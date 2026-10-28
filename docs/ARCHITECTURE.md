@@ -31,6 +31,8 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    Result: `Vec<Track>`.
 2. **Group** (`library/names.rs`, `library/grouping.rs`): artist spellings collapse to a *key* ("The Beatles",
    "Beatles, The" → `beatles`); keys merge by user decisions; near-misses become suggestions.
+   Albums with the same name are split by folder into editions (copies sharing their songs)
+   or separate same-name albums.
    Result: `Index` = clusters, suggestions, and `artists → albums → track indices`.
 3. **Plan** (`card/plan.rs`): `Options` (album order, which formats, …) + `Custom` (per-write
    exclusions, names, order) → list of `PlanItem { track, rel path, skip reason }`, FAT-safe and
@@ -107,7 +109,7 @@ src/
 | Thing | Identified by | Why it matters |
 |---|---|---|
 | Artist | cluster *key* (from the most common spelling) | Write exclusions and card names survive renames |
-| Album | `"<cluster key>|<title key>"` (`AlbumNode::id`) | Same, for albums |
+| Album | `"<cluster key>|<title key>"` (`AlbumNode::id`), plus `|<year>` for same-name albums and `#<folder key>` per edition | Same, for albums; `base_id` (without the edition) keys a write's choice of edition |
 | Write | its name (kept unique) | Background write/preview results find their write by name |
 | Track | `Track::id()`: its path, plus `#03` for a song inside an album file | Playlists, corrections and the waveform find their track |
 | Playlist | its name (in writes), track **ids** (inside) | Renaming a playlist updates writes; moving files outside the app drops them |
@@ -149,14 +151,16 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 28 tests, each next to the code it checks: name rules, folder-name reading,
-MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering, which formats play where, layout plans, copy/move/undo,
+`cargo test` runs 30 tests, each next to the code it checks: name rules, folder-name reading,
+MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
+editions and same-name albums (and which edition a write uses), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 playlist export, cover lookup, text shortening. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
-`cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`).
+`cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
+(`NEATLIBRARY_EMBED=<song>:<image>`).
 
 ## Conventions
 

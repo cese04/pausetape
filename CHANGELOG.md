@@ -144,3 +144,24 @@ Everything built so far, in the order it happened. All of it is unreleased work 
 - Debug demo: `NEATLIBRARY_SHOT_ARTIST` chooses the album played and looked up.
 - 33 tests (28 offline); new opt-in checks against a real album: `section_matches_cut`,
   `cue_album_write`.
+
+### 16. Editions, same-name albums and cover art in tags (2026-10-28)
+- **Editions.** Copies of the same album in different folders (two rips, a reissue, a vinyl
+  rip) are now editions instead of one album with every song twice:
+  - The library lists them as "edition 1 of 3", with the edition details on hover.
+  - The card gets one, by default the most complete lossless copy RECHO plays; tick another
+    in the card tab to switch.
+  - On the test library this caught 10 duplicated albums and made a full write about 1.5 GB smaller.
+- **Same-name albums.** Different albums with the same name (American Football's three
+  self-titled records) stay apart, by year. On the card they're "1999 - …", or
+  "American Football (2016)" when albums aren't ordered by year.
+- Album IDs change only for albums that were split. Exclusions and card names saved before
+  still apply to all their editions.
+- **Cover art in tags.** When the cover the player shows comes from an image file and not from
+  the songs' tags, it suggests adding it.
+  - "add it" embeds the image (resized to a 600 px baseline JPEG, ~100 KB) into the album's
+    songs as a correction. It goes into card copies at the next write (the Echo Mini shows
+    embedded covers), and into the music files with *write corrected tags*. Songs inside an
+    album file get it on the card only.
+  - A 1416 px scan became a 600×592 JPEG of 106 KB in a real FLAC.
+- 36 tests (30 offline); new opt-in check `embeds_cover`.

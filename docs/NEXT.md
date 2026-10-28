@@ -5,7 +5,8 @@ Each part says what happens today, why, and what to change. Part D gives the ord
 is done, and the tests.
 
 **Done (2026-10-28):** steps 1–2 of part D (A1–A4, B1, B2), the folder walk-up from B3, and
-part C (steps 5–7: CUE sheets in the library, playback and on the card). The "What happens
+part C (steps 5–7: CUE sheets in the library, playback and on the card), and B5 (step 8:
+editions and same-name albums). The "What happens
 today" sections below describe the behaviour *before* these steps; part C ends with what was
 built and measured.
 
@@ -217,6 +218,41 @@ track 1**, treat them as editions:
   2019) all carry the album tag "American Football" and merge into one today. Same artist +
   album name with **different years** should be different albums, not editions.
 
+**What was built for B5 (2026-10-28)**, differing from the sketch above where testing on the
+real library showed a better rule:
+
+- **Copies.** Tracks sharing an album name are split by album folder (a `CD 1` folder counts as
+  the folder above it). Folders that complete each other, with no shared track positions or
+  titles (discs kept in separate folders), form one copy.
+- **Editions or different albums.** Copies sharing at least half their song titles are
+  *editions* of one album. Copies sharing few are *different albums with the same name*.
+  Titles are a better signal than "both have a track 1" or years, which differ between a
+  release and its reissue.
+- **Data:** every edition is its own `AlbumNode` with an `Edition { key, label, rank, count }`
+  (one row each, so lookups, play, names and order work per edition). The label is the
+  folder's edition details ("1986, UK, Factory Records, FACD 10"). Same-name albums get a
+  `variant` (their year).
+  - IDs: `cluster|title` for unique names (unchanged), `cluster|title|2016` for same-name
+    albums, `…#<folder key>` per edition.
+- **Writes:** one edition per album goes on the card. The default is the one with the most
+  lossless songs RECHO plays, then the most songs RECHO plays, then the most songs, then one
+  without a CUE cut, then folder order: so a FLAC vinyl rip beats an MP3 copy with bonus tracks.
+  Ticking another edition in the card tab chooses it (`Custom::editions`). Exclusions and card
+  names saved under the old album ID still apply.
+- **Card folders:** all editions share one folder name (only one is written). Same-name albums
+  are told apart by the year prefix, or "Album (2016)" when albums aren't ordered by year.
+- **Numbering:** custom album numbering gives all editions one number.
+- **Reorganise** moves only the default edition; other editions stay where they are.
+- **Measured on the test library:** besides Joy Division (*Unknown Pleasures* ×3, *Closer* ×2)
+  and American Football (3 albums instead of one with 26 songs), it found duplicate copies of
+  five Between The Buried And Me albums, *Images And Words*, *Rust In Peace* (FLAC vinyl rip
+  vs MP3 320) and *The Dark Side of the Moon* (original vs 50th-anniversary remaster), all of
+  which went onto the card twice before. A full write is about 1.5 GB smaller.
+- **Not caught:** editions tagged with different album names (*Substance* vs *Substance
+  (1977-1980)*). Grouping by the cleaned name would catch them, but would also risk treating
+  "Live (1998)" and "Live (2004)" as editions when they share songs; left for a rule that also
+  compares years or lengths.
+
 ---
 
 ## C. Albums stored as one file plus a CUE sheet
@@ -355,8 +391,7 @@ track**:
   - Hidden audio before track 1's `INDEX 01` (skipped, as foobar2000 does).
   - Sheets embedded in FLAC files (C5).
   - Disc ID lookups (A6).
-  - Editions (B5). With CUE support, the three *Unknown Pleasures* editions now merge into one
-    30-song album, which makes B5 more pressing.
+  - Editions (B5): done since, see B5 above.
 
 ---
 
@@ -371,7 +406,7 @@ track**:
 | 5 | C1 CUE parser + C2 virtual tracks in scan/db/library | M | 1 | **Done** |
 | 6 | C3 playback of spans | M | 5 | **Done** (gapless joins not yet) |
 | 7 | C4 splitting on the card + manifest source keys | M | 5 | **Done** |
-| 8 | B5 editions | M | 4 | |
+| 8 | B5 editions | M | 4 | **Done** (differently named editions not yet) |
 | 9 | A6 disc ID lookups, C5 embedded sheets | M | 5 | |
 
 **Tests to add** (offline, small fixtures in temporary folders, as the existing tests do):

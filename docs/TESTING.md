@@ -17,7 +17,7 @@ portability fixes) · [ARCHITECTURE](ARCHITECTURE.md) (where things live in the 
 Once the repository is on GitHub, every push runs `.github/workflows/ci.yml`. It builds and
 tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
 
-- **Green on all three:** it compiles and the 28 tests pass everywhere. Go on to the hands-on
+- **Green on all three:** it compiles and the 30 tests pass everywhere. Go on to the hands-on
   test below.
 - **Red on Windows or Linux:** open the failed step's log; that's the first thing to fix. A
   compile error there is likely, since this code has never met those compilers.
@@ -68,7 +68,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/<you>/<repo>.git
 cd <repo>
-cargo test                          # 28 tests should pass (5 more are skipped on purpose)
+cargo test                          # 30 tests should pass (6 more are skipped on purpose)
 cargo run --release -- --version    # e.g. "NeatLibrary 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -143,6 +143,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     merges them.
 14. Library › an album › **look up**: MusicBrainz suggestions appear; **apply selected** marks
     tracks as edited. Quit and reopen: the edits are still there (library database).
+14a. If the same album is in two folders: the library shows "edition 1 of 2" and "2 of 2"; the
+    card tab ticks one, and ticking the other switches.
+14b. Play an album whose cover is a `folder.jpg`/`Front.jpg` (not embedded): the player says
+    "cover from … · add it". After **add it** and a write, the card copies show the cover in
+    Explorer / the file manager (and on the Echo Mini).
 
 ### E. The card
 15. Folders › **Choose card…**: Linux lists the stick by name; Windows uses the workaround

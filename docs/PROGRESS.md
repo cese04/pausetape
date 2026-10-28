@@ -1,6 +1,6 @@
 # NeatLibrary: progress and roadmap
 
-*Last updated: 2026-10-28: safer MusicBrainz lookups, folder-name reading and CUE sheets done ([NEXT](NEXT.md)).*
+*Last updated: 2026-10-28: safer MusicBrainz lookups, folder-name reading, CUE sheets, editions and cover embedding done ([NEXT](NEXT.md)).*
 
 NeatLibrary organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
@@ -77,10 +77,12 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 - **MusicBrainz lookups** were fixed on 2026-10-28 so they no longer suggest another album's
   titles ([NEXT §A](NEXT.md#a-musicbrainz-lookups-pick-the-wrong-release)). Still to do: choosing
   among alternative releases, and marking songs matched only by position.
-- **Several editions of one album merge** into one album with duplicate track numbers, and so do
-  same-named albums from different years (American Football ×3). Untagged files still take the
-  artist from the folder only, not from tagged neighbours. Planned in
-  [NEXT §B](NEXT.md#b-folder-and-file-names-are-misread) (B4, B5).
+- **Editions** of one album are kept apart, and one goes on the card; same-name albums
+  (American Football ×3) stay separate ([NEXT §B5](NEXT.md#b-folder-and-file-names-are-misread)).
+  Not yet caught: editions tagged with different album names (*Substance* vs *Substance
+  (1977-1980)*).
+- Untagged files still take the artist from the folder only, not from tagged neighbours
+  ([NEXT](NEXT.md) B4).
 - **Albums stored as one file plus a `.cue` sheet** now work in the library, the player and on
   the card ([NEXT §C](NEXT.md#c-albums-stored-as-one-file-plus-a-cue-sheet)). Limits:
   - no gapless join between songs of one file;
@@ -142,7 +144,10 @@ name reading, CUE sheets).
 - **Remember expanded artists and scroll position** between launches. *S*
 - **Look up every album** in one go, as a queue with progress, then review the suggestions
   album by album. *M*
-- **Duplicate-track detection** (same recording in two places or formats). *M*
+- **Duplicate-track detection** (same recording in two places or formats). *M* Editions now
+  catch whole duplicate albums; single duplicate tracks are still unhandled.
+- **Fetch missing covers** from the Cover Art Archive (MusicBrainz) for albums with no image at
+  all, then offer to add them to the songs as for covers found beside the files. *M*
 
 ### Player
 
