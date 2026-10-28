@@ -2,7 +2,8 @@
 # Build the minimal, LGPL-only ffmpeg that ships inside the macOS app.
 #
 # It only does what NeatLibrary asks of it: decode the formats the built-in decoder can't
-# (Dolby E-AC-3/AC-3/TrueHD, Opus, APE, WavPack, WMA, DTS…) and write a stereo 16-bit WAV.
+# (Dolby E-AC-3/AC-3/TrueHD, Opus, APE, WavPack, WMA, DTS…) and write a stereo 16-bit WAV, and
+# cut albums stored as one file plus a CUE sheet into one FLAC per song for the card.
 # No GPL components, no network, no video. Output is a universal (arm64 + x86_64) binary:
 #
 #   target/ffmpeg-macos/ffmpeg              the program
@@ -23,16 +24,6 @@ WORK="$ROOT/target/ffmpeg-build"
 OUT="$ROOT/target/ffmpeg-macos"
 URL="https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz"
 
-if [[ -x "$OUT/ffmpeg" && "${1:-}" != "--force" ]] && grep -q "ffmpeg $VERSION" "$OUT/BUILD-INFO.txt" 2>/dev/null; then
-    echo "ffmpeg $VERSION already built at $OUT (pass --force to rebuild)"
-    exit 0
-fi
-
-mkdir -p "$WORK" "$OUT"
-tarball="$WORK/ffmpeg-$VERSION.tar.xz"
-[[ -f "$tarball" ]] || curl -fL "$URL" -o "$tarball"
-echo "$SHA256  $tarball" | shasum -a 256 -c -
-
 COMMON=(
     --disable-everything --disable-autodetect --disable-network
     --disable-doc --disable-debug --disable-programs --enable-ffmpeg
@@ -42,9 +33,21 @@ COMMON=(
     --enable-demuxer=mov,ogg,matroska,asf,ape,wv,aac,ac3,eac3,flac,mp3,wav,w64,aiff,caf,dts,truehd,mlp
     --enable-parser=aac,ac3,opus,vorbis,flac,mpegaudio,dca,mlp
     --enable-decoder=aac,aac_latm,alac,ac3,eac3,truehd,mlp,dca,opus,vorbis,ape,wavpack,wmav1,wmav2,wmapro,wmalossless,mp3,mp3float,mp2,mp2float,flac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_s8,pcm_u8
-    --enable-encoder=pcm_s16le --enable-muxer=wav
-    --enable-filter=aresample,aformat,anull,abuffer,abuffersink
+    --enable-encoder=pcm_s16le,flac --enable-muxer=wav,flac
+    --enable-filter=aresample,aformat,anull,atrim,abuffer,abuffersink
 )
+
+# Rebuild when the version or the configure flags change.
+if [[ -x "$OUT/ffmpeg" && "${1:-}" != "--force" ]] && grep -q "ffmpeg $VERSION" "$OUT/BUILD-INFO.txt" 2>/dev/null \
+    && grep -qF -- "${COMMON[*]}" "$OUT/BUILD-INFO.txt"; then
+    echo "ffmpeg $VERSION already built at $OUT (pass --force to rebuild)"
+    exit 0
+fi
+
+mkdir -p "$WORK" "$OUT"
+tarball="$WORK/ffmpeg-$VERSION.tar.xz"
+[[ -f "$tarball" ]] || curl -fL "$URL" -o "$tarball"
+echo "$SHA256  $tarball" | shasum -a 256 -c -
 
 jobs=$(sysctl -n hw.ncpu)
 for arch in arm64 x86_64; do
