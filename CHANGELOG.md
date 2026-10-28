@@ -165,3 +165,18 @@ Everything built so far, in the order it happened. All of it is unreleased work 
     album file get it on the card only.
   - A 1416 px scan became a 600×592 JPEG of 106 KB in a real FLAC.
 - 36 tests (30 offline); new opt-in check `embeds_cover`.
+
+### 17. Copies of the same or higher quality (2026-10-28)
+- **Quality.** The scan now reads each file's bitrate, sample rate and bit depth. This is a
+  database schema bump: the first scan after updating re-reads every file once.
+- **Edition rows** show their format ("FLAC 24/96", "MP3 320"). Among equally complete
+  lossless copies, the higher resolution goes on the card by default.
+- **Covered copies.** When another edition has all of a copy's songs, at least as much music,
+  and the same or higher quality, the copy says so: "Edition 1 has all these songs in the same
+  quality (MP3 320); this copy could go (130 MB)". The header counts such copies and their size,
+  and links to a compact view listing just those albums.
+  - Nothing is deleted; other cases are left for the choice at write time.
+  - On the test library: 11 copies, 1.9 GB.
+- `--plan` also lists every album copy with its format and status.
+- Debug demo: `NEATLIBRARY_SHOT_DUPLICATES=1` opens that view.
+- 37 tests (31 offline).

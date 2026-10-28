@@ -151,9 +151,9 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 30 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 31 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
-editions and same-name albums (and which edition a write uses), which formats play where, layout plans, copy/move/undo,
+editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 playlist export, cover lookup, text shortening. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`

@@ -248,6 +248,21 @@ real library showed a better rule:
   five Between The Buried And Me albums, *Images And Words*, *Rust In Peace* (FLAC vinyl rip
   vs MP3 320) and *The Dark Side of the Moon* (original vs 50th-anniversary remaster), all of
   which went onto the card twice before. A full write is about 1.5 GB smaller.
+- **Copies that could go (2026-10-28).**
+  - A copy is *covered* when another edition has all its songs, at least as much music (not
+    over 30 s or 3% shorter), and the same or higher quality.
+  - Quality: lossless over lossy; then bit depth and sample rate; lossy copies by median
+    bitrate, within 10% counting as the same.
+  - Songs are compared by title without bracketed notes or anything after " - " or " / ", with
+    small spelling slips tolerated ("The Need For Repitition").
+  - The library says so under the copy ("Edition 1 has all these songs in the same quality
+    (MP3 320); this copy could go (130 MB)"). The header counts covered copies and their size,
+    and links to a view of just those albums. `--plan` lists every album copy and its status.
+  - Nothing is deleted by the app. Other cases (bonus songs, a hidden track, different
+    quality trade-offs) are left alone and chosen per write.
+  - On the test library: 11 copies, 1.9 GB.
+  - *The Silent Circus* stays unflagged: its second copy runs 8 minutes longer (a hidden
+    track).
 - **Not caught:** editions tagged with different album names (*Substance* vs *Substance
   (1977-1980)*). Grouping by the cleaned name would catch them, but would also risk treating
   "Live (1998)" and "Live (2004)" as editions when they share songs; left for a rule that also

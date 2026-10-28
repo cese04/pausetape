@@ -36,7 +36,8 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 - **Albums stored as one file plus a `.cue` sheet** show as separate songs, as in foobar2000
   or AIMP. On the card, each song becomes its own FLAC file.
 - **Several copies of an album** (rips, reissues) are recognised as editions; one goes on the
-  card, and you choose which.
+  card, and you choose which. Copies that another copy covers in the same or higher quality
+  are pointed out, so you can remove them if you like.
 - **Cover art in the songs:** when a cover is only an image in the folder, the player offers to
   embed it, so the Echo Mini shows it.
 
@@ -74,7 +75,7 @@ Linux the audio/windowing headers (exact commands per distribution in
 cargo run --release                          # the app
 cargo run --release -- --version             # version, and which ffmpeg it uses
 cargo run --release -- --plan ~/Music        # dry run: print the planned layout, change nothing
-cargo test                                   # 30 offline tests
+cargo test                                   # 31 offline tests
 ```
 
 ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,

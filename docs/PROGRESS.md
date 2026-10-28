@@ -79,6 +79,8 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
   among alternative releases, and marking songs matched only by position.
 - **Editions** of one album are kept apart, and one goes on the card; same-name albums
   (American Football ×3) stay separate ([NEXT §B5](NEXT.md#b-folder-and-file-names-are-misread)).
+  Copies that another copy covers in the same or higher quality are pointed out; removing them
+  is up to you (the app never deletes music).
   Not yet caught: editions tagged with different album names (*Substance* vs *Substance
   (1977-1980)*).
 - Untagged files still take the artist from the folder only, not from tagged neighbours
@@ -146,6 +148,13 @@ name reading, CUE sheets).
   album by album. *M*
 - **Duplicate-track detection** (same recording in two places or formats). *M* Editions now
   catch whole duplicate albums; single duplicate tracks are still unhandled.
+- **Duplicate copies, next steps** (discussed 2026-10-28; for now copies are only pointed out):
+  - a "prefer this copy" choice for all writes, folding the others in the library;
+  - "these are different albums" to unlink a remaster or deluxe edition;
+  - a keyboard review of all duplicates;
+  - moving covered copies to the Trash or a `_Duplicates` folder, with preview and undo;
+  - a quality-or-space preference per write;
+  - flagging "FLAC made from MP3" from auCDtect logs. *M each*
 - **Fetch missing covers** from the Cover Art Archive (MusicBrainz) for albums with no image at
   all, then offer to add them to the songs as for covers found beside the files. *M*
 
