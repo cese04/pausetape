@@ -55,4 +55,17 @@ fn print_plan(root: &std::path::Path) {
         let src = id.strip_prefix(root).unwrap_or(&id);
         println!("{:<60} <- {}{}", p.rel.display(), src.display(), p.skip.map(|s| format!("  [{s}]")).unwrap_or_default());
     }
+    // Albums in several copies: which goes on the card, and which another copy covers.
+    for a in &index.artists {
+        for al in a.albums.iter().filter(|al| al.edition.is_some()) {
+            let e = al.edition.as_ref().unwrap();
+            let note = match &e.superseded {
+                Some(s) => format!("covered by edition {} ({} quality)", s.rank + 1, if s.higher { "higher" } else { "same" }),
+                None if e.rank == 0 => "on the card".into(),
+                None => "keep: has songs or quality the others lack".into(),
+            };
+            let title = al.title.as_deref().unwrap_or_default();
+            println!("edition {}/{} {} / {title}: {} · {} · {} songs · {note}", e.rank + 1, e.count, a.name, e.label, e.format, al.tracks.len());
+        }
+    }
 }

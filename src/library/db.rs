@@ -13,8 +13,9 @@ use rusqlite::{Connection, params};
 
 use crate::library::Track;
 
-/// Bump when `Track` gains information older rows lack (2: MP4 codec), so files get re-read.
-const SCHEMA_VERSION: i64 = 2;
+/// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
+/// and bit depth), so files get re-read.
+const SCHEMA_VERSION: i64 = 3;
 
 pub struct Db {
     conn: Connection,

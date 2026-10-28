@@ -64,6 +64,8 @@ impl Shooter {
             app.active_playlist = Some(0);
             app.preview_tidy();
             app.filter = std::env::var("NEATLIBRARY_SHOT_FILTER").unwrap_or_default();
+            // NEATLIBRARY_SHOT_DUPLICATES=1 opens the library on the duplicate copies.
+            app.duplicates_only = std::env::var_os("NEATLIBRARY_SHOT_DUPLICATES").is_some();
             app.card_filter = app.filter.clone();
             for a in &app.index.artists {
                 app.card_expanded.insert(app.index.clusters[a.cluster].key.clone());

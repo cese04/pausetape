@@ -127,6 +127,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         return;
     }
 
+    if app.duplicates_only {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Showing albums with a copy that another copy covers in the same or higher quality.").color(ink.text));
+            if link(ui, "show all").clicked() {
+                app.duplicates_only = false;
+            }
+        });
+        ui.add_space(4.0);
+    }
+    // Albums (by base id) where one copy covers another, for the duplicates view.
+    let duplicated: std::collections::HashSet<String> = app
+        .index
+        .superseded()
+        .into_iter()
+        .map(|(a, b)| app.index.artists[a].albums[b].base_id(&app.index.clusters[app.index.artists[a].cluster].key))
+        .collect();
     let needle = app.filter.to_lowercase();
     let mut actions = Vec::new();
     let current = app.current();
@@ -148,7 +164,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 for (ai, artist) in app.index.artists.iter().enumerate() {
                     let akey = crate::library::names::artist_key(&artist.name);
                     let hit = |s: &str| s.to_lowercase().contains(&needle);
-                    let matching: Vec<usize> = if needle.is_empty() {
+                    let ck = &app.index.clusters[artist.cluster].key;
+                    let matching: Vec<usize> = if app.duplicates_only {
+                        (0..artist.albums.len()).filter(|&i| duplicated.contains(&artist.albums[i].base_id(ck))).collect()
+                    } else if needle.is_empty() {
                         (0..artist.albums.len()).collect()
                     } else if hit(&artist.name) {
                         (0..artist.albums.len()).collect()
@@ -163,7 +182,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     if matching.is_empty() {
                         continue;
                     }
-                    let open = app.expanded.contains(&akey) || (!needle.is_empty() && matching.len() < 6);
+                    let open = app.expanded.contains(&akey) || app.duplicates_only || (!needle.is_empty() && matching.len() < 6);
                     let n_tracks: usize = artist.albums.iter().map(|a| a.tracks.len()).sum();
                     // Letter headings, which the A–Z rail scrolls to.
                     let letter = initial(&artist.name);
@@ -202,7 +221,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             let title = al.title.as_deref().unwrap_or("Loose tracks");
                             let mut meta = format!("{} · {}", plural(al.tracks.len(), "track"), album_minutes(&app.tracks, &al.tracks));
                             if let Some(e) = &al.edition {
-                                meta = format!("edition {} of {} · {meta}", e.rank + 1, e.count);
+                                meta = format!("edition {} of {} · {} · {meta}", e.rank + 1, e.count, e.format);
                             }
                             let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
                             let off_text = match off {
@@ -231,8 +250,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             });
                         });
                         album_folders(ui, &app.tracks, &al.tracks, &source_root);
+                        if let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()) {
+                            superseded_note(ui, &app.tracks, &al.tracks, s);
+                        }
                         if let Some(l) = app.lookups.get_mut(&id) {
                             lookup_block(ui, &app.tracks, &id, l, &mut actions);
+                        }
+                        // The duplicates view compares copies; their song lists would bury that.
+                        if app.duplicates_only {
+                            continue;
                         }
                         for (pos, &ti) in al.tracks.iter().enumerate() {
                             let t = &app.tracks[ti];
@@ -300,6 +326,23 @@ fn az_rail(ui: &mut Ui, present: &std::collections::BTreeSet<char>, height: f32)
         }
     }
     clicked
+}
+
+/// A copy whose songs another edition has in the same or higher quality: say so, and what
+/// removing it would free. The app never deletes music itself.
+fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::library::grouping::Superseded) {
+    let ink = ink(ui);
+    let bytes: u64 = idxs.iter().map(|&i| tracks[i].size).sum();
+    let how = if s.higher { format!("in higher quality ({})", s.format) } else { format!("in the same quality ({})", s.format) };
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(52.0);
+        ui.label(RichText::new(format!("Edition {} has all these songs {how}; this copy could go ({}).", s.rank + 1, text::bytes(bytes))).size(12.5).italics().color(ink.text))
+            .on_hover_text(format!(
+                "Edition {}: {}.\nNeatLibrary never deletes music: to remove this copy, open its folder and delete it yourself. Until then, the card gets only one edition anyway.",
+                s.rank + 1,
+                s.label
+            ));
+    });
 }
 
 /// Where an album's files live on disk, relative to the music folder, with a way to open it.

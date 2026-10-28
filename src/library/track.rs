@@ -36,6 +36,11 @@ pub struct Track {
     pub year: Option<u16>,
     pub compilation: bool,
     pub duration: Duration,
+    /// Audio bitrate in kbps, sample rate in Hz, bits per sample (lossless formats), as the
+    /// file's header states them. For comparing copies of an album.
+    pub kbps: Option<u32>,
+    pub sample_rate: Option<u32>,
+    pub bit_depth: Option<u8>,
     pub size: u64,
     /// Modification time (ns since the Unix epoch) when the tags were read.
     pub mtime: u64,

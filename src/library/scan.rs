@@ -154,7 +154,9 @@ fn read_track(path: &Path, ext: &str) -> Track {
         t.codec = mp4_audio_codec(path);
     }
     let Ok(file) = lofty::read_from_path(path) else { return t };
-    t.duration = file.properties().duration();
+    let props = file.properties();
+    t.duration = props.duration();
+    (t.kbps, t.sample_rate, t.bit_depth) = (props.audio_bitrate(), props.sample_rate(), props.bit_depth());
     if let Some(tag) = file.primary_tag().or_else(|| file.first_tag()) {
         t.artist = nonempty(tag.artist());
         t.title = nonempty(tag.title());

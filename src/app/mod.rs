@@ -112,6 +112,8 @@ pub struct App {
     pub index: Index,
     pub tab: Tab,
     pub filter: String,
+    /// The library shows only albums with a copy that another copy covers.
+    pub duplicates_only: bool,
     /// Expanded artists in the library, by artist key.
     pub expanded: HashSet<String>,
     pub busy: Option<Busy>,
@@ -178,6 +180,7 @@ impl App {
             index: Index::default(),
             tab: if first_run { Tab::Folders } else { Tab::Library },
             filter: String::new(),
+            duplicates_only: false,
             expanded: HashSet::new(),
             busy: None,
             notices: Vec::new(),

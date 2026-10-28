@@ -83,6 +83,18 @@ fn header(app: &mut App, ui: &mut Ui) {
             facts.push(format!("{dirty} tracks with corrected tags"));
         }
         muted(ui, facts.join(" · "));
+        let spare = app.index.superseded();
+        if !spare.is_empty() {
+            let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
+            muted(ui, "·");
+            let copies = if spare.len() == 1 { "copy" } else { "copies" };
+            let text = format!("{} album {copies} with a same-or-better copy ({})", spare.len(), text::bytes(bytes));
+            let hint = "Copies whose songs are all in another copy of the album, in the same or higher quality. Show them in the library.";
+            if widgets::link(ui, text).on_hover_text(hint).clicked() {
+                app.tab = Tab::Library;
+                app.duplicates_only = true;
+            }
+        }
         if let Some(b) = &app.busy {
             ui.add_space(12.0);
             let txt = if b.total > 0 { format!("{} {}/{}", b.label, b.done, b.total) } else { format!("{} {}…", b.label, if b.done > 0 { b.done.to_string() } else { String::new() }) };

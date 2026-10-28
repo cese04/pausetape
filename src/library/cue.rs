@@ -264,6 +264,9 @@ fn split(image: &Track, sheet: &Sheet, file: &SheetFile, sheet_path: &Path) -> V
                 year: sheet.year.or(image.year),
                 compilation: image.compilation,
                 duration: frames_to_time(frames),
+                kbps: image.kbps,
+                sample_rate: image.sample_rate,
+                bit_depth: image.bit_depth,
                 // An estimate for space totals: the file's size shared out by length.
                 size: image.size * frames / total,
                 mtime: image.mtime,

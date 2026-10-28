@@ -78,6 +78,69 @@ pub struct Edition {
     /// 0 = the edition a write uses unless told otherwise (the most complete one RECHO plays).
     pub rank: usize,
     pub count: usize,
+    /// "FLAC 16/44.1", "MP3 320".
+    pub format: String,
+    /// Another edition has all of this one's songs in the same or higher quality, so this copy
+    /// could go.
+    pub superseded: Option<Superseded>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Superseded {
+    /// The better (or equal) edition: its rank and label.
+    pub rank: usize,
+    pub label: String,
+    pub format: String,
+    /// Higher quality, rather than the same.
+    pub higher: bool,
+}
+
+/// What an edition's audio is: lossless with its resolution, or lossy with its bitrate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Quality {
+    pub lossless: bool,
+    pub bit_depth: u8,
+    pub sample_rate: u32,
+    /// Median over the songs (lossy files are often variable bitrate).
+    pub kbps: u32,
+}
+
+impl Quality {
+    fn of(tracks: &[Track], idxs: &[usize]) -> Quality {
+        let songs = || idxs.iter().map(|&i| &tracks[i]);
+        let mut kbps: Vec<u32> = songs().filter_map(|t| t.kbps).collect();
+        kbps.sort();
+        Quality {
+            // A copy is only as good as its weakest file.
+            lossless: songs().all(Track::lossless),
+            bit_depth: songs().map(|t| t.bit_depth.unwrap_or(0)).min().unwrap_or(0),
+            sample_rate: songs().map(|t| t.sample_rate.unwrap_or(0)).min().unwrap_or(0),
+            kbps: kbps.get(kbps.len() / 2).copied().unwrap_or(0),
+        }
+    }
+
+    /// Lossless beats lossy; lossless copies compare by bit depth, then sample rate; lossy ones
+    /// by bitrate, within 10% counting as the same.
+    pub fn compare(&self, other: &Quality) -> std::cmp::Ordering {
+        use std::cmp::Ordering::*;
+        match (self.lossless, other.lossless) {
+            (true, false) => Greater,
+            (false, true) => Less,
+            (true, true) => (self.bit_depth, self.sample_rate).cmp(&(other.bit_depth, other.sample_rate)),
+            (false, false) if self.kbps.abs_diff(other.kbps) * 10 <= self.kbps.max(other.kbps) => Equal,
+            (false, false) => self.kbps.cmp(&other.kbps),
+        }
+    }
+
+    /// "FLAC 16/44.1" or "MP3 320", given the format's name.
+    pub fn label(&self, format: &str) -> String {
+        let khz = |hz: u32| if hz % 1000 == 0 { (hz / 1000).to_string() } else { format!("{:.1}", hz as f32 / 1000.0) };
+        match (self.lossless, self.bit_depth, self.sample_rate, self.kbps) {
+            (true, b, r, _) if b > 0 && r > 0 => format!("{format} {b}/{}", khz(r)),
+            (false, _, _, k) if k > 0 => format!("{format} {k}"),
+            _ => format.to_string(),
+        }
+    }
 }
 
 impl AlbumNode {
@@ -112,6 +175,22 @@ pub struct Index {
     pub clusters: Vec<Cluster>,
     pub suggestions: Vec<Suggestion>,
     pub artists: Vec<ArtistNode>,
+}
+
+impl Index {
+    /// Editions that another edition covers in the same or higher quality, as (artist, album)
+    /// positions: copies that could go.
+    pub fn superseded(&self) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        for (ai, a) in self.artists.iter().enumerate() {
+            for (bi, al) in a.albums.iter().enumerate() {
+                if al.edition.as_ref().is_some_and(|e| e.superseded.is_some()) {
+                    out.push((ai, bi));
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Raw artist used for a track's folder, before clustering. `None` means unknown.
@@ -194,6 +273,26 @@ impl Copy {
     }
 }
 
+/// A song title for telling whether two copies hold the same song: without bracketed notes or
+/// anything after " - " or " / " ("The Need For Repetition / The Man Land (Hidden Track)" →
+/// "the need for repetition"), as a `title_key`. Spelling slips are left to a fuzzy comparison.
+fn song_key(title: &str) -> String {
+    let cut = [" - ", " / "].iter().filter_map(|sep| title.find(sep)).min().unwrap_or(title.len());
+    let main = Some(&title[..cut]).filter(|m| !m.trim().is_empty()).unwrap_or(title);
+    let mut out = String::new();
+    let mut depth = 0;
+    for c in main.chars() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = (depth - 1).max(0),
+            c if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    let key = title_key(&out);
+    if key.is_empty() { title_key(title) } else { key }
+}
+
 /// The folder an album lives in: the track's own, or the one above a "CD 1" folder.
 fn album_dir(path: &Path) -> PathBuf {
     let Some(dir) = path.parent() else { return PathBuf::new() };
@@ -246,15 +345,38 @@ fn split_copies(tracks: &[Track], idxs: Vec<usize>) -> Vec<Vec<Copy>> {
     albums
 }
 
-/// Editions in rank order with their labels and keys. First: the copy with the most lossless
-/// songs RECHO plays (a FLAC vinyl rip over an MP3 with bonus tracks), then the most songs
-/// RECHO plays, then the most songs, then the one not needing a CUE sheet cut, then by folder.
-fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, String, String)> {
+/// Editions in rank order. First: the copy with the most lossless songs RECHO plays (a FLAC
+/// vinyl rip over an MP3 with bonus tracks), then the most songs RECHO plays, then the most
+/// songs, then the highest quality, then the one not needing a CUE sheet cut, then by folder.
+/// Each edition notes whether another has all its songs, and no less music, in the same or
+/// higher quality.
+fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, Edition)> {
     copies.sort_by_key(|c| {
         let count = |f: &dyn Fn(&Track) -> bool| usize::MAX - c.tracks.iter().filter(|&&i| f(&tracks[i])).count();
         let cue = c.tracks.iter().filter(|&&i| tracks[i].cue.is_some()).count();
-        (count(&|t| t.on_recho() && t.lossless()), count(&|t| t.on_recho()), usize::MAX - c.tracks.len(), cue, c.dirs[0].clone())
+        let q = Quality::of(tracks, &c.tracks);
+        let quality = (!q.lossless, u8::MAX - q.bit_depth, u32::MAX - q.sample_rate, u32::MAX - q.kbps);
+        (count(&|t| t.on_recho() && t.lossless()), count(&|t| t.on_recho()), usize::MAX - c.tracks.len(), quality, cue, c.dirs[0].clone())
     });
+    let quality: Vec<Quality> = copies.iter().map(|c| Quality::of(tracks, &c.tracks)).collect();
+    let format: Vec<String> = copies
+        .iter()
+        .zip(&quality)
+        .map(|(c, q)| {
+            let mut names: BTreeMap<String, usize> = BTreeMap::new();
+            for &i in &c.tracks {
+                *names.entry(if tracks[i].cue.is_some() { tracks[i].ext.to_uppercase() } else { tracks[i].format_label() }).or_default() += 1;
+            }
+            q.label(&most_common(&names, |_| 0).unwrap_or_default())
+        })
+        .collect();
+    let songs: Vec<Vec<String>> = copies.iter().map(|c| c.tracks.iter().map(|&i| song_key(&tracks[i].display_title())).collect()).collect();
+    // Also by length: the same titles can hide more music (a hidden track at the end).
+    let length: Vec<f64> = copies.iter().map(|c| c.tracks.iter().map(|&i| tracks[i].duration.as_secs_f64()).sum()).collect();
+    let covers = |j: usize, i: usize| {
+        songs[i].iter().all(|a| songs[j].iter().any(|b| a == b || strsim::jaro_winkler(a, b) >= 0.92))
+            && length[i] <= length[j] + (length[j] * 0.03).max(30.0)
+    };
     let name = |d: &Path| d.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let mut labels: Vec<String> = copies
         .iter()
@@ -271,17 +393,33 @@ fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, String, Strin
             labels[i] = format!("{} · {parent}", labels[i]);
         }
     }
+    // Superseded: another edition (the best-ranked such) has every song of this one, in higher
+    // quality, or in the same quality and ranked ahead.
+    let superseded: Vec<Option<Superseded>> = (0..copies.len())
+        .map(|i| {
+            (0..copies.len())
+                .filter(|&j| j != i && covers(j, i))
+                .find_map(|j| match quality[j].compare(&quality[i]) {
+                    std::cmp::Ordering::Greater => Some((j, true)),
+                    std::cmp::Ordering::Equal if j < i => Some((j, false)),
+                    _ => None,
+                })
+                .map(|(j, higher)| Superseded { rank: j, label: labels[j].clone(), format: format[j].clone(), higher })
+        })
+        .collect();
+    let count = copies.len();
     let mut keys: Vec<String> = Vec::new();
     copies
         .into_iter()
-        .zip(labels)
-        .map(|(c, label)| {
+        .zip(labels.into_iter().zip(format.into_iter().zip(superseded)))
+        .enumerate()
+        .map(|(rank, (c, (label, (format, superseded))))| {
             let mut key = c.key();
             if keys.contains(&key) {
                 key = format!("{key}-{}", keys.len() + 1);
             }
             keys.push(key.clone());
-            (c, label, key)
+            (c, Edition { key, label, rank, count, format, superseded })
         })
         .collect()
 }
@@ -422,10 +560,8 @@ pub fn build(tracks: &[Track], prefs: &ArtistPrefs) -> Index {
                         nodes.push(AlbumNode { variant, ..node(all) });
                         continue;
                     }
-                    let count = copies.len();
-                    for (rank, (copy, label, key)) in editions(tracks, copies).into_iter().enumerate() {
-                        let edition = Some(Edition { key, label, rank, count });
-                        nodes.push(AlbumNode { variant: variant.clone(), edition, ..node(copy.tracks) });
+                    for (copy, edition) in editions(tracks, copies) {
+                        nodes.push(AlbumNode { variant: variant.clone(), edition: Some(edition), ..node(copy.tracks) });
                     }
                 }
             }
@@ -503,6 +639,51 @@ mod tests {
         assert_eq!(titled("Hits").len(), 1, "discs in separate folders are one album");
         // A unique name keeps its old id.
         assert_eq!(titled("Live")[0].id("band"), "band|live");
+    }
+
+    #[test]
+    fn copies_covered_by_a_same_or_better_copy() {
+        let flac = |dir: &str, n: u32, title: &str, depth: u8, rate: u32| Track { bit_depth: Some(depth), sample_rate: Some(rate), kbps: Some(900), ..at(&format!("/m/Band/{dir}/{n}.flac"), "Alaska", n, title, 2005) };
+        let mp3 = |dir: &str, n: u32, title: &str, kbps: u32| Track { ext: "mp3".into(), kbps: Some(kbps), sample_rate: Some(44100), ..at(&format!("/m/Band/{dir}/{n}.mp3"), "Alaska", n, title, 2005) };
+        let songs = ["Alaska", "Croakies", "Breathe"];
+        let mut tracks = Vec::new();
+        for (i, s) in songs.iter().enumerate() {
+            let n = i as u32 + 1;
+            tracks.push(flac("A {CD}", n, s, 16, 44100));
+            tracks.push(flac("B {CD, again}", n, s, 16, 44100));
+            tracks.push(flac("C {24-96}", n, s, 24, 96000));
+            tracks.push(mp3("D {320}", n, s, 320));
+        }
+        // A copy with a longer last song (a hidden track) isn't covered by a shorter one.
+        let mut hidden = tracks.clone();
+        for t in hidden.iter_mut().filter(|t| t.path.to_string_lossy().contains("B {CD, again}") && t.track == Some(3)) {
+            t.duration = std::time::Duration::from_secs(600);
+        }
+        let idx = build(&hidden, &ArtistPrefs::default());
+        let again = idx.artists[0].albums.iter().filter_map(|a| a.edition.as_ref()).find(|e| e.label == "CD, again").unwrap();
+        assert!(again.superseded.is_none());
+        // An MP3 copy with a bonus song: not covered by the others, so it stays unflagged.
+        tracks.push(mp3("D {320}", 4, "Bonus", 320));
+        let idx = build(&tracks, &ArtistPrefs::default());
+        let eds: Vec<&Edition> = idx.artists[0].albums.iter().filter_map(|a| a.edition.as_ref()).collect();
+        let by = |label: &str| eds.iter().find(|e| e.label == label).copied().unwrap();
+        assert_eq!(by("24-96").rank, 0, "highest quality first among equally complete lossless copies");
+        assert_eq!(by("24-96").format, "FLAC 24/96");
+        assert!(by("24-96").superseded.is_none());
+        let cd = by("CD").superseded.as_ref().expect("covered by the 24/96 copy");
+        assert!(cd.higher && cd.format == "FLAC 24/96");
+        assert!(by("CD, again").superseded.as_ref().is_some_and(|s| s.higher));
+        assert_eq!(by("320").format, "MP3 320");
+        assert!(by("320").superseded.is_none(), "it has a song the others lack");
+        assert_eq!(idx.superseded().len(), 2);
+
+        assert_eq!(song_key("The Need For Repetition / The Man Land (Hidden Track)"), song_key("The Need For Repetition"));
+        assert!(strsim::jaro_winkler(&song_key("The Need For Repitition"), &song_key("The Need For Repetition - The Man Land")) >= 0.92);
+
+        // Same quality: only the lower-ranked copy is flagged, pointing at the other.
+        let q = |k| Quality { kbps: k, ..Default::default() };
+        assert_eq!(q(320).compare(&q(300)), std::cmp::Ordering::Equal);
+        assert_eq!(q(320).compare(&q(192)), std::cmp::Ordering::Greater);
     }
 
     #[test]

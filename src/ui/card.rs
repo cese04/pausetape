@@ -376,8 +376,11 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                 let title_w = ui.available_width() * if al.edition.is_some() { 0.25 } else { 0.45 };
                 widgets::fitted(ui, title_text, title_w, Sense::hover()).on_hover_text(shown);
                 if let Some(e) = &al.edition {
-                    ui.label(RichText::new(text::shorten(&e.label, 34)).size(12.5).color(ink.muted))
-                        .on_hover_text(format!("edition {} of {}: {}", e.rank + 1, e.count, e.label));
+                    let mut hover = format!("edition {} of {}: {} · {}", e.rank + 1, e.count, e.label, e.format);
+                    if let Some(s) = &e.superseded {
+                        hover.push_str(&format!("\nEdition {} has all these songs in {} quality.", s.rank + 1, if s.higher { "higher" } else { "the same" }));
+                    }
+                    ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(12.5).color(ink.muted)).on_hover_text(hover);
                 }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
                 let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
