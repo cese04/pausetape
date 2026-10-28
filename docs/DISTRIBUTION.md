@@ -22,7 +22,7 @@
 | Piece | Result |
 |---|---|
 | Universal app (Apple Silicon + Intel), macOS 12+ | 47 MB app, 24 MB DMG |
-| Bundled ffmpeg (`scripts/build-ffmpeg-macos.sh`) | FFmpeg 9.0.2, LGPL only, decoders/demuxers this app needs, universal, **8.3 MB**, links only system libraries. Converted a *Love (Dolby Atmos)* E-AC-3 track in 1 s. |
+| Bundled ffmpeg (`scripts/build-ffmpeg-macos.sh`) | FFmpeg 9.0.2, LGPL only, decoders/demuxers this app needs plus FLAC encoding for CUE albums, universal, **8.4 MB**, links only system libraries. Converted a *Love (Dolby Atmos)* E-AC-3 track in 1 s. |
 | App finds its own ffmpeg first | `NeatLibrary --version` → `ffmpeg: bundled (…/Contents/MacOS/ffmpeg)` |
 | Info.plist | Version, category, minimum macOS, and the permission messages for SD cards, Documents, Downloads, Desktop, network drives |
 | Icon | `assets/icon/icon-1024.png`, redrawn by `scripts/make-icon.py [letter]` |
@@ -150,14 +150,14 @@ the look: a serif "N" or a small folder on warm paper.
 
 **Bundled** (decided). Instead of a downloaded 80–100 MB GPL build, the app ships a minimal
 build made from FFmpeg's source by `scripts/build-ffmpeg-macos.sh`. It contains only the
-demuxers and decoders the app needs plus a WAV writer. It's LGPL v2.1 (no `--enable-gpl`),
-8.3 MB universal, with source URL, checksum and configure flags in `BUILD-INFO.txt` inside the
+demuxers and decoders the app needs, a WAV writer, and a FLAC encoder and writer for cutting
+CUE albums into songs. It's LGPL v2.1 (no `--enable-gpl`), 8.4 MB universal, with source URL, checksum and configure flags in `BUILD-INFO.txt` inside the
 app. ffmpeg runs as a separate program the app calls, not linked into it, so the app's MIT
 licence is unaffected. The LGPL obligations are the licence text and where to get the source,
 both shipped.
 
-If "convert while writing to the card" (PROGRESS.md §2 #1) is built, add the FLAC encoder
-(LGPL) and LAME for MP3 (LGPL) to the build. Windows and Linux need the same script adapted.
+If "convert while writing to the card" (PROGRESS.md §2 #1) is built, add LAME for MP3 (LGPL)
+to the build (the FLAC encoder is already in). Windows and Linux need the same script adapted.
 
 ---
 

@@ -114,3 +114,33 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   - The result line shows the release's country, label and track count; long messages wrap.
   - Single songs without an album: an unknown artist is replaced by the song's length in the search.
 - 24 tests (21 offline), new ones for names, folders, ranking and the album check.
+
+### 15. Albums stored as one file plus a CUE sheet (2026-10-28)
+- **Library:**
+  - An album file with a `.cue` sheet shows as its songs, with the sheet's titles, artists,
+    album and year; the file's own tags only fill gaps.
+  - Sheets in Windows-1251/1252 and other legacy encodings are read correctly.
+  - Sheet file names that differ in case or extension (`.FLAC`, `.wav` for a `.flac`) still
+    match.
+  - Sheets for already-split albums fill missing tags without splitting anything.
+  - On the test library: 9 album files became 104 songs.
+- **Player:** plays just the song's part of the file, sample-exact; seeking and the waveform
+  are per song.
+- **Card:**
+  - Each song is cut into its own FLAC with ffmpeg and tagged. This is lossless; FLAC, WAV,
+    APE, WavPack, AIFF and ALAC album files all become FLAC.
+  - Rewrites skip songs already cut.
+  - Songs in lossy album files, or with no ffmpeg available, are left out with a reason.
+- **Reorganise** leaves album files and their sheets in place. Corrections to these songs stay
+  in the app and reach the card copies.
+- **Fixes:**
+  - Cover art prefers conventional names, then an image named after the audio file, then
+    `Covers/Front.jpg`-style scans, and never a spectrogram or back cover.
+  - Duplicate card names are numbered "(2)", "(3)" instead of "(2) (3)".
+  - Mixed-case artist spellings beat all-caps ones on ties.
+  - The status line says "files unchanged".
+- **ffmpeg:** the bundled build adds the FLAC encoder, FLAC writer and `atrim` filter (8.4 MB);
+  `scripts/build-ffmpeg-macos.sh` rebuilds when its flags change.
+- Debug demo: `NEATLIBRARY_SHOT_ARTIST` chooses the album played and looked up.
+- 33 tests (28 offline); new opt-in checks against a real album: `section_matches_cut`,
+  `cue_album_write`.

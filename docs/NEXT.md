@@ -4,8 +4,10 @@
 Each part says what happens today, why, and what to change. Part D gives the order of work, what
 is done, and the tests.
 
-**Done (2026-10-28):** steps 1–2 of part D (A1–A4, B1, B2) and the folder walk-up from B3. The
-"What happens today" sections below describe the behaviour *before* these steps.
+**Done (2026-10-28):** steps 1–2 of part D (A1–A4, B1, B2), the folder walk-up from B3, and
+part C (steps 5–7: CUE sheets in the library, playback and on the card). The "What happens
+today" sections below describe the behaviour *before* these steps; part C ends with what was
+built and measured.
 
 Related: [PROGRESS](PROGRESS.md) (status and roadmap) · [ARCHITECTURE](ARCHITECTURE.md) (where
 the code lives).
@@ -228,9 +230,10 @@ from that start to the next track's start.
 ### What's in this library (surveyed 2026-10-28)
 
 - **86 `.cue` sheets** on `/Volumes/Elements/Music`.
-- **23 describe files holding several tracks** (The Cure *Disintegration*, Cigarettes After
-  Sex, Pink Floyd *The Wall* CD1/CD2, Chet Baker *The Hits* CD1–3, American Football, Joy
-  Division ×8, …). The rest describe already-split files; those are only useful for A6.
+- **9 album files hold several songs** (The Cure *Disintegration*, Cigarettes After Sex, Joy
+  Division ×6, Dream Theater *Octavarium*'s sides). The rest describe already-split files;
+  those are only useful for A6. (A first count said 23: it counted `TRACK` lines, which in
+  per-track rips can come before their own file's `FILE` line. That's the trap C1 describes.)
 - **One sheet covers several files:** *Octavarium* has 4 files (vinyl sides), each holding 1–3
   tracks.
 - **25 aren't UTF-8.** They're Windows-1251 (Cyrillic) or Windows-1252.
@@ -318,6 +321,43 @@ track**:
 **C5 (later).** Some FLAC files carry the sheet *inside* them: a `CUESHEET` metadata block or a
 `CUESHEET` Vorbis comment. Treat them like an external sheet.
 
+### What was built (2026-10-28)
+
+- **Parser** (`library/cue.rs`): encodings via `encoding_rs` + `chardetng`; songs assigned to
+  the file current at `INDEX 01`; `FILE` names resolved exactly, ignoring case, or by stem
+  with another audio extension.
+- **Library:**
+  - A file holding 2+ songs becomes one track per song; a file holding one song keeps its tags,
+    and the sheet fills the gaps (*Octavarium* side 4 became "08 - Octavarium").
+  - Sheets are read on every scan (milliseconds), so the database is unchanged: it caches the
+    album file's own tags, and the songs are derived from it.
+  - Track identity is `Track::id()`: the path, plus `#03` for a song inside an album file. Used
+    for playlists, corrections, the waveform and the `--plan` output.
+  - All-caps spellings from sheets ("JOY DIVISION") lose ties to mixed case.
+  - The album's folder line says "one file + CUE sheet".
+- **Playback:** `audio::Section` seeks the album file to the song's first sample frame and
+  stops after its last. Times, seeking and the waveform are relative to the song. Checked
+  against ffmpeg's cut of *Unknown Pleasures* track 2: the same 25,321,632 samples, difference 0.
+- **Card:**
+  - Songs are cut to FLAC with ffmpeg (`-ss` before `-i`: sample-exact, checked against the
+    whole decoded album), then tagged.
+  - Lossless album files of any format (FLAC, WAV, APE, WavPack, AIFF, ALAC) become FLAC. Songs
+    in lossy album files, or without ffmpeg, are left out with a reason.
+  - The manifest records what each song was cut from (`Written::source`), so a rewrite cuts
+    nothing unless the album file, the sheet's times or the tags changed. *Unknown Pleasures*:
+    10 songs in 5.4 s; a second write cut 0.
+- **Not moved:** *Reorganise* leaves album files and their sheets where they are.
+- **Corrections stay in the app:** they can't be written back into the album file; they reach
+  the card copies.
+- **Bundled ffmpeg** now includes the FLAC encoder, the FLAC writer and `atrim` (8.4 MB).
+- **Left for later:**
+  - Gapless playback between songs of the same file.
+  - Hidden audio before track 1's `INDEX 01` (skipped, as foobar2000 does).
+  - Sheets embedded in FLAC files (C5).
+  - Disc ID lookups (A6).
+  - Editions (B5). With CUE support, the three *Unknown Pleasures* editions now merge into one
+    30-song album, which makes B5 more pressing.
+
 ---
 
 ## D. Order of work and tests
@@ -328,9 +368,9 @@ track**:
 | 2 | A2–A4 safer lookup (no placeholder artist, checked candidates, no blind fallback) | M | 1 | **Done** |
 | 3 | A5 show the release found + alternatives | M | 2 | Partly: the found release's country, label and track count are shown |
 | 4 | B3/B4 artist folder walk-up and learning from neighbours | M | 1 | B3 walk-up **done**; B4 to do |
-| 5 | C1 CUE parser + C2 virtual tracks in scan/db/library | M | 1 | |
-| 6 | C3 playback of spans | M | 5 | |
-| 7 | C4 splitting on the card + manifest source keys | M | 5 | |
+| 5 | C1 CUE parser + C2 virtual tracks in scan/db/library | M | 1 | **Done** |
+| 6 | C3 playback of spans | M | 5 | **Done** (gapless joins not yet) |
+| 7 | C4 splitting on the card + manifest source keys | M | 5 | **Done** |
 | 8 | B5 editions | M | 4 | |
 | 9 | A6 disc ID lookups, C5 embedded sheets | M | 5 | |
 

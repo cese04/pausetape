@@ -33,6 +33,8 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
   can't hold symlinks).
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks
   clearly what the Echo Mini can't play.
+- **Albums stored as one file plus a `.cue` sheet** show as separate songs, as in foobar2000
+  or AIMP. On the card, each song becomes its own FLAC file.
 
 ## Status
 
@@ -68,7 +70,7 @@ Linux the audio/windowing headers (exact commands per distribution in
 cargo run --release                          # the app
 cargo run --release -- --version             # version, and which ffmpeg it uses
 cargo run --release -- --plan ~/Music        # dry run: print the planned layout, change nothing
-cargo test                                   # 21 offline tests
+cargo test                                   # 28 offline tests
 ```
 
 ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,

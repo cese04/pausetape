@@ -1,6 +1,6 @@
 # NeatLibrary: progress and roadmap
 
-*Last updated: 2026-10-28: safer MusicBrainz lookups and folder-name reading done; CUE sheets planned ([NEXT](NEXT.md)).*
+*Last updated: 2026-10-28: safer MusicBrainz lookups, folder-name reading and CUE sheets done ([NEXT](NEXT.md)).*
 
 NeatLibrary organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
@@ -81,8 +81,11 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
   same-named albums from different years (American Football ×3). Untagged files still take the
   artist from the folder only, not from tagged neighbours. Planned in
   [NEXT §B](NEXT.md#b-folder-and-file-names-are-misread) (B4, B5).
-- **Albums stored as one file plus a `.cue` sheet** show as a single long song (23 such sheets in
-  the test library). Fix designed in [NEXT §C](NEXT.md#c-albums-stored-as-one-file-plus-a-cue-sheet).
+- **Albums stored as one file plus a `.cue` sheet** now work in the library, the player and on
+  the card ([NEXT §C](NEXT.md#c-albums-stored-as-one-file-plus-a-cue-sheet)). Limits:
+  - no gapless join between songs of one file;
+  - corrections to those songs can't be written back into the album file (they reach the card);
+  - cutting needs ffmpeg, which only the Mac app bundles.
 - The debug screenshot demo has twice produced no screenshots (empty log, no panic); every
   rerun worked. It only affects that debug tool, but is noted in case the app is ever seen to
   hang on start-up.

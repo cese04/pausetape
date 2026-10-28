@@ -25,8 +25,9 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
 
 1. **Scan** (`library/scan.rs`, `library/db.rs`): walk the music folder; for each audio file reuse the
    database row if size and modification time match, else read tags with `lofty` (and, for
-   MP4 files, the codec code). Folder-name inference ("Artist/Album/03 - Title") runs every
-   time, because it depends on which folder is the root. Saved corrections are re-applied.
+   MP4 files, the codec code). Then, every time: `.cue` sheets turn album files into one track
+   per song (`library/cue.rs`), and folder-name inference ("Artist/Album/03 - Title") fills
+   gaps (it depends on which folder is the root). Saved corrections are re-applied.
    Result: `Vec<Track>`.
 2. **Group** (`library/names.rs`, `library/grouping.rs`): artist spellings collapse to a *key* ("The Beatles",
    "Beatles, The" → `beatles`); keys merge by user decisions; near-misses become suggestions.
@@ -34,12 +35,14 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
 3. **Plan** (`card/plan.rs`): `Options` (album order, which formats, …) + `Custom` (per-write
    exclusions, names, order) → list of `PlanItem { track, rel path, skip reason }`, FAT-safe and
    collision-free (case-insensitive).
-4. **Write** (`card/write.rs`, using `card/copy.rs` and `card/playlist.rs`): copy what differs, export playlists, prune files the *previous* write
-   created that are no longer wanted (only if their size still matches the manifest), clean
-   macOS `._` files, and store the new manifest in the write profile.
-5. **Play** (`audio/`, `library/cover.rs`): `audio::open` tries Symphonia, else converts with ffmpeg
-   to a cached stereo WAV. The waveform (loudness every 100 ms) and the cover load in background
-   threads.
+4. **Write** (`card/write.rs`, using `card/copy.rs` and `card/playlist.rs`): copy what
+   differs (songs inside an album file are cut out as FLAC with ffmpeg), export playlists,
+   prune files the *previous* write created that are no longer wanted (only if their size
+   still matches the manifest), clean macOS `._` files, and store the new manifest in the
+   write profile.
+5. **Play** (`audio/`, `library/cover.rs`): `audio::open` tries Symphonia, else converts with
+   ffmpeg to a cached stereo WAV; `audio::Section` keeps to one song of an album file. The
+   waveform (loudness every 100 ms) and the cover load in background threads.
 
 ## Modules
 
@@ -55,10 +58,11 @@ src/
 │   ├── track.rs       Track; which formats play on RECHO / here / not at all
 │   ├── scan.rs        incremental scan (database reuse), tag reading, folder-name inference
 │   ├── mp4.rs         the codec inside .m4a/.mp4 files (AAC, ALAC, Dolby E-AC-3, …)
+│   ├── cue.rs         CUE sheets: parse, decode legacy encodings, album file → songs
 │   ├── tags.rs        writing corrected tags into files
 │   ├── db.rs          SQLite library database: cached tags, unsaved corrections
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
-│   ├── names.rs       artist/title keys, fuzzy matching, FAT-safe file names
+│   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
 │   └── grouping.rs    clusters, merge suggestions, artist → album → track index
 ├── card/              putting music on the SD card (and tidying the music folder)
 │   ├── plan.rs        Options + Custom → planned paths (album order, names, exclusions)
@@ -105,8 +109,10 @@ src/
 | Artist | cluster *key* (from the most common spelling) | Write exclusions and card names survive renames |
 | Album | `"<cluster key>|<title key>"` (`AlbumNode::id`) | Same, for albums |
 | Write | its name (kept unique) | Background write/preview results find their write by name |
-| Playlist | its name (in writes), track **paths** (inside) | Renaming a playlist updates writes; moving files outside the app drops them |
-| Track in the database | absolute path + size + mtime | Any change means "read again" |
+| Track | `Track::id()`: its path, plus `#03` for a song inside an album file | Playlists, corrections and the waveform find their track |
+| Playlist | its name (in writes), track **ids** (inside) | Renaming a playlist updates writes; moving files outside the app drops them |
+| Track in the database | absolute path + size + mtime (album files cached whole; songs derived each scan) | Any change means "read again" |
+| Song cut onto the card | manifest `source`: id, CUE times, album file size/date, tags | A rewrite cuts again only when one of them changed |
 
 ## Where things are stored
 
@@ -130,6 +136,8 @@ App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
 - Copies are **plain byte copies** (`card::plain_copy`): `std::fs::copy` on macOS would
   copy extended attributes, which appear as `._` files on FAT cards.
 - Copies go to a `.partial` file first and are renamed when complete.
+- Album files with a CUE sheet are **never moved or retagged**: *Reorganise* skips them, and
+  corrections to their songs stay in the app (and in card copies).
 
 ## Platform-specific code
 
@@ -141,13 +149,14 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 21 tests, each next to the code it checks: name rules, folder-name reading,
-MusicBrainz release checks, clustering, which formats play where, layout plans, copy/move/undo,
+`cargo test` runs 28 tests, each next to the code it checks: name rules, folder-name reading,
+MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering, which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 playlist export, cover lookup, text shortening. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
-(`NEATLIBRARY_FORMATS=<dir>`).
+(`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
+`cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`).
 
 ## Conventions
 

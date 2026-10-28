@@ -17,7 +17,7 @@ portability fixes) · [ARCHITECTURE](ARCHITECTURE.md) (where things live in the 
 Once the repository is on GitHub, every push runs `.github/workflows/ci.yml`. It builds and
 tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
 
-- **Green on all three:** it compiles and the 21 tests pass everywhere. Go on to the hands-on
+- **Green on all three:** it compiles and the 28 tests pass everywhere. Go on to the hands-on
   test below.
 - **Red on Windows or Linux:** open the failed step's log; that's the first thing to fix. A
   compile error there is likely, since this code has never met those compilers.
@@ -68,7 +68,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/<you>/<repo>.git
 cd <repo>
-cargo test                          # 21 tests should pass (3 more are skipped on purpose)
+cargo test                          # 28 tests should pass (5 more are skipped on purpose)
 cargo run --release -- --version    # e.g. "NeatLibrary 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -134,6 +134,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 11. An M4A (AAC) plays and shows a "M4A · not on RECHO" badge. With ffmpeg: an Opus or Dolby
     file plays after a short "converting with ffmpeg…".
 12. Settings › ffmpeg shows the path found (or "not found" with an install hint).
+12a. If you have an album stored as one file plus a `.cue` sheet: it shows as separate songs
+    ("one file + CUE sheet" under the album), and each song plays from its own start with its
+    own length.
 
 ### D. Artists and MusicBrainz
 13. Artists tab: a misspelled artist appears under *possible duplicates*; **same artist**
@@ -148,6 +151,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 17. **Write to the card**. Then check the stick in Explorer / the file manager:
     `Artist/1997 - Album/01 - Title.ext`, no `._` files, playlists under `_Playlists`.
 18. Write again: "0 copied", everything "unchanged".
+18a. With a CUE album and ffmpeg: each song is its own FLAC on the stick, with the right
+    length; writing again cuts nothing. Without ffmpeg, those songs are left out with
+    "needs ffmpeg to cut the album file into songs".
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
