@@ -85,3 +85,32 @@ Everything built so far, in the order it happened. All of it is unreleased work 
 - The data folder is computed in one place (`platform::data_dir`).
 - Dolby AC-4 is now correctly reported as unplayable even with ffmpeg (FFmpeg has no decoder);
   texts no longer claim otherwise. New test for the format rules (16 tests).
+
+### 13. Planned fixes documented (2026-10-28)
+- `docs/NEXT.md`: why MusicBrainz suggestions can come from the wrong album and how to make
+  lookups safer; folder and file names that are misread (an artist called "1979", nested
+  collection folders, several editions of one album); support for albums stored as one file
+  plus a `.cue` sheet (library, playback, splitting on the card). Not implemented yet.
+
+### 14. Safer MusicBrainz lookups and better folder-name reading (2026-10-28)
+- Folder and file names:
+  - `1979 - Album.flac` gives a year, not an artist "1979"; `1-03 - Title` gives disc 1, track 3.
+  - Album folders like `1979. Album {edition}`, `Album (1997) [FLAC]` and `Artist - Album (1997)`
+    lose the year and edition details; the year is kept as the year.
+  - The artist is taken from the nearest folder above that isn't itself an album, without
+    endings like " - коллекция" or " [restored]"; `CD 1` folders give the disc number.
+  - Measured on the test library: Joy Division, The Cure, Cigarettes After Sex and Ritchie
+    Kotzen & Greg Howe albums are no longer filed under "1979"/"1980"/"1988" or as singles.
+  - Albums named only by their folder may get a new identity (e.g. "Album (2017) [LP]" is now
+    "Album"), so a write's exclusions or card names for those albums reset once.
+- MusicBrainz:
+  - Folder names are cleaned before searching ("The Beatles - Love (2006) [Dolby Atmos]" → "Love").
+  - Never searches for an artist called "Unknown Artist".
+  - Results must have the same artist and title; the exact title beats a similar one.
+  - Up to 3 releases are checked against the songs. Songs are paired by track number or length
+    only after enough titles agree, or every length lines up, so a wrong album can't hand out its
+    titles. Otherwise: "no confident match", naming the releases that were checked.
+  - Titles with a track number or band name in front ("01 Joy Division - Disorder") still match.
+  - The result line shows the release's country, label and track count; long messages wrap.
+  - Single songs without an album: an unknown artist is replaced by the song's length in the search.
+- 24 tests (21 offline), new ones for names, folders, ranking and the album check.

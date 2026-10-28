@@ -1,6 +1,6 @@
 # NeatLibrary: progress and roadmap
 
-*Last updated: 2026-10-27: Mac packaging, cross-platform test preparation.*
+*Last updated: 2026-10-28: safer MusicBrainz lookups and folder-name reading done; CUE sheets planned ([NEXT](NEXT.md)).*
 
 NeatLibrary organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
@@ -10,7 +10,8 @@ WAV. Everything here is shaped by those limits.
 Related documents: [README](../README.md) (install and run) · [CHANGELOG](../CHANGELOG.md)
 (everything done so far, in order) · [ARCHITECTURE](ARCHITECTURE.md) (how the code fits
 together) · [TESTING](TESTING.md) (Windows and Linux test guide) ·
-[DISTRIBUTION](DISTRIBUTION.md) (packaging and releases).
+[DISTRIBUTION](DISTRIBUTION.md) (packaging and releases) · [NEXT](NEXT.md) (agreed next
+changes, designed in detail).
 
 ---
 
@@ -73,6 +74,15 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 
 ### Known issues and limits
 
+- **MusicBrainz lookups** were fixed on 2026-10-28 so they no longer suggest another album's
+  titles ([NEXT §A](NEXT.md#a-musicbrainz-lookups-pick-the-wrong-release)). Still to do: choosing
+  among alternative releases, and marking songs matched only by position.
+- **Several editions of one album merge** into one album with duplicate track numbers, and so do
+  same-named albums from different years (American Football ×3). Untagged files still take the
+  artist from the folder only, not from tagged neighbours. Planned in
+  [NEXT §B](NEXT.md#b-folder-and-file-names-are-misread) (B4, B5).
+- **Albums stored as one file plus a `.cue` sheet** show as a single long song (23 such sheets in
+  the test library). Fix designed in [NEXT §C](NEXT.md#c-albums-stored-as-one-file-plus-a-cue-sheet).
 - The debug screenshot demo has twice produced no screenshots (empty log, no panic); every
   rerun worked. It only affects that debug tool, but is noted in case the app is ever seen to
   hang on start-up.
@@ -89,6 +99,9 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 ## 2. Pending suggestions (offered in conversation)
 
 Ordered by value. Effort: **S** = an hour or two, **M** = about a day, **L** = several days.
+
+Agreed and designed in detail, to do first: [NEXT](NEXT.md) (safer MusicBrainz lookups, folder
+name reading, CUE sheets).
 
 | # | Suggestion | Why | Effort |
 |---|---|---|---|

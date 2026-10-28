@@ -17,7 +17,7 @@ portability fixes) · [ARCHITECTURE](ARCHITECTURE.md) (where things live in the 
 Once the repository is on GitHub, every push runs `.github/workflows/ci.yml`. It builds and
 tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
 
-- **Green on all three:** it compiles and the 16 tests pass everywhere. Go on to the hands-on
+- **Green on all three:** it compiles and the 21 tests pass everywhere. Go on to the hands-on
   test below.
 - **Red on Windows or Linux:** open the failed step's log; that's the first thing to fix. A
   compile error there is likely, since this code has never met those compilers.
@@ -68,7 +68,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/<you>/<repo>.git
 cd <repo>
-cargo test                          # 16 tests should pass (3 more are skipped on purpose)
+cargo test                          # 21 tests should pass (3 more are skipped on purpose)
 cargo run --release -- --version    # e.g. "NeatLibrary 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```

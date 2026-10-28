@@ -141,11 +141,11 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 16 tests, each next to the code it checks: name rules, clustering, which
-formats play where, layout plans, copy/move/undo, custom layouts and pruning, card write →
-deselect → rewrite, database reuse and corrections, playlist export, cover lookup, text
-shortening. They use temporary folders and fake audio files, so they
-need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
+`cargo test` runs 21 tests, each next to the code it checks: name rules, folder-name reading,
+MusicBrainz release checks, clustering, which formats play where, layout plans, copy/move/undo,
+custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
+playlist export, cover lookup, text shortening. They use temporary folders and fake audio files,
+so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`).
 
