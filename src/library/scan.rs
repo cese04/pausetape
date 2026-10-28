@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 use super::db::Db;
 use super::mp4::{MP4_EXTS, mp4_audio_codec};
+use super::names::{clean_album, clean_artist_folder, disc_folder, parse_file_stem, split_artist_album};
 use super::track::Track;
 
 /// Everything scanned. Opus, APE, WavPack and WMA have no Rust decoder: listed, organised, not playable.
@@ -157,45 +158,89 @@ fn read_track(path: &Path, ext: &str) -> Track {
     t
 }
 
-/// Fill gaps from the file name and folders: "03 - Title.mp3", "Artist - Title.mp3",
-/// ".../Artist/Album/track.flac".
+/// Fill gaps from the file name and folders: "03 - Title.mp3", "1979 - Album.flac",
+/// ".../Artist/1997 - Album/CD 1/track.flac", ".../Artist - collection/1979. Album/edition/".
 fn infer_from_path(t: &mut Track, root: &Path) {
     let stem = t.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    let digits: String = stem.chars().take_while(|c| c.is_ascii_digit()).collect();
-    let mut rest = stem.as_str();
-    if !digits.is_empty() && digits.len() <= 3 {
-        rest = stem[digits.len()..].trim_start_matches([' ', '-', '.', '_']);
-        if t.track.is_none() {
-            t.track = digits.parse().ok();
-        }
+    let p = parse_file_stem(&stem);
+    t.track = t.track.or(p.track);
+    t.disc = t.disc.or(p.disc);
+    t.year = t.year.or(p.year);
+    if t.artist.is_none() {
+        t.artist = p.artist;
     }
-    if let Some((a, title)) = rest.split_once(" - ") {
-        if t.artist.is_none() {
-            t.artist = Some(a.trim().to_string());
-        }
-        if t.title.is_none() {
-            t.title = Some(title.trim().to_string());
-        }
-    } else if t.title.is_none() && !rest.is_empty() {
-        t.title = Some(rest.trim().to_string());
+    if t.title.is_none() {
+        t.title = p.title;
     }
 
-    let rel_dirs: Vec<String> = t
+    let mut dirs: Vec<String> = t
         .path
         .parent()
         .and_then(|p| p.strip_prefix(root).ok())
         .map(|p| p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect())
         .unwrap_or_default();
-    // Only trust folder names in an Artist/Album layout; a lone "Downloads" isn't an album.
-    if t.album.is_none()
-        && rel_dirs.len() >= 2
-        && let Some(album) = rel_dirs.last()
-    {
-        // "1997 - OK Computer" -> "OK Computer"
-        let album = album.split_once(" - ").filter(|(y, _)| y.len() == 4 && y.chars().all(|c| c.is_ascii_digit()));
-        t.album = Some(album.map(|(_, a)| a).unwrap_or(rel_dirs.last().unwrap()).to_string());
+    // "CD 1" belongs to the album folder above it.
+    if let Some(d) = dirs.last().and_then(|d| disc_folder(d)) {
+        t.disc.get_or_insert(d);
+        dirs.pop();
     }
-    if t.artist.is_none() && t.album_artist.is_none() && rel_dirs.len() >= 2 {
-        t.artist = Some(rel_dirs[rel_dirs.len() - 2].clone());
+    let Some((album_dir, above)) = dirs.split_last() else { return };
+    // The artist is the nearest folder above that isn't itself an album, e.g. skipping
+    // "1979. Unknown Pleasures {3 editions}" that holds several editions.
+    let album_like = |d: &str| disc_folder(d).is_some() || clean_album(d, None).year.is_some();
+    let mut folder_artist = above.iter().rev().find(|d| !album_like(d)).map(|d| clean_artist_folder(d));
+    let hint = t.album_artist.clone().or(t.artist.clone()).or(folder_artist.clone());
+    let mut name = clean_album(album_dir, hint.as_deref());
+    // A lone "Artist - Album (1997)" folder names both; a lone "Downloads" isn't an album.
+    let mut trusted = !above.is_empty();
+    if folder_artist.is_none()
+        && let Some((a, n)) = split_artist_album(album_dir)
+    {
+        (folder_artist, name, trusted) = (Some(a), n, true);
+    }
+    if !trusted {
+        return;
+    }
+    if t.album.is_none() {
+        t.album = Some(name.album);
+    }
+    t.year = t.year.or(name.year);
+    if t.artist.is_none() && t.album_artist.is_none() {
+        t.artist = folder_artist;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn inferred(rel: &str) -> Track {
+        let root = Path::new("/music");
+        let mut t = Track { path: root.join(rel), ..Default::default() };
+        infer_from_path(&mut t, root);
+        t
+    }
+
+    #[test]
+    fn names_from_folders() {
+        let t = inferred("Joy Division - коллекция/1979. Unknown Pleasures {3 издания}/1979. Unknown Pleasures {1989, US, Qwest Records, 9 25840-2} v.1/1979 - Unknown Pleasures.flac");
+        assert_eq!(t.artist.as_deref(), Some("Joy Division"));
+        assert_eq!(t.album.as_deref(), Some("Unknown Pleasures"));
+        assert_eq!(t.year, Some(1979));
+
+        let t = inferred("Pink Floyd - The Wall (2007 Remaster) [FLAC] 88/CD 2/03 - Hey You.flac");
+        assert_eq!((t.artist.as_deref(), t.album.as_deref(), t.disc, t.track), (Some("Pink Floyd"), Some("The Wall"), Some(2), Some(3)));
+
+        let t = inferred("Radiohead/1997 - OK Computer/02 - Paranoid Android.mp3");
+        assert_eq!((t.artist.as_deref(), t.album.as_deref(), t.year, t.title.as_deref()), (Some("Radiohead"), Some("OK Computer"), Some(1997), Some("Paranoid Android")));
+
+        let t = inferred("Downloads/03 - Song.mp3");
+        assert_eq!((t.artist, t.album), (None, None));
+
+        // Tags win over folders.
+        let root = Path::new("/music");
+        let mut t = Track { path: root.join("Joy Division - коллекция/1980. Closer {x}/a.flac"), artist: Some("JOY DIVISION".into()), ..Default::default() };
+        infer_from_path(&mut t, root);
+        assert_eq!((t.artist.as_deref(), t.album.as_deref()), (Some("JOY DIVISION"), Some("Closer")));
     }
 }
