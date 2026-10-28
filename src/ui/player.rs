@@ -49,7 +49,7 @@ fn cover_art(app: &App, ui: &mut Ui, ti: usize) {
     let ink = ink(ui);
     let (rect, _) = ui.allocate_exact_size(vec2(COVER, COVER), Sense::hover());
     let t = &app.tracks[ti];
-    match app.cover.as_ref().filter(|(p, _)| *p == t.path).and_then(|(_, tex)| tex.as_ref()) {
+    match app.cover.as_ref().filter(|(p, _, _)| *p == t.path).and_then(|(_, tex, _)| tex.as_ref()) {
         Some(tex) => {
             // Fit inside the square without cropping; most covers are square anyway.
             let size = tex.size_vec2();
@@ -141,6 +141,7 @@ fn transport(app: &mut App, ui: &mut Ui, st: &Status) {
         }
         ui.add_space(12.0);
         muted(ui, format!("{} of {}", app.qpos + 1, app.queue.len()));
+        cover_suggestion(app, ui);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let mut v = app.saved.volume;
             if volume(ui, &mut v) {
@@ -150,6 +151,26 @@ fn transport(app: &mut App, ui: &mut Ui, st: &Status) {
             muted(ui, "volume");
         });
     });
+}
+
+/// When the cover shown comes from an image file rather than the songs' tags, offer to add it:
+/// the Echo Mini shows embedded covers, not image files in the folder.
+fn cover_suggestion(app: &mut App, ui: &mut Ui) {
+    let Some(ti) = app.current() else { return };
+    let t = &app.tracks[ti];
+    let Some(file) = app.cover.as_ref().filter(|(p, tex, _)| *p == t.path && tex.is_some()).and_then(|(_, _, f)| f.clone()) else { return };
+    let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    ui.add_space(12.0);
+    if t.cover.is_some() {
+        let when = if t.cue.is_some() { "in card copies when you next write" } else { "in card copies when you next write, and in the music files with \"write corrected tags\"" };
+        muted(ui, "cover will be added to the songs' tags").on_hover_text(format!("{name}: {when}"));
+        return;
+    }
+    muted(ui, format!("cover from {}, not in the songs' tags ·", text::shorten(&name, 28)));
+    let hint = "Embed this image as the cover of the album's songs (resized to 600 px JPEG). Players like the Echo Mini show embedded covers, not image files in the folder.";
+    if super::widgets::link(ui, "add it").on_hover_text(hint).clicked() {
+        app.add_cover(ti, file);
+    }
 }
 
 /// Space, ←/→ seek 10 s, N/P for next/previous, unless typing in a field.

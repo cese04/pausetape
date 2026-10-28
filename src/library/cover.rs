@@ -8,6 +8,9 @@ use lofty::prelude::*;
 
 /// Longest side of the decoded image; the player shows it at about a third of this.
 const MAX_SIDE: u32 = 320;
+/// Longest side of a cover embedded into songs. Small players decode embedded art themselves;
+/// a modest baseline JPEG displays everywhere and adds ~100 KB per song.
+const EMBED_SIDE: u32 = 600;
 const NAMES: &[&str] = &["cover", "folder", "front", "album", "albumart", "artwork", "front cover"];
 const EXTS: &[&str] = &["jpg", "jpeg", "png"];
 
@@ -56,12 +59,29 @@ fn images_in(dir: &Path) -> Vec<PathBuf> {
     images
 }
 
-/// Decoded, downscaled cover for the track at `path`, if it has one.
-pub fn load(path: &Path) -> Option<image::RgbaImage> {
-    let bytes = embedded(path).or_else(|| std::fs::read(beside(path)?).ok())?;
+/// Decoded, downscaled cover for the track at `path`, if it has one, and the image file it came
+/// from when it isn't embedded in the track (so it could be added to the track's tags).
+pub fn load(path: &Path) -> Option<(image::RgbaImage, Option<PathBuf>)> {
+    let (bytes, file) = match embedded(path) {
+        Some(b) => (b, None),
+        None => {
+            let f = beside(path)?;
+            (std::fs::read(&f).ok()?, Some(f))
+        }
+    };
     let img = image::load_from_memory(&bytes).ok()?;
     let img = if img.width() > MAX_SIDE || img.height() > MAX_SIDE { img.thumbnail(MAX_SIDE, MAX_SIDE) } else { img };
-    Some(img.to_rgba8())
+    Some((img.to_rgba8(), file))
+}
+
+/// An image file as a cover to embed: at most `EMBED_SIDE` pixels, baseline JPEG.
+pub fn for_embedding(image: &Path) -> anyhow::Result<Vec<u8>> {
+    use anyhow::Context;
+    let img = image::open(image).with_context(|| format!("reading {}", image.display()))?;
+    let img = if img.width() > EMBED_SIDE || img.height() > EMBED_SIDE { img.thumbnail(EMBED_SIDE, EMBED_SIDE) } else { img };
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90).encode_image(&img.to_rgb8())?;
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -80,8 +100,11 @@ mod tests {
         // A large "Folder.JPG"-style name is found case-insensitively and downscaled.
         image::RgbaImage::from_pixel(800, 600, image::Rgba([200, 30, 30, 255])).save(dir.join("Folder.png")).unwrap();
         image::RgbaImage::from_pixel(10, 10, image::Rgba([0, 0, 0, 255])).save(dir.join("back.png")).unwrap();
-        let img = load(&track).expect("cover found");
+        let (img, file) = load(&track).expect("cover found");
         assert_eq!(img.dimensions(), (MAX_SIDE, 240));
+        assert_eq!(file, Some(dir.join("Folder.png")), "not embedded: it could be added to the tags");
+        let jpeg = for_embedding(&dir.join("Folder.png")).unwrap();
+        assert_eq!(image::load_from_memory(&jpeg).unwrap().width(), EMBED_SIDE);
         std::fs::remove_dir_all(&dir).unwrap();
 
         // An album file: its spectrogram sorts first, but the image named after it is the cover.

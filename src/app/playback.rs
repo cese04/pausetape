@@ -32,13 +32,8 @@ impl App {
         let (path, id) = (t.path.clone(), t.id());
         let span = t.cue.as_ref().map(|c| (c.start_time(), c.end_time()));
         self.audio.load(&path, span);
-        if self.cover.as_ref().is_none_or(|(p, _)| *p != path) {
-            let p = path.clone();
-            self.spawn(move |tx| {
-                let img = crate::library::cover::load(&p)
-                    .map(|rgba| egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw()));
-                let _ = tx.send(Msg::Cover(p.clone(), img));
-            });
+        if self.cover.as_ref().is_none_or(|(p, _, _)| *p != path) {
+            self.load_cover(path.clone());
         }
         if self.envelope.as_ref().is_none_or(|(p, _)| *p != id) {
             self.envelope = None;
@@ -48,6 +43,16 @@ impl App {
                 }
             });
         }
+    }
+
+    /// Look up the cover for a track path in the background (`Msg::Cover`).
+    pub fn load_cover(&mut self, p: std::path::PathBuf) {
+        self.spawn(move |tx| {
+            let found = crate::library::cover::load(&p);
+            let file = found.as_ref().and_then(|(_, f)| f.clone());
+            let img = found.map(|(rgba, _)| egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw()));
+            let _ = tx.send(Msg::Cover(p.clone(), img, file));
+        });
     }
 
     pub fn next(&mut self) {

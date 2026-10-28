@@ -97,7 +97,11 @@ impl App {
                     self.busy = None;
                     for &(i, size, mtime) in &ok {
                         let t = &mut self.tracks[i];
-                        (t.dirty, t.size, t.mtime) = (false, size, mtime);
+                        (t.dirty, t.size, t.mtime, t.cover) = (false, size, mtime, None);
+                    }
+                    // A cover now embedded in the playing track: look it up again.
+                    if let Some(c) = self.current().filter(|c| ok.iter().any(|&(i, _, _)| i == *c)) {
+                        self.load_cover(self.tracks[c].path.clone());
                     }
                     // The corrections live in the files now; the next scan re-reads them.
                     if let Some(db) = &mut self.db {
@@ -106,10 +110,10 @@ impl App {
                     }
                     self.notice(format!("tags written to {} files{}", ok.len(), if errors.is_empty() { String::new() } else { format!(" · {} failed", errors.len()) }));
                 }
-                Msg::Cover(path, img) => {
+                Msg::Cover(path, img, file) => {
                     if self.current().is_some_and(|i| self.tracks[i].path == path) {
                         let tex = img.map(|img| self.ctx.load_texture("cover", img, egui::TextureOptions::LINEAR));
-                        self.cover = Some((path, tex));
+                        self.cover = Some((path, tex, file));
                     }
                 }
                 Msg::Envelope(id, env) => {

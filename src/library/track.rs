@@ -47,6 +47,9 @@ pub struct Track {
     /// One song of an album stored as a single file, as a CUE sheet describes it. `path` is
     /// then the album file, and `duration`/`size` are the song's (size estimated).
     pub cue: Option<CueSpan>,
+    /// An image beside the track to embed as its front cover when tags are next written (the
+    /// user chose to add it). Part of the corrections, like edited fields.
+    pub cover: Option<PathBuf>,
 }
 
 impl Track {

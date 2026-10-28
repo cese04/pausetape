@@ -170,6 +170,33 @@ impl App {
         self.mb().send(job);
     }
 
+    /// Add the cover image found beside the playing track to the tags of its album's songs (or
+    /// edition's), as a correction: it goes into card copies, and into the music files with
+    /// "write corrected tags".
+    pub fn add_cover(&mut self, track: usize, image: PathBuf) {
+        let album = self.index.artists.iter().flat_map(|a| &a.albums).find(|al| al.tracks.contains(&track));
+        let songs: Vec<usize> = album.map(|al| al.tracks.clone()).unwrap_or_else(|| vec![track]);
+        for &i in &songs {
+            let t = &mut self.tracks[i];
+            t.cover = Some(image.clone());
+            t.dirty = true;
+        }
+        if let Some(db) = &mut self.db
+            && let Err(e) = db.save_edits(songs.iter().map(|&i| &self.tracks[i]))
+        {
+            self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
+        }
+        self.write_preview = None;
+        let name = image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        // Songs inside an album file (CUE) can't be retagged in place; their card copies can.
+        let where_ = if songs.iter().all(|&i| self.tracks[i].cue.is_some()) {
+            "in card copies when you next write"
+        } else {
+            "in card copies when you next write, and in the music files with \"write corrected tags\""
+        };
+        self.notice(format!("{name} will be added as the cover of {}: {where_}", plural_files(songs.len())));
+    }
+
     pub fn apply_lookup(&mut self, id: &str) {
         let Some(Lookup::Ready { changes, .. }) = self.lookups.remove(id) else { return };
         let mut touched = HashSet::new();

@@ -268,6 +268,7 @@ fn split(image: &Track, sheet: &Sheet, file: &SheetFile, sheet_path: &Path) -> V
                 size: image.size * frames / total,
                 mtime: image.mtime,
                 cue: Some(CueSpan { number: st.number, start: st.start, end, sheet: sheet_path.to_path_buf() }),
+                cover: None,
                 dirty: false,
             }
         })

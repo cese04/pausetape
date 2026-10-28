@@ -96,7 +96,8 @@ enum Msg {
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
     /// Loudness of a track, by track id.
     Envelope(PathBuf, Vec<f32>),
-    Cover(PathBuf, Option<egui::ColorImage>),
+    /// Cover for a track path, and the image file it came from if it isn't embedded.
+    Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
 }
 
 pub struct Busy {
@@ -144,7 +145,7 @@ pub struct App {
     /// Waveform of the playing track, by track id.
     pub envelope: Option<(PathBuf, Vec<f32>)>,
     /// Cover of the playing track; `None` inside once looked up and none was found.
-    pub cover: Option<(PathBuf, Option<egui::TextureHandle>)>,
+    pub cover: Option<(PathBuf, Option<egui::TextureHandle>, Option<PathBuf>)>,
     pub active_playlist: Option<usize>,
     pub renaming: Option<(usize, String)>,
     /// UI-thread connection to the library database (scans open their own).
