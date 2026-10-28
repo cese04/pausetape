@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>                 <string>__APP_NAME__</string>
+    <key>CFBundleDisplayName</key>          <string>__APP_NAME__</string>
+    <key>CFBundleIdentifier</key>           <string>__BUNDLE_ID__</string>
+    <key>CFBundleExecutable</key>           <string>neatlibrary</string>
+    <key>CFBundleIconFile</key>             <string>AppIcon</string>
+    <key>CFBundlePackageType</key>          <string>APPL</string>
+    <key>CFBundleShortVersionString</key>   <string>__VERSION__</string>
+    <key>CFBundleVersion</key>              <string>__VERSION__</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>LSMinimumSystemVersion</key>       <string>12.0</string>
+    <key>LSApplicationCategoryType</key>    <string>public.app-category.music</string>
+    <key>NSHighResolutionCapable</key>      <true/>
+    <key>NSHumanReadableCopyright</key>     <string>MIT License. Includes FFmpeg (LGPL v2.1).</string>
+
+    <!-- Shown by macOS the first time the app reads or writes these places. -->
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>__APP_NAME__ copies your music to the SD card for your Echo Mini.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>__APP_NAME__ reads your music library if it is in Documents.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>__APP_NAME__ reads your music library if it is in Downloads.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>__APP_NAME__ reads your music library if it is on the Desktop.</string>
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>__APP_NAME__ reads your music library if it is on a network drive.</string>
+</dict>
+</plist>

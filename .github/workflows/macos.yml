@@ -1,0 +1,56 @@
+# Test and package the macOS app on every push; attach the DMG to a GitHub Release for tags
+# like v0.1.0. Not yet run: it needs the repository on GitHub first.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write   # to create releases from tags
+
+jobs:
+  package:
+    runs-on: macos-14   # Apple Silicon; the Intel half is cross-compiled
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      # The minimal ffmpeg takes minutes to build; rebuild only when its script changes.
+      - uses: actions/cache@v4
+        with:
+          path: target/ffmpeg-macos
+          key: ffmpeg-macos-${{ hashFiles('scripts/build-ffmpeg-macos.sh') }}
+
+      - run: cargo test --locked
+
+      - run: scripts/package-macos.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOS-dmg
+          path: dist/*.dmg*
+
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg*
+          body: |
+            macOS 12 or later, Apple Silicon and Intel.
+
+            This beta isn't signed by a registered Apple developer yet. After dragging the app
+            to Applications, open it once, then go to System Settings › Privacy & Security and
+            click "Open Anyway". Details are in "Read me first.txt" inside the disk image.

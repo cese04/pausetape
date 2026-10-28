@@ -1,0 +1,46 @@
+# Build and test on all three platforms for every push and pull request. This is the first
+# check that the app compiles and its tests pass on Windows and Linux (it has only ever been
+# developed on macOS). Packaging lives in macos.yml.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false   # see every platform's result, not just the first failure
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ matrix.os }}-${{ hashFiles('Cargo.lock') }}
+
+      # Audio (ALSA) and windowing headers the Linux build links against.
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libxkbcommon-dev libwayland-dev
+
+      - run: cargo build --locked --release
+      - run: cargo test --locked
+
+      # The release binary, for trying on a machine without a Rust toolchain.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neatlibrary-${{ runner.os }}
+          path: |
+            target/release/neatlibrary
+            target/release/neatlibrary.exe
+          if-no-files-found: ignore
