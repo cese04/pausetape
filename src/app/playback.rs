@@ -28,8 +28,10 @@ impl App {
             self.audio.stop();
             return;
         };
-        let path = self.tracks[i].path.clone();
-        self.audio.load(&path);
+        let t = &self.tracks[i];
+        let (path, id) = (t.path.clone(), t.id());
+        let span = t.cue.as_ref().map(|c| (c.start_time(), c.end_time()));
+        self.audio.load(&path, span);
         if self.cover.as_ref().is_none_or(|(p, _)| *p != path) {
             let p = path.clone();
             self.spawn(move |tx| {
@@ -38,11 +40,11 @@ impl App {
                 let _ = tx.send(Msg::Cover(p.clone(), img));
             });
         }
-        if self.envelope.as_ref().is_none_or(|(p, _)| *p != path) {
+        if self.envelope.as_ref().is_none_or(|(p, _)| *p != id) {
             self.envelope = None;
             self.spawn(move |tx| {
-                if let Some(env) = audio::envelope(&path) {
-                    let _ = tx.send(Msg::Envelope(path, env));
+                if let Some(env) = audio::envelope(&path, span) {
+                    let _ = tx.send(Msg::Envelope(id, env));
                 }
             });
         }

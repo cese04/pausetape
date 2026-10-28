@@ -1,8 +1,9 @@
 //! The library database: tags read from each file, so rescans only open files that changed,
 //! and in-app corrections that haven't been written to the files yet.
 //!
-//! One SQLite file serves every music folder; rows are keyed by absolute path. A cached row is
-//! trusted only while the file's size and modification time match what was recorded.
+//! One SQLite file serves every music folder; rows are keyed by absolute path (corrections by
+//! track id, which adds "#03" for a song inside an album file). A cached row is trusted only
+//! while the file's size and modification time match what was recorded.
 
 use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -107,7 +108,8 @@ impl Db {
                 put.execute(params![t.path.to_string_lossy(), t.size as i64, t.mtime as i64, serde_json::to_string(t)?])?;
             }
             let mut del = tx.prepare("DELETE FROM tracks WHERE path = ?1")?;
-            let mut del_edit = tx.prepare("DELETE FROM edits WHERE path = ?1")?;
+            // Also corrections to the songs of an album file ("<path>#03").
+            let mut del_edit = tx.prepare("DELETE FROM edits WHERE path = ?1 OR substr(path, 1, length(?1) + 1) = ?1 || '#'")?;
             for p in gone {
                 del.execute(params![p])?;
                 del_edit.execute(params![p])?;
@@ -139,14 +141,14 @@ impl Db {
         {
             let mut put = tx.prepare("INSERT OR REPLACE INTO edits (path, size, mtime, data) VALUES (?1, ?2, ?3, ?4)")?;
             for t in tracks {
-                put.execute(params![t.path.to_string_lossy(), t.size as i64, t.mtime as i64, serde_json::to_string(t)?])?;
+                put.execute(params![t.id().to_string_lossy(), t.size as i64, t.mtime as i64, serde_json::to_string(t)?])?;
             }
         }
         tx.commit()?;
         Ok(())
     }
 
-    /// The corrections are now in the file itself; the next scan re-reads it.
+    /// The corrections are now in the file itself; the next scan re-reads it. Takes track ids.
     pub fn drop_edits<'a>(&mut self, paths: impl IntoIterator<Item = &'a Path>) -> Result<()> {
         let tx = self.conn.transaction()?;
         {

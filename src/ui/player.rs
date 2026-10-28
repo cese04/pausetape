@@ -91,7 +91,7 @@ fn scrubber(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     let frac = if len.is_zero() { 0.0 } else { (st.pos.as_secs_f32() / len.as_secs_f32()).clamp(0.0, 1.0) };
     let mid = rect.center().y;
     let playhead_x = rect.left() + rect.width() * frac;
-    match app.envelope.as_ref().filter(|(path, _)| *path == app.tracks[ti].path) {
+    match app.envelope.as_ref().filter(|(id, _)| *id == app.tracks[ti].id()) {
         Some((_, env)) if !env.is_empty() => {
             let cols = (rect.width() / 2.0).max(1.0) as usize;
             let level = |c: usize| {

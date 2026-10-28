@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::audio::{self, Audio};
 use crate::card::playlist::{self, Playlist};
-use crate::card::{self, Custom, Mode, Options, Outcome, PlanItem, Preview, Progress, Volume, WriteProfile};
+use crate::card::{self, Mode, Options, Outcome, PlanItem, Preview, Progress, Volume, WriteProfile};
 use crate::library::db::Db;
 use crate::library::grouping::{self, AlbumNode, ArtistPrefs, Index};
 use crate::library::names::artist_key;
@@ -94,6 +94,7 @@ enum Msg {
     Previewed(String, Box<Preview>),
     /// (track index, new size, new mtime) for files whose tags were written.
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
+    /// Loudness of a track, by track id.
     Envelope(PathBuf, Vec<f32>),
     Cover(PathBuf, Option<egui::ColorImage>),
 }
@@ -140,6 +141,7 @@ pub struct App {
     pub audio: Audio,
     pub queue: Vec<usize>,
     pub qpos: usize,
+    /// Waveform of the playing track, by track id.
     pub envelope: Option<(PathBuf, Vec<f32>)>,
     /// Cover of the playing track; `None` inside once looked up and none was found.
     pub cover: Option<(PathBuf, Option<egui::TextureHandle>)>,

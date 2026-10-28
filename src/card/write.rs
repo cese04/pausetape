@@ -6,7 +6,6 @@
 //! recorded) are ever deleted.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -79,10 +78,13 @@ pub struct Preview {
 pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[Playlist], dest: &Path) -> Preview {
     let mut p = Preview::default();
     let mut keep: HashSet<String> = HashSet::new();
+    let previous = super::copy::by_rel(&w.manifest);
     let check = |rel: &Path, t: &Track, p: &mut Preview, keep: &mut HashSet<String>| {
-        keep.insert(rel.to_string_lossy().to_lowercase());
+        let key = rel.to_string_lossy().to_lowercase();
+        let up_to_date = super::up_to_date(t, &dest.join(rel), previous.get(&key).copied());
+        keep.insert(key);
         p.total_bytes += t.size;
-        if !t.dirty && fs::metadata(dest.join(rel)).is_ok_and(|m| m.len() == t.size) {
+        if up_to_date {
             p.unchanged += 1;
         } else {
             p.to_copy += 1;
@@ -96,8 +98,9 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
             check(&item.rel, &tracks[item.track], &mut p, &mut keep);
         }
     }
-    let by_path: HashMap<&Path, &Track> = tracks.iter().map(|t| (t.path.as_path(), t)).collect();
-    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_path, &w.playlists_folder, w.options.skip_unplayable) {
+    let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
+    let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
+    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.skip_unplayable) {
         p.playlist_files += copies.len();
         for c in copies {
             check(&c.rel, c.track, &mut p, &mut keep);
@@ -133,10 +136,10 @@ pub fn write(
 ) -> Outcome {
     // Clean the macOS files once at the end, after playlists too.
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
-    let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &mut progress);
+    let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, &mut progress);
 
-    let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].path.clone(), p.rel.clone())).collect();
-    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.skip_unplayable, |_, _| {});
+    let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
+    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.skip_unplayable, &w.manifest, |_, _| {});
 
     let mut manifest = r.written;
     manifest.extend(pl.written);
@@ -164,7 +167,39 @@ pub fn now() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+
+    /// `NEATLIBRARY_CUE_ALBUM=<folder with an album file + .cue> cargo test -- --ignored cue_album --nocapture`
+    /// Writes the folder to a temporary "card": every song is cut into its own FLAC, and a second
+    /// write cuts nothing.
+    #[test]
+    #[ignore]
+    fn cue_album_write() {
+        let Some(src) = std::env::var_os("NEATLIBRARY_CUE_ALBUM").map(PathBuf::from) else { return };
+        let card = std::env::temp_dir().join(format!("neatlibrary-test-cue-card-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&card);
+        let (tracks, _) = crate::library::scan(&src, None, false, |_| {});
+        assert!(tracks.iter().any(|t| t.cue.is_some()), "no album file with a CUE sheet in {}", src.display());
+        let index = crate::library::grouping::build(&tracks, &Default::default());
+        let mut w = WriteProfile::default();
+        let plan = w.plan(&tracks, &index);
+        let t = std::time::Instant::now();
+        let out = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        println!("first write: {} cut/copied in {:.1?}, errors {:?}", out.copied, t.elapsed(), out.errors);
+        assert!(out.errors.is_empty());
+        for m in &out.manifest {
+            let secs = lofty::read_from_path(card.join(&m.rel)).map(|f| lofty::prelude::AudioFile::properties(&f).duration().as_secs_f32()).unwrap_or(0.0);
+            println!("  {}  {:.2} s", m.rel.display(), secs);
+        }
+        w.manifest = out.manifest;
+        let p = preview(&w, &tracks, &index, &[], &card);
+        let again = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        println!("preview: {} to copy, {} unchanged; second write: {} copied, {} unchanged", p.to_copy, p.unchanged, again.copied, again.unchanged);
+        assert_eq!((p.to_copy, again.copied), (0, 0));
+        let _ = fs::remove_dir_all(&card);
+    }
     use crate::library::grouping::{ArtistPrefs, build};
     use crate::library::scan;
 
@@ -182,7 +217,7 @@ mod tests {
 
         let (tracks, _) = scan(&src, None, false, |_| {});
         let index = build(&tracks, &ArtistPrefs::default());
-        let playlists = vec![Playlist { name: "Mix".into(), tracks: vec![tracks[0].path.clone()] }];
+        let playlists = vec![Playlist { name: "Mix".into(), tracks: vec![tracks[0].id()] }];
         let mut w = WriteProfile { dest: Some(card.clone()), options: Options { write_tags: false, ..Default::default() }, ..Default::default() };
         w.playlists.insert("Mix".into());
 

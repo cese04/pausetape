@@ -9,10 +9,10 @@ use std::time::Duration;
 use crossbeam_channel::{Sender, unbounded};
 use rodio::Source;
 
-use super::decode::open;
+use super::decode::{Span, open_span};
 
 enum Cmd {
-    Load(PathBuf),
+    Load(PathBuf, Option<Span>),
     Toggle,
     Seek(Duration),
     Volume(f32),
@@ -55,9 +55,9 @@ impl Audio {
             let mut live = false;
             loop {
                 match rx.recv_timeout(Duration::from_millis(100)) {
-                    Ok(Cmd::Load(path)) => {
+                    Ok(Cmd::Load(path, span)) => {
                         player.clear();
-                        let decoded = open(&path, || {
+                        let decoded = open_span(&path, span, || {
                             *shared.lock().unwrap() = Status { converting: true, path: Some(path.clone()), ..Default::default() };
                             wake();
                         });
@@ -108,8 +108,9 @@ impl Audio {
         std::mem::take(&mut self.status.lock().unwrap().ended)
     }
 
-    pub fn load(&self, path: &Path) {
-        let _ = self.tx.send(Cmd::Load(path.to_path_buf()));
+    /// Play `path`, or only `span` of it (a song inside an album file).
+    pub fn load(&self, path: &Path, span: Option<Span>) {
+        let _ = self.tx.send(Cmd::Load(path.to_path_buf(), span));
     }
     pub fn toggle(&self) {
         let _ = self.tx.send(Cmd::Toggle);

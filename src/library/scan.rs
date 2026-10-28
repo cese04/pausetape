@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use lofty::prelude::*;
 use walkdir::WalkDir;
 
+use super::cue;
 use super::db::Db;
 use super::mp4::{MP4_EXTS, mp4_audio_codec};
 use super::names::{clean_album, clean_artist_folder, disc_folder, parse_file_stem, split_artist_album};
@@ -57,6 +58,7 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
 
     let mut raw: Vec<Track> = Vec::new();
     let mut fresh: Vec<Track> = Vec::new();
+    let mut sheets: Vec<PathBuf> = Vec::new();
     let entries = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| {
         // Skip hidden entries, including macOS "._" AppleDouble files on FAT volumes.
         e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')
@@ -67,6 +69,10 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
         }
         let path = entry.path();
         let Some(ext) = path.extension().map(|e| e.to_string_lossy().to_lowercase()) else { continue };
+        if ext == "cue" {
+            sheets.push(path.to_path_buf());
+            continue;
+        }
         if !AUDIO.contains(&ext.as_str()) {
             continue;
         }
@@ -100,20 +106,24 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
         note(&mut stats, e);
     }
 
+    // Albums stored as one file plus a CUE sheet become one track per song. Like folder-name
+    // inference, this runs every scan: sheets are small, and an edited sheet takes effect at once.
+    let raw = cue::expand(raw, &sheets);
+
     // Folder-name inference depends on `root`, so it runs every scan rather than being cached.
     let mut stale_edits: HashSet<PathBuf> = HashSet::new();
     let tracks = raw
         .into_iter()
         .map(|mut t| {
             infer_from_path(&mut t, root);
-            match edits.get(t.path.to_string_lossy().as_ref()) {
+            match edits.get(t.id().to_string_lossy().as_ref()) {
                 Some(e) if e.size == t.size && e.mtime == t.mtime => {
                     stats.edits += 1;
                     Track { dirty: true, ..e.track.clone() }
                 }
                 Some(_) => {
                     // The file changed since the correction was made; trust the file.
-                    stale_edits.insert(t.path.clone());
+                    stale_edits.insert(t.id());
                     t
                 }
                 None => t,

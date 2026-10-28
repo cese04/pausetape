@@ -5,8 +5,10 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
-use rodio::{Decoder, Source};
+use rodio::source::SeekError;
+use rodio::{ChannelCount, Decoder, Sample, SampleRate, Source};
 
 /// Where ffmpeg is: the copy bundled next to the app's executable (inside the .app), else an
 /// installed one. Apps started from Finder don't get the shell's PATH, so the usual install
@@ -51,6 +53,112 @@ pub fn open(path: &Path, on_convert: impl FnOnce()) -> Result<FileSource, String
     on_convert();
     let wav = converted(path, ff)?;
     Decoder::try_from(File::open(&wav).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+/// Part of a file, from `start` to `end` (or the file's end): one song of an album stored as a
+/// single file with a CUE sheet. Times and seeking are relative to the song.
+pub type Span = (Duration, Option<Duration>);
+
+/// `open`, then keep to `span` if there is one.
+pub fn open_span(path: &Path, span: Option<Span>, on_convert: impl FnOnce()) -> Result<Section<FileSource>, String> {
+    let src = open(path, on_convert)?;
+    match span {
+        Some((start, end)) => Section::new(src, start, end).map_err(|e| format!("seeking to the song: {e}")),
+        None => Ok(Section::whole(src)),
+    }
+}
+
+/// A source limited to a section of another, counted in sample frames so songs cut from an
+/// album file start and end exactly where the CUE sheet says.
+pub struct Section<S> {
+    inner: S,
+    /// The section's first sample frame in `inner` (0 for a whole file).
+    first: u64,
+    /// Samples (all channels) the section holds, and how many are left.
+    len: Option<u64>,
+    left: Option<u64>,
+}
+
+impl<S: Source> Section<S> {
+    fn whole(inner: S) -> Self {
+        Section { inner, first: 0, len: None, left: None }
+    }
+
+    fn new(inner: S, start: Duration, end: Option<Duration>) -> Result<Self, SeekError> {
+        let first = frame_at(&inner, start);
+        let len = end.map(|e| (frame_at(&inner, e).saturating_sub(first)) * inner.channels().get() as u64);
+        let mut s = Section { inner, first, len, left: len };
+        if first > 0 {
+            s.seek_frame(first)?;
+        }
+        Ok(s)
+    }
+
+    /// Seek to the middle of a sample frame: a time exactly on a frame boundary can round down
+    /// to the frame before it.
+    fn seek_frame(&mut self, frame: u64) -> Result<(), SeekError> {
+        let rate = self.inner.sample_rate().get() as u128;
+        self.inner.try_seek(Duration::from_nanos(((frame as u128 * 2 + 1) * 1_000_000_000 / (rate * 2)) as u64))
+    }
+}
+
+/// The sample frame nearest to `t`.
+fn frame_at(s: &impl Source, t: Duration) -> u64 {
+    let rate = s.sample_rate().get() as u128;
+    ((t.as_nanos() * rate + 500_000_000) / 1_000_000_000) as u64
+}
+
+impl<S: Source> Iterator for Section<S> {
+    type Item = Sample;
+
+    fn next(&mut self) -> Option<Sample> {
+        if self.left == Some(0) {
+            return None;
+        }
+        let s = self.inner.next()?;
+        if let Some(l) = &mut self.left {
+            *l -= 1;
+        }
+        Some(s)
+    }
+}
+
+impl<S: Source> Source for Section<S> {
+    fn current_span_len(&self) -> Option<usize> {
+        match (self.inner.current_span_len(), self.left) {
+            (Some(n), Some(l)) => Some(n.min(l as usize)),
+            (None, Some(l)) => Some(l as usize),
+            (n, None) => n,
+        }
+    }
+
+    fn channels(&self) -> ChannelCount {
+        self.inner.channels()
+    }
+
+    fn sample_rate(&self) -> SampleRate {
+        self.inner.sample_rate()
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        let per_sec = self.sample_rate().get() as u128 * self.channels().get() as u128;
+        match self.len {
+            Some(n) => Some(Duration::from_nanos((n as u128 * 1_000_000_000 / per_sec) as u64)),
+            None => {
+                let start = Duration::from_nanos((self.first as u128 * 1_000_000_000 / self.sample_rate().get() as u128) as u64);
+                self.inner.total_duration().map(|d| d.saturating_sub(start))
+            }
+        }
+    }
+
+    fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
+        let offset = frame_at(&self.inner, pos);
+        self.seek_frame(self.first + offset)?;
+        if let Some(len) = self.len {
+            self.left = Some(len.saturating_sub(offset * self.channels().get() as u64));
+        }
+        Ok(())
+    }
 }
 
 /// Cache of converted files, newest last; only a few are kept (a 5-minute track is ~55 MB).
@@ -107,10 +215,10 @@ fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
     Ok(out)
 }
 
-/// RMS loudness in 100 ms windows, normalised to 0..=1. Decodes the whole file, so call it off
-/// the UI thread.
-pub fn envelope(path: &Path) -> Option<Vec<f32>> {
-    let src = open(path, || {}).ok()?;
+/// RMS loudness in 100 ms windows, normalised to 0..=1. Decodes the whole file (or song), so
+/// call it off the UI thread.
+pub fn envelope(path: &Path, span: Option<Span>) -> Option<Vec<f32>> {
+    let src = open_span(path, span, || {}).ok()?;
     let window = (src.sample_rate().get() as usize * src.channels().get() as usize / 10).max(1);
     let mut out = Vec::new();
     let (mut sum, mut n) = (0.0f64, 0usize);
@@ -128,6 +236,27 @@ pub fn envelope(path: &Path) -> Option<Vec<f32>> {
 
 #[cfg(test)]
 mod tests {
+    /// `NEATLIBRARY_SECTION=<album.flac>:<start frames>:<end frames>:<reference.raw>` with the
+    /// reference being that section cut by ffmpeg as 16-bit stereo PCM; checks that playback of
+    /// a CUE song yields exactly those samples.
+    #[test]
+    #[ignore]
+    fn section_matches_cut() {
+        use rodio::Source;
+        let Ok(spec) = std::env::var("NEATLIBRARY_SECTION") else { return };
+        let parts: Vec<&str> = spec.split(':').collect();
+        let frames = |s: &str| crate::library::cue::frames_to_time(s.parse().unwrap());
+        let src = super::open_span(std::path::Path::new(parts[0]), Some((frames(parts[1]), Some(frames(parts[2])))), || {}).unwrap();
+        let expect_len = src.total_duration().unwrap();
+        let got: Vec<f32> = src.collect();
+        let raw = std::fs::read(parts[3]).unwrap();
+        let want: Vec<f32> = raw.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0).collect();
+        let worst = got.iter().zip(&want).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+        println!("samples: got {} want {} · duration {expect_len:?} · max difference {worst}", got.len(), want.len());
+        assert_eq!(got.len(), want.len());
+        assert!(worst < 1e-4);
+    }
+
     /// `NEATLIBRARY_FORMATS=<dir> cargo test -- --ignored decodes_formats --nocapture`
     /// Fully decodes every file in the folder and reports which formats work.
     #[test]
@@ -138,7 +267,7 @@ mod tests {
         files.sort();
         for f in files {
             let t = std::time::Instant::now();
-            let env = super::envelope(&f);
+            let env = super::envelope(&f, None);
             let codec = crate::library::mp4::mp4_audio_codec(&f).map(|c| format!(" [{}]", crate::library::mp4::codec_name(&c))).unwrap_or_default();
             print!("{:<28}{codec} in {:.2?}: ", f.file_name().unwrap().to_string_lossy(), t.elapsed());
             println!("{}", match env {

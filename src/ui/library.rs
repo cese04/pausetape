@@ -93,7 +93,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if link(ui, "collapse all").clicked() {
             app.expanded.clear();
         }
-        let dirty = app.dirty_count();
+        let dirty = app.dirty_in_files();
         if dirty > 0 && link(ui, format!("write {dirty} corrected tags to source files")).clicked() {
             app.save_tags_to_source();
         }
@@ -318,6 +318,10 @@ fn album_folders(ui: &mut Ui, tracks: &[Track], idxs: &[usize], root: &Path) {
         // "open folder" goes first so a long path can never push it out of view.
         if link(ui, "open folder").clicked() {
             crate::platform::reveal(first);
+        }
+        if idxs.iter().any(|&i| tracks[i].cue.is_some()) {
+            ui.label(RichText::new("one file + CUE sheet ·").size(12.5).color(ink.muted))
+                .on_hover_text("This album is stored as a single file; its CUE sheet lists the songs. On the card each song becomes its own FLAC file.");
         }
         let r = ui.add(egui::Label::new(RichText::new(text).size(12.5).color(ink.muted)).truncate());
         r.on_hover_text(dirs.iter().map(|d| rel(d)).collect::<Vec<_>>().join("\n"));

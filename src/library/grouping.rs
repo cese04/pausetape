@@ -135,13 +135,14 @@ fn most_common<T: Ord + Clone, K: Ord>(counts: &BTreeMap<T, usize>, tiebreak: im
 }
 
 /// Tiebreak between equally common spellings: keep diacritics ("Beyoncé"), capitalisation
-/// ("Radiohead" over "radiohead"), natural order ("The Beatles" over "Beatles, The"), and
-/// punctuation ("AC/DC" over "ACDC").
-fn spelling_quality(v: &str) -> (usize, bool, bool, usize) {
+/// ("Radiohead" over "radiohead", "Joy Division" over a CUE sheet's "JOY DIVISION"), natural
+/// order ("The Beatles" over "Beatles, The"), and punctuation ("AC/DC" over "ACDC").
+fn spelling_quality(v: &str) -> (usize, bool, bool, bool, usize) {
     let non_ascii = v.chars().filter(|c| !c.is_ascii()).count();
     let capitalised = v.chars().next().is_some_and(char::is_uppercase);
+    let not_shouting = v.chars().any(char::is_lowercase);
     let natural = !v.to_lowercase().ends_with(", the");
-    (non_ascii, capitalised, natural, v.len())
+    (non_ascii, capitalised, not_shouting, natural, v.len())
 }
 
 pub fn build(tracks: &[Track], prefs: &ArtistPrefs) -> Index {

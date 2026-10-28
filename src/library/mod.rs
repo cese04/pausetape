@@ -2,6 +2,7 @@
 //! art, and grouping tracks into artists and albums.
 
 pub mod cover;
+pub mod cue;
 pub mod db;
 pub mod grouping;
 pub mod mp4;

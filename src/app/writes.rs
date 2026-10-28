@@ -4,7 +4,7 @@ use super::*;
 
 impl App {
     pub fn preview_tidy(&mut self) {
-        self.tidy_plan = Some(card::build_plan(&self.tracks, &self.index, &self.saved.tidy, &Custom::default()));
+        self.tidy_plan = Some(card::tidy_plan(&self.tracks, &self.index, &self.saved.tidy));
     }
 
     pub fn run_tidy(&mut self) {
@@ -17,7 +17,7 @@ impl App {
         let opts = self.saved.tidy.clone();
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
-            let report = card::execute(&tracks, &plan, &source, &source, Mode::MoveInPlace, &opts, |p| {
+            let report = card::execute(&tracks, &plan, &source, &source, Mode::MoveInPlace, &opts, &[], |p| {
                 // Throttle UI updates to keep the channel small on large libraries.
                 if let Progress::Step { done, .. } = &p
                     && done % 10 != 0
@@ -118,6 +118,6 @@ impl App {
             self.notice("create a playlist first");
             return;
         };
-        p.tracks.push(self.tracks[track].path.clone());
+        p.tracks.push(self.tracks[track].id());
     }
 }

@@ -2,6 +2,7 @@
 //! order it uses there, and a sync that only copies what changed.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use egui::{Align, Layout, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
 
@@ -11,6 +12,7 @@ use super::theme::{self, ink};
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
 use crate::card::{AlbumOrder, album_folder};
+use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
@@ -125,7 +127,8 @@ impl Sizes {
                 s.album.insert(id, bytes);
             }
         }
-        let by_path = app.tracks.iter().map(|t| (t.path.as_path(), t)).collect();
+        let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
+        let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
         s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, w.options.skip_unplayable)
             .iter()
             .flat_map(|(_, copies, _)| copies.iter().map(|c| c.track.size))
@@ -258,7 +261,8 @@ fn playlists(app: &mut App, ui: &mut Ui) {
         muted(ui, "none yet; make some in the playlists tab.");
         return;
     }
-    let by_path = app.tracks.iter().map(|t| (t.path.as_path(), t)).collect();
+    let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
+    let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
     let mut changed = false;
     let w = &mut app.saved.writes[app.saved.active_write];
     ui.horizontal_wrapped(|ui| {

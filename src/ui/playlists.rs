@@ -2,7 +2,7 @@
 //! numbered copies).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use egui::{Align, FontId, Layout, RichText, ScrollArea, Ui};
@@ -21,8 +21,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         "RECHO has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is exported as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware.",
     );
     ui.add_space(8.0);
-    let by_path: HashMap<&Path, &Track> = app.tracks.iter().map(|t| (t.path.as_path(), t)).collect();
-    let by_index: HashMap<&Path, usize> = app.tracks.iter().enumerate().map(|(i, t)| (t.path.as_path(), i)).collect();
+    // Playlists hold track ids: a song inside an album file has its own ("…/Album.flac#03").
+    let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
+    let by_path: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
+    let by_index: HashMap<&Path, usize> = ids.iter().enumerate().map(|(i, id)| (id.as_path(), i)).collect();
     let mut select = None;
     let mut play = None;
     ui.horizontal_top(|ui| {

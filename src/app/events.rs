@@ -19,7 +19,7 @@ impl App {
                     let unplayable = tracks.iter().filter(|t| !t.on_recho()).count();
                     let mut parts = vec![format!("{} songs", tracks.len())];
                     if stats.cached > 0 {
-                        parts.push(format!("{} unchanged (from the library database)", stats.cached));
+                        parts.push(format!("{} unchanged (from the library database)", plural_files(stats.cached)));
                     }
                     parts.push(format!("{} read from files", stats.read));
                     if stats.removed > 0 {
@@ -101,7 +101,8 @@ impl App {
                     }
                     // The corrections live in the files now; the next scan re-reads them.
                     if let Some(db) = &mut self.db {
-                        let _ = db.drop_edits(ok.iter().map(|&(i, _, _)| self.tracks[i].path.as_path()));
+                        let ids: Vec<PathBuf> = ok.iter().map(|&(i, _, _)| self.tracks[i].id()).collect();
+                        let _ = db.drop_edits(ids.iter().map(PathBuf::as_path));
                     }
                     self.notice(format!("tags written to {} files{}", ok.len(), if errors.is_empty() { String::new() } else { format!(" · {} failed", errors.len()) }));
                 }
@@ -111,9 +112,9 @@ impl App {
                         self.cover = Some((path, tex));
                     }
                 }
-                Msg::Envelope(path, env) => {
-                    if self.current().is_some_and(|i| self.tracks[i].path == path) {
-                        self.envelope = Some((path, env));
+                Msg::Envelope(id, env) => {
+                    if self.current().is_some_and(|i| self.tracks[i].id() == id) {
+                        self.envelope = Some((id, env));
                     }
                 }
             }

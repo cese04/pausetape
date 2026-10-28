@@ -1,5 +1,6 @@
 //! Debug builds only: `NEATLIBRARY_SHOT=<dir>` stages a demo (expand, play, look up, playlist),
-//! saves a screenshot of every tab as PPM, then quits. Handy for checking the look headlessly.
+//! saves a screenshot of every tab as PPM, then quits. `NEATLIBRARY_SHOT_ARTIST` (default
+//! Radiohead) chooses the album played and looked up. Handy for checking the look headlessly.
 //! The demo changes playlists and the active write in memory only: `App::save` skips saving
 //! while it runs, so a tester's real settings are left alone.
 
@@ -47,13 +48,18 @@ impl Shooter {
             for a in &app.index.artists {
                 app.expanded.insert(crate::library::names::artist_key(&a.name));
             }
-            let found = app.index.artists.iter().enumerate().find(|(_, a)| a.name == "Radiohead");
-            if let Some((ai, queue, cluster)) = found.map(|(ai, a)| (ai, a.albums[0].tracks.clone(), a.cluster)) {
+            // NEATLIBRARY_SHOT_ARTIST picks whose album plays and is looked up (preferring an
+            // album stored as one file with a CUE sheet).
+            let who = std::env::var("NEATLIBRARY_SHOT_ARTIST").unwrap_or_else(|_| "Radiohead".into());
+            let found = app.index.artists.iter().enumerate().find(|(_, a)| a.name.eq_ignore_ascii_case(&who));
+            if let Some((ai, a)) = found {
+                let al = a.albums.iter().position(|al| al.tracks.iter().any(|&i| app.tracks[i].cue.is_some())).unwrap_or(0);
+                let (queue, cluster) = (a.albums[al].tracks.clone(), a.cluster);
                 app.play(queue, 1);
-                app.lookup_album(ai, 0);
+                app.lookup_album(ai, al);
                 app.lookup_artist(cluster);
             }
-            let some: Vec<PathBuf> = app.tracks.iter().take(5).map(|t| t.path.clone()).collect();
+            let some: Vec<PathBuf> = app.tracks.iter().take(5).map(|t| t.id()).collect();
             app.saved.playlists = vec![Playlist { name: "Road Trip".into(), tracks: some }];
             app.active_playlist = Some(0);
             app.preview_tidy();

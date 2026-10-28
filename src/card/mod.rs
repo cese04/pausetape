@@ -8,8 +8,8 @@ pub mod playlist;
 mod volumes;
 mod write;
 
-pub use copy::{Mode, Progress, Written, clean_mac_files, execute, plain_copy, prune};
+pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, up_to_date};
 pub use journal::{latest_journal, undo_latest};
-pub use plan::{AlbumOrder, Custom, Options, PlanItem, album_folder, build_plan};
+pub use plan::{AlbumOrder, Custom, Options, PlanItem, album_folder, build_plan, tidy_plan};
 pub use volumes::{SpaceInfo, Volume, space, volumes};
 pub use write::{Outcome, Preview, WriteProfile, now, preview, write};

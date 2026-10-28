@@ -46,7 +46,7 @@ impl App {
         self.tidy_plan = None;
         self.write_preview = None;
         self.in_place = match &self.saved.source {
-            Some(src) => card::build_plan(&self.tracks, &self.index, &self.saved.tidy, &Custom::default())
+            Some(src) => card::tidy_plan(&self.tracks, &self.index, &self.saved.tidy)
                 .iter()
                 .filter(|p| src.join(&p.rel) == self.tracks[p.track].path)
                 .count(),
@@ -58,8 +58,14 @@ impl App {
         self.tracks.iter().filter(|t| t.dirty).count()
     }
 
+    /// Corrections that can be written into the music files. Songs inside an album file (CUE)
+    /// keep theirs in the app; they reach the card copies, which are separate files.
+    pub fn dirty_in_files(&self) -> usize {
+        self.tracks.iter().filter(|t| t.dirty && t.cue.is_none()).count()
+    }
+
     pub fn save_tags_to_source(&mut self) {
-        let dirty: Vec<(usize, Track)> = self.tracks.iter().enumerate().filter(|(_, t)| t.dirty).map(|(i, t)| (i, t.clone())).collect();
+        let dirty: Vec<(usize, Track)> = self.tracks.iter().enumerate().filter(|(_, t)| t.dirty && t.cue.is_none()).map(|(i, t)| (i, t.clone())).collect();
         if dirty.is_empty() || self.busy.is_some() {
             return;
         }

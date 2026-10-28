@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use super::cue::CueSpan;
 use super::mp4::codec_name;
 
 /// Formats the RECHO firmware plays (FLAC/WAV up to 24-bit/192 kHz, MP3 up to 320 kbps).
@@ -17,6 +18,9 @@ pub const APP_FORMATS: &[&str] = &["flac", "mp3", "wav", "m4a", "m4b", "mp4", "a
 /// MP4 sample entries FFmpeg has no decoder for.
 const NO_DECODER_CODECS: &[&str] = &["ac-4"];
 const NATIVE_MP4_CODECS: &[&str] = &["mp4a", "alac"];
+
+/// Lossless formats: songs cut from an album file in one of these become FLAC on the card.
+const LOSSLESS: &[&str] = &["flac", "wav", "aiff", "aif", "aifc", "ape", "wv", "w64"];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -40,12 +44,41 @@ pub struct Track {
     pub codec: Option<String>,
     /// Fields were changed in-app (e.g. from MusicBrainz) and differ from the file's tags.
     pub dirty: bool,
+    /// One song of an album stored as a single file, as a CUE sheet describes it. `path` is
+    /// then the album file, and `duration`/`size` are the song's (size estimated).
+    pub cue: Option<CueSpan>,
 }
 
 impl Track {
-    /// The Echo Mini running RECHO can play this file.
+    /// What identifies this track in playlists, corrections and caches: its path, plus
+    /// "#<track>" for a song inside an album file ("…/Album.flac#03").
+    pub fn id(&self) -> PathBuf {
+        match &self.cue {
+            Some(c) => {
+                let mut s = self.path.clone().into_os_string();
+                s.push(format!("#{:02}", c.number));
+                s.into()
+            }
+            None => self.path.clone(),
+        }
+    }
+
+    /// The Echo Mini running RECHO can play this file, or (for a song in an album file) the
+    /// FLAC the song is cut into on the card.
     pub fn on_recho(&self) -> bool {
-        RECHO_FORMATS.contains(&self.ext.as_str())
+        match self.cue {
+            Some(_) => self.lossless(),
+            None => RECHO_FORMATS.contains(&self.ext.as_str()),
+        }
+    }
+
+    /// The file extension on the card: songs cut from an album file become FLAC.
+    pub fn card_ext(&self) -> &str {
+        if self.cue.is_some() && self.lossless() { "flac" } else { &self.ext }
+    }
+
+    fn lossless(&self) -> bool {
+        LOSSLESS.contains(&self.ext.as_str()) || self.codec.as_deref() == Some("alac")
     }
 
     /// The built-in decoder (Symphonia) handles this file without help.

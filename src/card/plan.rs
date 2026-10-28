@@ -115,7 +115,26 @@ pub fn file_name(t: &Track, album: &AlbumNode) -> String {
         }
     }
     name.push_str(&t.display_title());
-    format!("{}.{}", sanitize_component(&name, 120), t.ext)
+    format!("{}.{}", sanitize_component(&name, 120), t.card_ext())
+}
+
+/// Why a track can't go on the card at all, not even with "copy anyway". Only songs inside an
+/// album file (CUE): they're cut out with ffmpeg, losslessly, so a lossy album file is left out.
+pub fn cannot_write(t: &Track) -> Option<&'static str> {
+    t.cue.as_ref()?;
+    if !t.on_recho() {
+        Some("inside a lossy album file; can't be cut out without re-encoding")
+    } else if crate::audio::ffmpeg().is_none() {
+        Some("needs ffmpeg to cut the album file into songs")
+    } else {
+        None
+    }
+}
+
+/// The plan for reorganising the music folder in place. Songs inside an album file stay with
+/// their file and its CUE sheet, so they're left out.
+pub fn tidy_plan(tracks: &[Track], index: &Index, opts: &Options) -> Vec<PlanItem> {
+    build_plan(tracks, index, opts, &Custom::default()).into_iter().filter(|p| tracks[p.track].cue.is_none()).collect()
 }
 
 pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Custom) -> Vec<PlanItem> {
@@ -142,13 +161,13 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
                 let t = &tracks[i];
                 let base = PathBuf::from(&artist_dir).join(&album_dir);
                 let mut rel = base.join(file_name(t, album));
+                let stem = rel.file_stem().unwrap().to_string_lossy().into_owned();
                 let mut n = 2;
                 while !taken.insert(rel.to_string_lossy().to_lowercase()) {
-                    let stem = rel.file_stem().unwrap().to_string_lossy().into_owned();
-                    rel = base.join(format!("{stem} ({n}).{}", t.ext));
+                    rel = base.join(format!("{stem} ({n}).{}", t.card_ext()));
                     n += 1;
                 }
-                let skip = (opts.skip_unplayable && !t.on_recho()).then_some("format not playable on RECHO");
+                let skip = cannot_write(t).or((opts.skip_unplayable && !t.on_recho()).then_some("format not playable on RECHO"));
                 plan.push(PlanItem { track: i, rel, skip });
             }
         }

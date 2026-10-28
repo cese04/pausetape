@@ -1,7 +1,7 @@
 //! Carrying out a plan: copying to a card or moving within the music folder, removing what an
 //! earlier write left behind, and cleaning up macOS metadata files.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
@@ -12,6 +12,7 @@ use walkdir::WalkDir;
 
 use super::journal::save_journal;
 use super::plan::{Options, PlanItem};
+use crate::library::cue::FRAMES_PER_SEC;
 use crate::library::{Track, write_tags};
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,9 +49,80 @@ pub struct Report {
 pub struct Written {
     pub rel: PathBuf,
     pub size: u64,
+    /// For a song cut from an album file: what it was cut from (`source_key`). The cut file's
+    /// size can't be compared with anything in the music folder, so this says whether it's current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
-/// Run the plan. `tracks` must be the same list the plan was built from.
+/// The manifest of a previous write, looked up by card path (lowercased: the card is
+/// case-insensitive).
+pub fn by_rel(previous: &[Written]) -> HashMap<String, &Written> {
+    previous.iter().map(|w| (w.rel.to_string_lossy().to_lowercase(), w)).collect()
+}
+
+/// What a song inside an album file is cut from: the song, where it lies, the album file's
+/// size and date, and its tags. `None` for ordinary files.
+pub fn source_key(t: &Track) -> Option<String> {
+    use std::hash::{Hash, Hasher};
+    let c = t.cue.as_ref()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (&t.title, &t.artist, &t.album_artist, &t.album, t.track, t.disc, t.year).hash(&mut h);
+    Some(format!("{}|{}-{}|{}|{}|{:016x}", t.id().display(), c.start, c.end.map(|e| e.to_string()).unwrap_or_default(), t.size, t.mtime, h.finish()))
+}
+
+/// The card already holds `t` at `dst` as a write would put it there now.
+pub fn up_to_date(t: &Track, dst: &Path, previous: Option<&Written>) -> bool {
+    if t.dirty {
+        return false;
+    }
+    let size = fs::metadata(dst).ok().map(|m| m.len());
+    match source_key(t) {
+        None => size == Some(t.size),
+        Some(key) => previous.is_some_and(|w| w.source.as_deref() == Some(key.as_str()) && size == Some(w.size)),
+    }
+}
+
+/// Put `t`'s audio at `dst`: a plain copy, or for a song inside an album file, the song cut out
+/// as FLAC, with its tags (the cut carries none over).
+pub fn materialise(t: &Track, dst: &Path) -> Result<()> {
+    match &t.cue {
+        None => plain_copy(&t.path, dst),
+        Some(c) => {
+            cut(&t.path, c.start, c.end, dst)?;
+            write_tags(t, dst)
+        }
+    }
+}
+
+/// Cut CD frames `start..end` of an album file into a FLAC file with ffmpeg. The seek before
+/// `-i` is sample-exact when decoding, so consecutive songs join without gaps or overlaps.
+fn cut(image: &Path, start: u64, end: Option<u64>, dst: &Path) -> Result<()> {
+    let ff = crate::audio::ffmpeg().context("ffmpeg is needed to cut songs out of an album file")?;
+    let secs = |f: u64| format!("{}.{:06}", f / FRAMES_PER_SEC, f % FRAMES_PER_SEC * 1_000_000 / FRAMES_PER_SEC);
+    let tmp = dst.with_extension("partial");
+    let mut cmd = std::process::Command::new(ff);
+    cmd.args(["-nostdin", "-v", "error", "-y"]);
+    if start > 0 {
+        cmd.args(["-ss", &secs(start)]);
+    }
+    cmd.arg("-i").arg(image);
+    if let Some(e) = end {
+        cmd.args(["-t", &secs(e.saturating_sub(start))]);
+    }
+    cmd.args(["-map", "0:a:0", "-map_metadata", "-1", "-c:a", "flac", "-f", "flac"]).arg(&tmp);
+    let out = cmd.output().context("running ffmpeg")?;
+    if !out.status.success() {
+        let _ = fs::remove_file(&tmp);
+        anyhow::bail!("ffmpeg couldn't cut the song: {}", String::from_utf8_lossy(&out.stderr).trim());
+    }
+    fs::rename(&tmp, dst)?;
+    Ok(())
+}
+
+/// Run the plan. `tracks` must be the same list the plan was built from. `previous` is the
+/// manifest of the last write to `dest` (empty when reorganising).
+#[allow(clippy::too_many_arguments)]
 pub fn execute(
     tracks: &[Track],
     plan: &[PlanItem],
@@ -58,21 +130,25 @@ pub fn execute(
     dest: &Path,
     mode: Mode,
     opts: &Options,
+    previous: &[Written],
     mut progress: impl FnMut(Progress),
 ) -> Report {
     let mut r = Report::default();
+    let previous = by_rel(previous);
     for (n, item) in plan.iter().enumerate() {
         let t = &tracks[item.track];
         progress(Progress::Step { done: n, total: plan.len() });
-        if item.skip.is_some() {
+        // A song inside an album file can be cut out for the card, but never moved.
+        if item.skip.is_some() || (mode == Mode::MoveInPlace && t.cue.is_some()) {
             r.skipped += 1;
             continue;
         }
         let dst = dest.join(&item.rel);
-        match place(t, &dst, mode, opts, &mut r) {
+        let prev = previous.get(&item.rel.to_string_lossy().to_lowercase()).copied();
+        match place(t, &dst, mode, opts, prev, &mut r) {
             Ok(()) if mode == Mode::CopyTo => {
                 let size = fs::metadata(&dst).map(|m| m.len()).unwrap_or(t.size);
-                r.written.push(Written { rel: item.rel.clone(), size });
+                r.written.push(Written { rel: item.rel.clone(), size, source: source_key(t) });
             }
             Ok(()) => {}
             Err(e) => r.errors.push(format!("{}: {e:#}", t.path.display())),
@@ -92,7 +168,7 @@ pub fn execute(
     r
 }
 
-fn place(t: &Track, dst: &Path, mode: Mode, opts: &Options, r: &mut Report) -> Result<()> {
+fn place(t: &Track, dst: &Path, mode: Mode, opts: &Options, prev: Option<&Written>, r: &mut Report) -> Result<()> {
     let tag = |r: &mut Report| -> Result<()> {
         if t.dirty && opts.write_tags {
             write_tags(t, dst)?;
@@ -109,12 +185,11 @@ fn place(t: &Track, dst: &Path, mode: Mode, opts: &Options, r: &mut Report) -> R
     }
     match mode {
         Mode::CopyTo => {
-            let same_size = fs::metadata(dst).is_ok_and(|m| m.len() == t.size);
-            if same_size && !t.dirty {
+            if up_to_date(t, dst, prev) {
                 r.unchanged += 1;
                 return Ok(());
             }
-            plain_copy(&t.path, dst)?;
+            materialise(t, dst)?;
             r.copied += 1;
         }
         Mode::MoveInPlace => {
@@ -242,11 +317,11 @@ mod tests {
         let index = build(&tracks, &ArtistPrefs::default());
         let opts = Options { write_tags: false, ..Default::default() };
         let plan = build_plan(&tracks, &index, &opts, &Custom::default());
-        let r = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, |_| {});
+        let r = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], |_| {});
         assert_eq!((r.copied, r.errors.len(), r.written.len()), (3, 0, 3), "{:?}", r.errors);
         assert!(dst.join("Muse/Absolution/01 - Intro.mp3").exists());
         assert!(dst.join("Muse/Singles/Muse - Hysteria.mp3").exists());
-        let again = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, |_| {});
+        let again = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], |_| {});
         assert_eq!((again.copied, again.unchanged), (0, 3));
         fs::remove_dir_all(root).unwrap();
     }
@@ -259,7 +334,7 @@ mod tests {
         let index = build(&tracks, &ArtistPrefs::default());
         let opts = Options { write_tags: false, clean_mac_files: false, ..Default::default() };
         let plan = build_plan(&tracks, &index, &opts, &Custom::default());
-        let r = execute(&tracks, &plan, &src, &src, Mode::MoveInPlace, &opts, |_| {});
+        let r = execute(&tracks, &plan, &src, &src, Mode::MoveInPlace, &opts, &[], |_| {});
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         assert_eq!((r.moved, r.unchanged), (1, 2));
         assert!(src.join("Muse/Singles/Muse - Hysteria.mp3").exists());
@@ -293,7 +368,7 @@ mod tests {
         let expect = |parts: &[&str]| parts.iter().collect::<PathBuf>();
         assert!(rels.contains(&expect(&["MUSE", "01 - Showbiz", "01 - Sunburn.mp3"]).as_path()), "{rels:?}");
         assert!(rels.contains(&expect(&["MUSE", "02 - Absolution", "01 - Intro.mp3"]).as_path()), "{rels:?}");
-        let first = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, |_| {});
+        let first = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], |_| {});
 
         // Drop Showbiz from the card: its file goes, and so does its now-empty folder.
         custom.excluded_albums.insert(showbiz);

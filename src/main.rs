@@ -51,7 +51,8 @@ fn print_plan(root: &std::path::Path) {
     }
     for p in card::build_plan(&tracks, &index, &card::Options::default(), &card::Custom::default()) {
         let t = &tracks[p.track];
-        let src = t.path.strip_prefix(root).unwrap_or(&t.path);
+        let id = t.id();
+        let src = id.strip_prefix(root).unwrap_or(&id);
         println!("{:<60} <- {}{}", p.rel.display(), src.display(), p.skip.map(|s| format!("  [{s}]")).unwrap_or_default());
     }
 }
