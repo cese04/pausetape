@@ -333,7 +333,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                 muted(ui, "asking MusicBrainz…");
             }
             Lookup::Failed(e) => {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
                     if link(ui, "dismiss").clicked() {
                         actions.push(Action::Dismiss(id.to_string()));
@@ -341,7 +341,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                 });
             }
             Lookup::Ready { label, changes } => {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     caps(ui, "musicbrainz");
                     ui.label(RichText::new(label.as_str()).color(ink.text));
                 });
