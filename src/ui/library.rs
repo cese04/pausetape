@@ -200,7 +200,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         ui.horizontal(|ui| {
                             ui.add_sized([44.0, 20.0], egui::Label::new(RichText::new(al.year.map(|y| y.to_string()).unwrap_or_default()).color(ink.muted)));
                             let title = al.title.as_deref().unwrap_or("Loose tracks");
-                            let meta = format!("{} · {}", plural(al.tracks.len(), "track"), album_minutes(&app.tracks, &al.tracks));
+                            let mut meta = format!("{} · {}", plural(al.tracks.len(), "track"), album_minutes(&app.tracks, &al.tracks));
+                            if let Some(e) = &al.edition {
+                                meta = format!("edition {} of {} · {meta}", e.rank + 1, e.count);
+                            }
                             let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
                             let off_text = match off {
                                 0 => String::new(),
@@ -211,7 +214,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + 150.0;
                             let shown = RichText::new(title).italics().size(17.0);
                             widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
-                            muted(ui, meta);
+                            let r = ui.label(RichText::new(meta).color(ink.muted));
+                            if let Some(e) = &al.edition {
+                                r.on_hover_text(format!("{}\nThe card gets one edition; choose which in the card tab.", e.label));
+                            }
                             if off > 0 {
                                 ui.label(RichText::new(off_text).size(12.5).color(ink.accent));
                             }

@@ -77,7 +77,8 @@ impl Track {
         if self.cue.is_some() && self.lossless() { "flac" } else { &self.ext }
     }
 
-    fn lossless(&self) -> bool {
+    /// FLAC, WAV, APE, WavPack, AIFF, ALAC: no quality lost.
+    pub fn lossless(&self) -> bool {
         LOSSLESS.contains(&self.ext.as_str()) || self.codec.as_deref() == Some("alac")
     }
 

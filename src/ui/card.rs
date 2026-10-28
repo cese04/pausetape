@@ -120,8 +120,12 @@ impl Sizes {
                     .filter(|t| t.on_recho() || !w.options.skip_unplayable)
                     .map(|t| t.size)
                     .sum();
-                *s.artist.entry(ck.clone()).or_default() += bytes;
-                if !w.custom.excluded_artists.contains(ck) && !w.custom.excluded_albums.contains(&id) {
+                let on_card = w.custom.on_card(ck, al, &a.albums);
+                // Of several editions, only the one going on the card counts towards the artist.
+                if al.edition.is_none() || on_card {
+                    *s.artist.entry(ck.clone()).or_default() += bytes;
+                }
+                if !w.custom.excluded_artists.contains(ck) && on_card {
                     s.selected += bytes;
                 }
                 s.album.insert(id, bytes);
@@ -292,6 +296,8 @@ enum Edit {
     Rename(bool, String, String),
     StartRename(bool, String, String),
     Move(String, Vec<String>, usize, isize),
+    /// Put this edition (id) of an album (base id) on the card instead of the others.
+    Edition(String, String),
 }
 
 fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
@@ -348,24 +354,31 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         }
         let ordered = w.custom.ordered_albums(ck, &artist.albums);
         let order_ids: Vec<String> = ordered.iter().map(|a| a.id(ck)).collect();
-        let mut position = 0;
+        let positions = w.custom.positions(ck, &ordered);
         for (n, al) in ordered.iter().enumerate() {
             let id = &order_ids[n];
-            let title = w.custom.album_names.get(id).map(String::as_str);
-            let folder = album_folder(al, title, position, &w.options);
-            if al.title.is_some() {
-                position += 1;
-            }
-            let on_card = included && !w.custom.excluded_albums.contains(id);
+            let title = w.custom.album_name(ck, al);
+            let folder = album_folder(al, title, positions[n], &w.options);
+            let mut on = w.custom.on_card(ck, al, &artist.albums);
+            let on_card = included && on;
             ui.horizontal(|ui| {
                 ui.add_space(26.0);
-                let mut on = !w.custom.excluded_albums.contains(id);
-                if ui.add_enabled(included, egui::Checkbox::without_text(&mut on)).changed() {
-                    edits.push(Edit::Album(id.clone(), on));
+                let hint = if al.edition.is_some() { "One edition of this album goes on the card; ticking this one replaces the other." } else { "" };
+                let r = ui.add_enabled(included, egui::Checkbox::without_text(&mut on));
+                if (if hint.is_empty() { r } else { r.on_hover_text(hint) }).changed() {
+                    edits.push(match (&al.edition, on) {
+                        (Some(_), true) => Edit::Edition(al.base_id(ck), id.clone()),
+                        _ => Edit::Album(id.clone(), on),
+                    });
                 }
                 let shown = al.title.as_deref().unwrap_or("Loose tracks");
                 let title_text = RichText::new(shown).italics().color(if on_card { ink.text } else { ink.muted });
-                widgets::fitted(ui, title_text, ui.available_width() * 0.45, Sense::hover()).on_hover_text(shown);
+                let title_w = ui.available_width() * if al.edition.is_some() { 0.25 } else { 0.45 };
+                widgets::fitted(ui, title_text, title_w, Sense::hover()).on_hover_text(shown);
+                if let Some(e) = &al.edition {
+                    ui.label(RichText::new(text::shorten(&e.label, 34)).size(12.5).color(ink.muted))
+                        .on_hover_text(format!("edition {} of {}: {}", e.rank + 1, e.count, e.label));
+                }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
                 let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
                 if off > 0 {
@@ -428,7 +441,12 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             }
             Edit::Album(id, on) => {
                 if on {
+                    // Also an exclusion saved before the album had editions.
+                    let base = id.split_once('#').map(|(b, _)| b.to_string());
                     w.custom.excluded_albums.remove(&id);
+                    if let Some(b) = base {
+                        w.custom.excluded_albums.remove(&b);
+                    }
                 } else {
                     w.custom.excluded_albums.insert(id);
                 }
@@ -437,6 +455,12 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             Edit::All(on) => {
                 w.custom.excluded_albums.clear();
                 w.custom.excluded_artists = if on { Default::default() } else { artist_keys.iter().cloned().collect() };
+                touched_layout = true;
+            }
+            Edit::Edition(base, id) => {
+                w.custom.excluded_albums.remove(&id);
+                w.custom.excluded_albums.remove(&base);
+                w.custom.editions.insert(base, id);
                 touched_layout = true;
             }
             Edit::Move(ck, mut ids, n, d) => {

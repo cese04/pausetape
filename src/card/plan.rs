@@ -58,9 +58,52 @@ pub struct Custom {
     pub album_names: BTreeMap<String, String>,
     /// Cluster key → album ids in the user's order (for `AlbumOrder::Custom`).
     pub album_order: BTreeMap<String, Vec<String>>,
+    /// Album (`AlbumNode::base_id`) → the edition to put on the card, when there are several.
+    pub editions: BTreeMap<String, String>,
 }
 
 impl Custom {
+    /// Whether this write puts the album on the card (its artist aside). Of several editions,
+    /// only one goes: the one chosen for this write, else the first-ranked. Exclusions and
+    /// names saved before the album had editions (under its base id) still apply.
+    pub fn on_card(&self, cluster_key: &str, album: &AlbumNode, siblings: &[AlbumNode]) -> bool {
+        let (id, base) = (album.id(cluster_key), album.base_id(cluster_key));
+        if self.excluded_albums.contains(&id) || self.excluded_albums.contains(&base) {
+            return false;
+        }
+        let Some(e) = &album.edition else { return true };
+        match self.editions.get(&base) {
+            Some(chosen) if siblings.iter().any(|s| s.id(cluster_key) == *chosen) => *chosen == id,
+            _ => e.rank == 0,
+        }
+    }
+
+    /// The card name for an album in this write, if renamed.
+    pub fn album_name(&self, cluster_key: &str, album: &AlbumNode) -> Option<&str> {
+        self.album_names.get(&album.id(cluster_key)).or_else(|| self.album_names.get(&album.base_id(cluster_key))).map(String::as_str)
+    }
+
+    /// The number each album's folder gets with `AlbumOrder::Custom` ("02 - …"), 0-based:
+    /// titled albums count up, and all editions of an album share one number.
+    pub fn positions(&self, cluster_key: &str, ordered: &[&AlbumNode]) -> Vec<usize> {
+        let mut next = 0;
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        ordered
+            .iter()
+            .map(|a| {
+                if let Some(&p) = seen.get(&a.base_id(cluster_key)) {
+                    return p;
+                }
+                let p = next;
+                if a.title.is_some() {
+                    seen.insert(a.base_id(cluster_key), p);
+                    next += 1;
+                }
+                p
+            })
+            .collect()
+    }
+
     /// Albums of an artist in layout order: the user's order first, then the rest as grouped.
     pub fn ordered_albums<'a>(&self, cluster_key: &str, albums: &'a [AlbumNode]) -> Vec<&'a AlbumNode> {
         let mut out: Vec<&AlbumNode> = Vec::with_capacity(albums.len());
@@ -91,6 +134,17 @@ pub struct PlanItem {
 pub fn album_folder(album: &AlbumNode, title: Option<&str>, position: usize, opts: &Options) -> String {
     let Some(t) = title.or(album.title.as_deref()) else {
         return sanitize_component(&opts.singles_folder, 100);
+    };
+    // Different albums with the same name need different folders: by year, unless the year
+    // prefix already does it.
+    let same_name = album.variant.as_ref().filter(|v| !(opts.album_order == AlbumOrder::Year && album.year.map(|y| y.to_string()).as_ref() == Some(v)));
+    let with_variant;
+    let t = match same_name {
+        Some(v) => {
+            with_variant = format!("{t} ({v})");
+            with_variant.as_str()
+        }
+        None => t,
     };
     let name = match (opts.album_order, album.year) {
         (AlbumOrder::Year, Some(y)) => format!("{y} - {t}"),
@@ -147,16 +201,13 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
             continue;
         }
         let artist_dir = sanitize_component(custom.artist_names.get(ck).unwrap_or(&artist.name), 80);
-        let mut position = 0;
-        for album in custom.ordered_albums(ck, &artist.albums) {
-            let id = album.id(ck);
-            let album_dir = album_folder(album, custom.album_names.get(&id).map(String::as_str), position, opts);
-            if album.title.is_some() {
-                position += 1;
-            }
-            if custom.excluded_albums.contains(&id) {
+        let ordered = custom.ordered_albums(ck, &artist.albums);
+        let positions = custom.positions(ck, &ordered);
+        for (album, position) in ordered.into_iter().zip(positions) {
+            if !custom.on_card(ck, album, &artist.albums) {
                 continue;
             }
+            let album_dir = album_folder(album, custom.album_name(ck, album), position, opts);
             for &i in &album.tracks {
                 let t = &tracks[i];
                 let base = PathBuf::from(&artist_dir).join(&album_dir);
@@ -173,4 +224,51 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
         }
     }
     plan
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::grouping::{ArtistPrefs, build};
+
+    fn at(path: &str, album: &str, title: &str, year: u16) -> Track {
+        Track { path: path.into(), artist: Some("Band".into()), album: Some(album.into()), track: Some(1), title: Some(title.into()), year: Some(year), ext: "flac".into(), size: 1, ..Default::default() }
+    }
+
+    #[test]
+    fn one_edition_goes_on_the_card() {
+        let tracks = vec![
+            at("/m/Band/UP {1986}/1.flac", "Unknown Pleasures", "Disorder", 1979),
+            at("/m/Band/UP {1989}/1.flac", "Unknown Pleasures", "Disorder", 1979),
+            at("/m/Band/1999 - Band/1.flac", "Band", "Never Meant", 1999),
+            at("/m/Band/2016 - Band/1.flac", "Band", "Where Are We Now", 2016),
+        ];
+        let index = build(&tracks, &ArtistPrefs::default());
+        let opts = Options { album_order: AlbumOrder::Title, ..Default::default() };
+        let mut custom = Custom::default();
+        let sources = |plan: &[PlanItem]| plan.iter().map(|p| tracks[p.track].path.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let plan = build_plan(&tracks, &index, &opts, &custom);
+        assert_eq!(plan.len(), 3);
+        assert!(sources(&plan).contains(&"/m/Band/UP {1986}/1.flac".to_string()));
+        let rels: Vec<PathBuf> = plan.iter().map(|p| p.rel.clone()).collect();
+        assert!(rels.contains(&["Band", "Band (2016)", "01 - Where Are We Now.flac"].iter().collect()), "{rels:?}");
+
+        // Choose the other edition for this write.
+        let albums = &index.artists[0].albums;
+        let other = albums.iter().find(|a| a.edition.as_ref().is_some_and(|e| e.rank == 1)).unwrap();
+        custom.editions.insert(other.base_id("band"), other.id("band"));
+        let plan = build_plan(&tracks, &index, &opts, &custom);
+        assert!(sources(&plan).contains(&"/m/Band/UP {1989}/1.flac".to_string()));
+        assert!(!sources(&plan).contains(&"/m/Band/UP {1986}/1.flac".to_string()));
+
+        // Excluding the album as it was known before it had editions still works.
+        custom.excluded_albums.insert(other.base_id("band"));
+        assert_eq!(build_plan(&tracks, &index, &opts, &custom).len(), 2);
+
+        // Custom numbering: both editions share one number.
+        let ordered: Vec<&AlbumNode> = albums.iter().collect();
+        let positions = Custom::default().positions("band", &ordered);
+        let up: Vec<usize> = albums.iter().zip(&positions).filter(|(a, _)| a.edition.is_some()).map(|(_, p)| *p).collect();
+        assert_eq!(up[0], up[1]);
+    }
 }
