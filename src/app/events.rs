@@ -137,8 +137,6 @@ impl App {
                 }
             }
         }
-        if self.audio.take_ended() {
-            self.next();
-        }
+        self.follow_audio();
     }
 }

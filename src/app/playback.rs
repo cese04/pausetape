@@ -1,37 +1,51 @@
-//! The play queue on top of the audio thread.
+//! The play queue on top of the audio thread. The thread owns the queue and moves from song to
+//! song by itself; the app follows its position (`follow_audio`) to show the right song, cover
+//! and waveform whenever the window is drawn.
 
 use super::*;
 
 impl App {
     pub fn play(&mut self, queue: Vec<usize>, start: usize) {
+        // Entries nothing here can decode (Opus, APE… without ffmpeg) stay in the queue, so
+        // positions match, but the audio thread steps over them.
+        let items = queue
+            .iter()
+            .map(|&i| {
+                let t = &self.tracks[i];
+                t.plays_here().then(|| (t.path.clone(), t.cue.as_ref().map(|c| (c.start_time(), c.end_time()))))
+            })
+            .collect();
         self.queue = queue;
         self.qpos = start;
-        self.play_current();
+        self.audio.play_queue(items, start);
+        self.show_current();
     }
 
     pub fn current(&self) -> Option<usize> {
         self.queue.get(self.qpos).copied()
     }
 
-    fn play_current(&mut self) {
-        // Step over files no decoder here can open (Opus, APE, WavPack, WMA).
-        let start = self.qpos;
-        while self.current().is_some_and(|i| !self.tracks[i].plays_here()) {
-            self.qpos += 1;
+    /// Catch up with the audio thread: the song it's on, and songs it stepped over.
+    pub(super) fn follow_audio(&mut self) {
+        let skipped = self.audio.take_skipped();
+        if skipped > 0 {
+            self.notice(format!("skipped {} NeatLibrary can't play", plural_files(skipped)));
         }
-        if self.qpos != start {
-            let n = self.qpos - start;
-            self.notice(format!("skipped {} NeatLibrary can't play", plural_files(n)));
+        if let Some(i) = self.audio.status().index
+            && i != self.qpos
+            && i < self.queue.len()
+        {
+            self.qpos = i;
+            self.show_current();
         }
-        let Some(i) = self.current() else {
-            self.qpos = start.min(self.queue.len().saturating_sub(1));
-            self.audio.stop();
-            return;
-        };
+    }
+
+    /// Load the cover and waveform of the song at `qpos`, if not already shown.
+    fn show_current(&mut self) {
+        let Some(i) = self.current() else { return };
         let t = &self.tracks[i];
         let (path, id) = (t.path.clone(), t.id());
         let span = t.cue.as_ref().map(|c| (c.start_time(), c.end_time()));
-        self.audio.load(&path, span);
         if self.cover.as_ref().is_none_or(|(p, _, _)| *p != path) {
             self.load_cover(path.clone());
         }
@@ -57,20 +71,19 @@ impl App {
 
     pub fn next(&mut self) {
         if self.qpos + 1 < self.queue.len() {
-            self.qpos += 1;
-            self.play_current();
+            self.audio.jump(self.qpos + 1);
         } else {
             self.audio.stop();
         }
     }
 
     pub fn prev(&mut self) {
-        // Like most players: restart the track unless we're near its start.
-        if self.audio.status().pos.as_secs() > 3 || self.qpos == 0 {
-            self.audio.seek(std::time::Duration::ZERO);
-        } else {
-            self.qpos -= 1;
-            self.play_current();
+        // Like most players: restart the track unless we're near its start. Going back steps
+        // over songs that can't play here, as going forward does.
+        let before = (0..self.qpos).rev().find(|&q| self.tracks[self.queue[q]].plays_here());
+        match before {
+            Some(q) if self.audio.status().pos.as_secs() <= 3 => self.audio.jump(q),
+            _ => self.audio.seek(std::time::Duration::ZERO),
         }
     }
 }
