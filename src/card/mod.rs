@@ -1,6 +1,7 @@
 //! Putting music on the SD card: the layout plan, copying and pruning, saved writes, drives,
 //! and playlists. Also used to tidy the music folder in place (with an undo journal).
 
+pub mod adopt;
 mod copy;
 mod journal;
 mod plan;

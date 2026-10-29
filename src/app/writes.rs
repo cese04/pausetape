@@ -47,12 +47,14 @@ impl App {
 
     pub fn write_mut(&mut self) -> &mut WriteProfile {
         self.write_preview = None;
+        self.card_survey = None;
         &mut self.saved.writes[self.saved.active_write]
     }
 
     pub fn select_write(&mut self, i: usize) {
         self.saved.active_write = i.min(self.saved.writes.len() - 1);
         self.write_preview = None;
+        self.card_survey = None;
         self.card_renaming = None;
     }
 
@@ -86,6 +88,57 @@ impl App {
             let index = grouping::build(&tracks, &prefs);
             let p = card::preview(&w, &tracks, &index, &playlists, &dest);
             let _ = tx.send(Msg::Previewed(w.name, Box::new(p)));
+        });
+    }
+
+    /// Look at what's on the card besides this write's files: which are copies of library songs.
+    pub fn survey_card(&mut self) {
+        let w = self.write().clone();
+        let Some(dest) = w.dest.clone() else { return };
+        if self.busy.is_some() {
+            return;
+        }
+        let plan = w.plan(&self.tracks, &self.index);
+        let tracks = self.tracks.clone();
+        let ctx = self.ctx.clone();
+        self.busy = Some(Busy { label: "checking the card's music".into(), done: 0, total: 0 });
+        self.spawn(move |tx| {
+            let s = card::adopt::survey(&tracks, &plan, &w.manifest, &dest, |done, total| {
+                if done % 25 == 0 {
+                    let _ = tx.send(Msg::WriteProgress(done, total));
+                    ctx.request_repaint();
+                }
+            });
+            let _ = tx.send(Msg::Surveyed(w.name, Box::new(s)));
+        });
+    }
+
+    /// Move the card's copies of library songs into this write's layout (see `card::adopt`).
+    pub fn take_over_card(&mut self) {
+        let Some((name, survey)) = self.card_survey.take() else { return };
+        let Some(dest) = self.write().dest.clone().filter(|_| self.write().name == name) else { return };
+        if self.busy.is_some() {
+            self.card_survey = Some((name, survey));
+            return;
+        }
+        let gather = self.gather_on_take_over;
+        self.busy = Some(Busy { label: "taking over the card".into(), done: 0, total: 0 });
+        self.spawn(move |tx| {
+            let out = card::adopt::take_over(&survey, &dest, gather, &name);
+            let _ = tx.send(Msg::TookOver(name, Box::new(out)));
+        });
+    }
+
+    pub fn undo_take_over(&mut self) {
+        let w = self.write().clone();
+        let Some(dest) = w.dest.clone() else { return };
+        if self.busy.is_some() {
+            return;
+        }
+        self.busy = Some(Busy { label: "putting the card back".into(), done: 0, total: 0 });
+        self.spawn(move |tx| {
+            let r = card::adopt::undo_latest(&w.name, &dest).map_err(|e| format!("{e:#}"));
+            let _ = tx.send(Msg::UndidTakeOver(w.name, r));
         });
     }
 

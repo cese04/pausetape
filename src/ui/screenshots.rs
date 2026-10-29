@@ -25,16 +25,23 @@ pub struct Shooter {
     dir: PathBuf,
     step: usize,
     until: Option<Instant>,
+    /// NEATLIBRARY_SHOT_SURVEY: check the card's own music once the comparison is in (reads only).
+    survey: bool,
 }
 
 impl Shooter {
     pub fn from_env() -> Option<Self> {
-        std::env::var_os("NEATLIBRARY_SHOT").map(|d| Shooter { dir: d.into(), step: 0, until: None })
+        std::env::var_os("NEATLIBRARY_SHOT").map(|d| Shooter { dir: d.into(), step: 0, until: None, survey: std::env::var_os("NEATLIBRARY_SHOT_SURVEY").is_some() })
     }
 
     pub fn tick(&mut self, app: &mut App, ctx: &egui::Context) {
         ctx.request_repaint();
         if app.tracks.is_empty() || app.busy.is_some() || self.until.is_some_and(|t| Instant::now() < t) {
+            return;
+        }
+        if self.survey && app.write_preview.as_ref().is_some_and(|(_, p)| p.foreign > 0) {
+            self.survey = false;
+            app.survey_card();
             return;
         }
         if self.step == 0 {

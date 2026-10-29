@@ -92,6 +92,11 @@ enum Msg {
     WriteProgress(usize, usize),
     Written(String, Box<Outcome>),
     Previewed(String, Box<Preview>),
+    /// What's on the card besides the write's own files, for taking it over.
+    Surveyed(String, Box<card::adopt::Survey>),
+    TookOver(String, Box<card::adopt::Outcome>),
+    /// Card paths no longer the write's, files put back, errors.
+    UndidTakeOver(String, Result<(Vec<PathBuf>, usize, Vec<String>), String>),
     /// (track index, new size, new mtime) for files whose tags were written.
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
     /// Loudness of a track, by track id.
@@ -132,6 +137,10 @@ pub struct App {
     pub in_place: usize,
     /// Preview of the active write, tagged with the write's name.
     pub write_preview: Option<(String, Preview)>,
+    /// The card surveyed for taking over, by write name.
+    pub card_survey: Option<(String, card::adopt::Survey)>,
+    /// Gather what a take-over doesn't use into one folder on the card.
+    pub gather_on_take_over: bool,
     /// Open folder/card dialog.
     pub picker: Option<crate::ui::folders::Picker>,
     /// Library A–Z rail: jump to the first artist under this letter on the next frame.
@@ -194,6 +203,8 @@ impl App {
             tidy_plan: None,
             in_place: 0,
             write_preview: None,
+            card_survey: None,
+            gather_on_take_over: true,
             picker: None,
             jump_to: None,
             volumes: card::volumes(),

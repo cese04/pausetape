@@ -85,6 +85,42 @@ impl App {
                     self.write_preview = None;
                     self.volumes = card::volumes();
                 }
+                Msg::Surveyed(name, s) => {
+                    self.busy = None;
+                    if self.write().name == name {
+                        self.card_survey = Some((name, *s));
+                    }
+                }
+                Msg::TookOver(name, out) => {
+                    self.busy = None;
+                    if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
+                        // The moved files are now this write's, as if it had copied them.
+                        let mut have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
+                        for wr in out.written {
+                            if have.insert(wr.rel.to_string_lossy().to_lowercase()) {
+                                w.manifest.push(wr);
+                            }
+                        }
+                    }
+                    let errors = if out.errors.is_empty() { String::new() } else { format!(" · {} problems (first: {})", out.errors.len(), out.errors[0]) };
+                    self.notice(format!("card taken over: {} songs moved into place, {} other files gathered{errors}", out.moved, out.gathered));
+                    self.preview_write();
+                }
+                Msg::UndidTakeOver(name, r) => {
+                    self.busy = None;
+                    match r {
+                        Ok((released, restored, errors)) => {
+                            if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
+                                let gone: HashSet<String> = released.iter().map(|r| r.to_string_lossy().to_lowercase()).collect();
+                                w.manifest.retain(|m| !gone.contains(&m.rel.to_string_lossy().to_lowercase()));
+                            }
+                            let errors = if errors.is_empty() { String::new() } else { format!(" · {} problems (first: {})", errors.len(), errors[0]) };
+                            self.notice(format!("card put back as it was: {restored} files{errors}"));
+                        }
+                        Err(e) => self.notice(format!("undo: {e}")),
+                    }
+                    self.preview_write();
+                }
                 Msg::Previewed(name, p) => {
                     if self.busy.as_ref().is_some_and(|b| b.label.starts_with("comparing")) {
                         self.busy = None;

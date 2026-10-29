@@ -75,6 +75,11 @@ pub struct Preview {
     pub to_remove: Vec<PathBuf>,
     pub playlist_files: usize,
     pub total_bytes: u64,
+    /// Files on the card this write didn't put there (by its manifest), and their size.
+    pub foreign: usize,
+    pub foreign_bytes: u64,
+    /// An earlier take-over of the card by this write can be undone.
+    pub can_undo_take_over: bool,
 }
 
 /// What a write would do, comparing the plan with the card. Touches the card read-only.
@@ -117,6 +122,9 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     if w.prune {
         p.to_remove = w.manifest.iter().filter(|m| !keep.contains(&m.rel.to_string_lossy().to_lowercase())).map(|m| m.rel.clone()).collect();
     }
+    let foreign = super::adopt::foreign_files(dest, &w.manifest);
+    (p.foreign, p.foreign_bytes) = (foreign.len(), foreign.iter().map(|(_, n)| n).sum());
+    p.can_undo_take_over = super::adopt::latest(&w.name).is_some();
     p
 }
 
