@@ -17,7 +17,7 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    scan thread ───┤  library::scan  + db (SQLite cache)
    MusicBrainz ───┤  one worker, ≤ 1 request/second
    writes ────────┤  card::write / card::execute
-   audio thread ──┘  rodio player; status shared via Arc<Mutex<Status>>
+   audio thread ──┘  rodio player and the play queue; status shared via Arc<Mutex<Status>>
    helpers: waveform + cover loading per track; ffmpeg conversions (serialised)
 ```
 
@@ -34,11 +34,14 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    Albums with the same name are split by folder into editions (copies sharing their songs)
    or separate same-name albums.
    Result: `Index` = clusters, suggestions, and `artists → albums → track indices`.
-3. **Plan** (`card/plan.rs`): `Options` (album order, which formats, …) + `Custom` (per-write
-   exclusions, names, order) → list of `PlanItem { track, rel path, skip reason }`, FAT-safe and
-   collision-free (case-insensitive).
+3. **Plan** (`card/plan.rs`): `Options` (album order, what to do with formats RECHO can't play,
+   …) + `Custom` (per-write exclusions, editions, names, order) → list of
+   `PlanItem { track, rel path, skip reason, target }`, FAT-safe and collision-free
+   (case-insensitive). `target` says how the song becomes a card file: copied, or made by
+   ffmpeg as FLAC or MP3 320 (`card::target`).
 4. **Write** (`card/write.rs`, using `card/copy.rs` and `card/playlist.rs`): copy what
-   differs (songs inside an album file are cut out as FLAC with ffmpeg), export playlists,
+   differs (songs inside an album file are cut out, and formats RECHO can't play converted,
+   with ffmpeg), export playlists,
    prune files the *previous* write created that are no longer wanted (only if their size
    still matches the manifest), clean macOS `._` files, and store the new manifest in the
    write profile.
@@ -74,7 +77,7 @@ src/
 │   ├── volumes.rs     mounted drives, free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
 ├── audio/             playing music
-│   ├── player.rs      playback thread (rodio), shared Status
+│   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI
 │   └── decode.rs      Symphonia or ffmpeg (conversion cache), loudness envelope
 ├── app/               state and the glue between background work and the UI
 │   ├── mod.rs         App, Saved (persisted), Tab, messages, eframe::App
@@ -114,7 +117,7 @@ src/
 | Track | `Track::id()`: its path, plus `#03` for a song inside an album file | Playlists, corrections and the waveform find their track |
 | Playlist | its name (in writes), track **ids** (inside) | Renaming a playlist updates writes; moving files outside the app drops them |
 | Track in the database | absolute path + size + mtime (album files cached whole; songs derived each scan) | Any change means "read again" |
-| Song cut onto the card | manifest `source`: id, CUE times, album file size/date, tags | A rewrite cuts again only when one of them changed |
+| Song made by ffmpeg for the card (cut or converted) | manifest `source`: id, target format, CUE times, source size/date, tags, added cover | A rewrite makes it again only when one of them changed |
 
 ## Where things are stored
 
@@ -151,7 +154,7 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 31 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 32 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
@@ -160,7 +163,7 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 (live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
 `cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
-(`NEATLIBRARY_EMBED=<song>:<image>`).
+(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`).
 
 ## Conventions
 

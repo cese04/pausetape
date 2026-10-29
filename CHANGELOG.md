@@ -180,3 +180,35 @@ Everything built so far, in the order it happened. All of it is unreleased work 
 - `--plan` also lists every album copy with its format and status.
 - Debug demo: `NEATLIBRARY_SHOT_DUPLICATES=1` opens that view.
 - 37 tests (31 offline).
+
+### 18. Converting for the card (2026-10-28)
+- **What converts.** Songs the Echo Mini can't play are converted when writing to the card,
+  now the default (*convert them*, next to *leave them off* and *copy them anyway*):
+  - lossless (ALAC, AIFF, APE, WavPack…) → FLAC, nothing lost;
+  - lossy (AAC, Dolby E-AC-3/AC-3, Opus, Vorbis, WMA…) → MP3 320 kbps, stereo. Lossy audio is
+    never made into FLAC, which would only take more space.
+- **What carries over.** Converted files get the song's tags and the cover embedded in the
+  source. Like CUE cuts, the write records what each was made from, so later writes convert
+  nothing that hasn't changed.
+- **Songs inside lossy album files (MP3 + CUE)** can now go on the card too, as MP3 320.
+- **Card tab:** says what converting makes ("111 songs to FLAC, 226 to MP3 320") and what is
+  still left out and why. Album rows say "N converted". The comparison counts conversions.
+- **Settings › ffmpeg** says whether this ffmpeg can make MP3s.
+- **On the test library:** all 337 M4A songs now reach the card (none left out).
+  - *Speak Now* (14 ALAC songs) → FLAC in 15 s.
+  - *Morning Glory* (12 Dolby songs) → MP3 in 22 s.
+  - Lengths match the sources within 0.1 s.
+- **Bundled ffmpeg** gains LAME 3.100 for MP3 (LGPL, built from source, licence shipped):
+  8.9 MB.
+- **Existing writes** switch to *convert them*: the old leave/copy setting isn't carried over.
+- 39 tests (32 offline); new opt-in check `convert_write`.
+
+### 19. Fix: playback stopped after a song while the window was hidden (2026-10-28)
+- **Cause.** The next song was started from the window's frame update. macOS stops drawing
+  windows that are covered (for example while working in another app), so the queue stalled at
+  the end of a song until the window was looked at again.
+- **Fix.** The audio thread now owns the play queue and moves from song to song by itself. It
+  steps over songs that can't play and reports them. The window follows its position (song,
+  cover, waveform) whenever it's drawn.
+- New opt-in check `queue_advances_without_ui` (plays two one-second parts of a song with no
+  window).

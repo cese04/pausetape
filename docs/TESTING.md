@@ -17,7 +17,7 @@ portability fixes) · [ARCHITECTURE](ARCHITECTURE.md) (where things live in the 
 Once the repository is on GitHub, every push runs `.github/workflows/ci.yml`. It builds and
 tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
 
-- **Green on all three:** it compiles and the 31 tests pass everywhere. Go on to the hands-on
+- **Green on all three:** it compiles and the 32 tests pass everywhere. Go on to the hands-on
   test below.
 - **Red on Windows or Linux:** open the failed step's log; that's the first thing to fix. A
   compile error there is likely, since this code has never met those compilers.
@@ -68,7 +68,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/<you>/<repo>.git
 cd <repo>
-cargo test                          # 31 tests should pass (6 more are skipped on purpose)
+cargo test                          # 32 tests should pass (7 more are skipped on purpose)
 cargo run --release -- --version    # e.g. "NeatLibrary 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -161,6 +161,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 18a. With a CUE album and ffmpeg: each song is its own FLAC on the stick, with the right
     length; writing again cuts nothing. Without ffmpeg, those songs are left out with
     "needs ffmpeg to cut the album file into songs".
+18b. With ffmpeg, write an album in ALAC or AAC (`.m4a`): on the stick it's FLAC or MP3 with
+    the same length, title and cover; writing again converts nothing. Settings › ffmpeg says
+    whether this ffmpeg can make MP3s (the Windows `winget` and Linux distribution builds can).
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.

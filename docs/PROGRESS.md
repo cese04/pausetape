@@ -112,7 +112,7 @@ name reading, CUE sheets).
 
 | # | Suggestion | Why | Effort |
 |---|---|---|---|
-| 1 | **Convert while writing to the card.** Lossless sources (ALAC, APE, WavPack, AIFF) → FLAC; lossy (AAC, Dolby, Opus, Vorbis, WMA) → 320 kbps MP3, never lossy → FLAC. Third choice next to *leave off / copy anyway*. | Today the *Love (Atmos)* album and every M4A can't reach the player at all. ffmpeg is already wired in. | M |
+| 1 | ~~**Convert while writing to the card.**~~ **Done 2026-10-28** (CHANGELOG §18): lossless → FLAC, lossy → MP3 320, the default for new and existing writes. | | |
 | 2 | **Shorter folder names on the card**, as a setting per write (e.g. 40 characters; today 80 artist / 100 album / 120 file). | The Echo Mini's screen shows far fewer characters; long names are cut off on the device. | S |
 | 3 | **Optional max width on very wide screens**, keeping the rail beside the list and centring the block. | Titles and durations drift far apart on large monitors. | S |
 | 4 | **AcoustID fingerprinting** (needs `fpcalc` and a free API key) to identify files with no usable tags. | MusicBrainz lookup needs at least a rough artist/title. | M |

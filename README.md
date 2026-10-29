@@ -33,6 +33,8 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
   can't hold symlinks).
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks
   clearly what the Echo Mini can't play.
+- **Converts for the card** what the Echo Mini can't play: ALAC, AIFF, APE and other lossless
+  files become FLAC, with nothing lost; AAC, Dolby and other lossy files become MP3 320.
 - **Albums stored as one file plus a `.cue` sheet** show as separate songs, as in foobar2000
   or AIMP. On the card, each song becomes its own FLAC file.
 - **Several copies of an album** (rips, reissues) are recognised as editions; one goes on the
