@@ -31,6 +31,22 @@ pub fn ffmpeg() -> Option<&'static Path> {
         .as_deref()
 }
 
+/// The ffmpeg in use has this encoder ("flac", "libmp3lame"). Builds differ: the minimal one
+/// bundled with the app has only what NeatLibrary asks of it.
+pub fn ffmpeg_encodes(name: &str) -> bool {
+    static ENCODERS: OnceLock<String> = OnceLock::new();
+    let list = ENCODERS.get_or_init(|| {
+        let Some(ff) = ffmpeg() else { return String::new() };
+        std::process::Command::new(ff)
+            .args(["-hide_banner", "-encoders"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    });
+    // Lines look like " A....D flac                 FLAC (Free Lossless Audio Codec)".
+    list.lines().any(|l| l.split_whitespace().nth(1) == Some(name))
+}
+
 /// The ffmpeg in use is the one shipped inside the app.
 pub fn ffmpeg_is_bundled() -> bool {
     let here = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));

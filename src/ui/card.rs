@@ -1,7 +1,7 @@
 //! Card tab: saved writes. Each is a named layout for a card: what goes on it, the names and
 //! order it uses there, and a sync that only copies what changed.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use egui::{Align, Layout, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
@@ -11,7 +11,7 @@ use super::text::{self, plural};
 use super::theme::{self, ink};
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
-use crate::card::{AlbumOrder, album_folder};
+use crate::card::{AlbumOrder, Target, Unplayable, album_folder, card_size, target};
 use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -117,8 +117,7 @@ impl Sizes {
                     .tracks
                     .iter()
                     .map(|&i| &app.tracks[i])
-                    .filter(|t| t.on_recho() || !w.options.skip_unplayable)
-                    .map(|t| t.size)
+                    .filter_map(|t| target(t, w.options.unplayable).ok().map(|to| card_size(t, to)))
                     .sum();
                 let on_card = w.custom.on_card(ck, al, &a.albums);
                 // Of several editions, only the one going on the card counts towards the artist.
@@ -133,9 +132,9 @@ impl Sizes {
         }
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, w.options.skip_unplayable)
+        s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, w.options.unplayable)
             .iter()
-            .flat_map(|(_, copies, _)| copies.iter().map(|c| c.track.size))
+            .flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target)))
             .sum();
         s
     }
@@ -190,12 +189,13 @@ fn actions(app: &mut App, ui: &mut Ui) {
         }
     });
     if let Some((_, p)) = &app.write_preview {
-        let mut parts = vec![format!("{} to copy ({})", p.to_copy, text::bytes(p.copy_bytes)), format!("{} already there", p.unchanged)];
+        let converting = if p.to_convert > 0 { format!(", {} of them converted or cut", p.to_convert) } else { String::new() };
+        let mut parts = vec![format!("{} to copy ({}{converting})", p.to_copy, text::bytes(p.copy_bytes)), format!("{} already there", p.unchanged)];
         if !p.to_remove.is_empty() {
             parts.push(format!("{} to remove", p.to_remove.len()));
         }
         if p.skipped > 0 {
-            parts.push(format!("{} left out (format)", p.skipped));
+            parts.push(format!("{} left out", p.skipped));
         }
         if p.playlist_files > 0 {
             parts.push(format!("{} playlist copies", p.playlist_files));
@@ -234,10 +234,39 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
             muted(ui, format!("{} RECHO can't play ({formats}):", plural(*n, "song")));
         });
         ui.horizontal(|ui| {
-            changed |= ui.radio_value(&mut w.options.skip_unplayable, true, "leave them off the card").changed();
-            changed |= ui.radio_value(&mut w.options.skip_unplayable, false, "copy them anyway").changed();
+            changed |= ui
+                .radio_value(&mut w.options.unplayable, Unplayable::Convert, "convert them")
+                .on_hover_text("Lossless ones (ALAC, AIFF, APE…) become FLAC, with nothing lost; the rest (AAC, Dolby, Opus…) become MP3 at 320 kbps, in stereo. Takes a while the first time; later writes keep what's already on the card.")
+                .changed();
+            changed |= ui.radio_value(&mut w.options.unplayable, Unplayable::Leave, "leave them off the card").changed();
+            changed |= ui.radio_value(&mut w.options.unplayable, Unplayable::Copy, "copy them anyway").changed();
         });
-        if !w.options.skip_unplayable {
+        if w.options.unplayable == Unplayable::Convert {
+            // What converting would make of them, and what still can't go (no ffmpeg, AC-4…).
+            let (mut flac, mut mp3, mut left) = (0, 0, BTreeMap::<&str, usize>::new());
+            for t in app.tracks.iter().filter(|t| !t.on_recho() && t.cue.is_none()) {
+                match target(t, Unplayable::Convert) {
+                    Ok(Target::Flac) => flac += 1,
+                    Ok(Target::Mp3) => mp3 += 1,
+                    Ok(Target::Copy) => {}
+                    Err(why) => *left.entry(why).or_default() += 1,
+                }
+            }
+            let mut made = Vec::new();
+            if flac > 0 {
+                made.push(format!("{} to FLAC", plural(flac, "song")));
+            }
+            if mp3 > 0 {
+                made.push(format!("{} to MP3 320", plural(mp3, "song")));
+            }
+            if !made.is_empty() {
+                muted(ui, format!("{}.", made.join(", ")));
+            }
+            for (why, n) in left {
+                ui.label(RichText::new(format!("{} left out: {why}.", plural(n, "song"))).color(ink(ui).accent).size(13.0));
+            }
+        }
+        if w.options.unplayable == Unplayable::Copy {
             theme::warning_frame(ui).show(ui, |ui| {
                 ui.label(
                     RichText::new(format!(
@@ -383,10 +412,19 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(12.5).color(ink.muted)).on_hover_text(hover);
                 }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
-                let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
-                if off > 0 {
-                    let text = if w.options.skip_unplayable { format!("{off} left out (format)") } else { format!("{off} won't play") };
-                    ui.label(RichText::new(text).size(12.5).color(ink.accent)).on_hover_text("RECHO plays FLAC, MP3 and WAV only; change this under layout below");
+                // Songs RECHO can't read as they are: converted, copied anyway, or left out.
+                let fates: Vec<Result<Target, &str>> = al.tracks.iter().map(|&i| &app.tracks[i]).filter(|t| !t.on_recho() && t.cue.is_none()).map(|t| target(t, w.options.unplayable)).collect();
+                let converted = fates.iter().filter(|f| matches!(f, Ok(Target::Flac | Target::Mp3))).count();
+                let copied = fates.iter().filter(|f| matches!(f, Ok(Target::Copy))).count();
+                let left: Vec<&str> = al.tracks.iter().filter_map(|&i| target(&app.tracks[i], w.options.unplayable).err()).collect();
+                if converted > 0 {
+                    muted(ui, format!("{converted} converted")).on_hover_text("RECHO plays FLAC, MP3 and WAV only; these are converted on the way (lossless to FLAC, the rest to MP3 320)");
+                }
+                if copied > 0 {
+                    ui.label(RichText::new(format!("{copied} won't play")).size(12.5).color(ink.accent)).on_hover_text("copied as they are, but RECHO plays FLAC, MP3 and WAV only; change this under layout below");
+                }
+                if let Some(why) = left.first() {
+                    ui.label(RichText::new(format!("{} left out", left.len())).size(12.5).color(ink.accent)).on_hover_text(*why);
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.add_space(10.0);

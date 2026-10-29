@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::playlist::{self, Playlist};
+use super::plan::{Target, card_size};
 use super::{Custom, Mode, Options, PlanItem, Progress, Written};
 use crate::library::Track;
 use crate::library::grouping::Index;
@@ -65,6 +66,8 @@ impl WriteProfile {
 #[derive(Default)]
 pub struct Preview {
     pub to_copy: usize,
+    /// Of `to_copy`, files ffmpeg makes (converted songs, songs cut from album files).
+    pub to_convert: usize,
     pub copy_bytes: u64,
     pub unchanged: usize,
     pub skipped: usize,
@@ -79,31 +82,35 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     let mut p = Preview::default();
     let mut keep: HashSet<String> = HashSet::new();
     let previous = super::copy::by_rel(&w.manifest);
-    let check = |rel: &Path, t: &Track, p: &mut Preview, keep: &mut HashSet<String>| {
+    let check = |rel: &Path, t: &Track, to: Target, p: &mut Preview, keep: &mut HashSet<String>| {
         let key = rel.to_string_lossy().to_lowercase();
-        let up_to_date = super::up_to_date(t, &dest.join(rel), previous.get(&key).copied());
+        let up_to_date = super::up_to_date(t, to, &dest.join(rel), previous.get(&key).copied());
         keep.insert(key);
-        p.total_bytes += t.size;
+        let bytes = card_size(t, to);
+        p.total_bytes += bytes;
         if up_to_date {
             p.unchanged += 1;
         } else {
             p.to_copy += 1;
-            p.copy_bytes += t.size;
+            p.copy_bytes += bytes;
+            if to != Target::Copy {
+                p.to_convert += 1;
+            }
         }
     };
     for item in w.plan(tracks, index) {
         if item.skip.is_some() {
             p.skipped += 1;
         } else {
-            check(&item.rel, &tracks[item.track], &mut p, &mut keep);
+            check(&item.rel, &tracks[item.track], item.target, &mut p, &mut keep);
         }
     }
     let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
     let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
-    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.skip_unplayable) {
+    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.unplayable) {
         p.playlist_files += copies.len();
         for c in copies {
-            check(&c.rel, c.track, &mut p, &mut keep);
+            check(&c.rel, c.track, c.target, &mut p, &mut keep);
         }
         keep.insert(dir.with_file_name(format!("{}.m3u8", dir.file_name().unwrap().to_string_lossy())).to_string_lossy().to_lowercase());
     }
@@ -139,7 +146,7 @@ pub fn write(
     let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, &mut progress);
 
     let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
-    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.skip_unplayable, &w.manifest, |_, _| {});
+    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.unplayable, &w.manifest, |_, _| {});
 
     let mut manifest = r.written;
     manifest.extend(pl.written);
@@ -170,6 +177,54 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    /// `NEATLIBRARY_CONVERT=<folder> cargo test -- --ignored convert_write --nocapture`
+    /// Writes a folder of songs RECHO can't play (ALAC, AAC, Dolby…) to a temporary "card" with
+    /// conversion on, reports what each became, and checks that a second write converts nothing.
+    #[test]
+    #[ignore]
+    fn convert_write() {
+        use lofty::prelude::*;
+        let Some(src) = std::env::var_os("NEATLIBRARY_CONVERT").map(PathBuf::from) else { return };
+        let card = std::env::temp_dir().join(format!("neatlibrary-test-convert-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&card);
+        let (tracks, _) = crate::library::scan(&src, None, false, |_| {});
+        let index = crate::library::grouping::build(&tracks, &Default::default());
+        let mut w = WriteProfile::default();
+        assert!(w.options.unplayable == super::super::Unplayable::Convert, "converting is the default");
+        let plan = w.plan(&tracks, &index);
+        for p in plan.iter().filter(|p| p.skip.is_some()) {
+            println!("  left out: {} ({})", tracks[p.track].path.display(), p.skip.unwrap());
+        }
+        let t = std::time::Instant::now();
+        let out = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        println!("first write: {} made in {:.1?}, errors {:?}", out.copied, t.elapsed(), out.errors);
+        assert!(out.errors.is_empty());
+        for (m, p) in out.manifest.iter().zip(plan.iter().filter(|p| p.skip.is_none())) {
+            let f = lofty::read_from_path(card.join(&m.rel)).unwrap();
+            let props = f.properties();
+            let cover = f.tags().iter().any(|t| !t.pictures().is_empty());
+            let title = f.primary_tag().and_then(|t| t.title().map(|s| s.into_owned())).unwrap_or_default();
+            let src = &tracks[p.track];
+            println!(
+                "  {:<55} {:?} {} kbps {}/{} Hz · {:.1} s (source {:.1} s, {}) · title {title:?} · cover {cover}",
+                m.rel.display().to_string(),
+                p.target,
+                props.audio_bitrate().unwrap_or(0),
+                props.bit_depth().unwrap_or(0),
+                props.sample_rate().unwrap_or(0),
+                props.duration().as_secs_f32(),
+                src.duration.as_secs_f32(),
+                src.format_label()
+            );
+            assert!((props.duration().as_secs_f32() - src.duration.as_secs_f32()).abs() < 0.2, "same length as the source");
+        }
+        w.manifest = out.manifest;
+        let again = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        println!("second write: {} made, {} unchanged", again.copied, again.unchanged);
+        assert_eq!(again.copied, 0);
+        let _ = fs::remove_dir_all(&card);
+    }
 
     /// `NEATLIBRARY_CUE_ALBUM=<folder with an album file + .cue> cargo test -- --ignored cue_album --nocapture`
     /// Writes the folder to a temporary "card": every song is cut into its own FLAC, and a second

@@ -77,7 +77,16 @@ pub fn load(path: &Path) -> Option<(image::RgbaImage, Option<PathBuf>)> {
 /// An image file as a cover to embed: at most `EMBED_SIDE` pixels, baseline JPEG.
 pub fn for_embedding(image: &Path) -> anyhow::Result<Vec<u8>> {
     use anyhow::Context;
-    let img = image::open(image).with_context(|| format!("reading {}", image.display()))?;
+    shrink(&std::fs::read(image).with_context(|| format!("reading {}", image.display()))?)
+}
+
+/// The front cover embedded in a file, ready to embed in another (see `for_embedding`).
+pub fn embedded_for_embedding(path: &Path) -> Option<Vec<u8>> {
+    shrink(&embedded(path)?).ok()
+}
+
+fn shrink(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let img = image::load_from_memory(bytes)?;
     let img = if img.width() > EMBED_SIDE || img.height() > EMBED_SIDE { img.thumbnail(EMBED_SIDE, EMBED_SIDE) } else { img };
     let mut out = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90).encode_image(&img.to_rgb8())?;

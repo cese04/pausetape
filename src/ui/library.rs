@@ -113,9 +113,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 muted(
                     ui,
                     if crate::audio::ffmpeg().is_some() {
-                        "RECHO plays FLAC, MP3 and WAV only. Here, AAC, ALAC, AIFF and Ogg directly; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA by converting with ffmpeg first, in stereo; Dolby AC-4 has no decoder yet. On the card they're left out unless you choose to copy them in the card tab."
+                        "RECHO plays FLAC, MP3 and WAV only. Here, AAC, ALAC, AIFF and Ogg directly; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA by converting with ffmpeg first, in stereo; Dolby AC-4 has no decoder yet. On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab."
                     } else {
-                        "RECHO plays FLAC, MP3 and WAV only. AAC, ALAC, AIFF and Ogg still play here; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg (brew install ffmpeg). On the card they're left out unless you choose to copy them in the card tab."
+                        "RECHO plays FLAC, MP3 and WAV only. AAC, ALAC, AIFF and Ogg still play here; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg (brew install ffmpeg). On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab."
                     },
                 );
             }

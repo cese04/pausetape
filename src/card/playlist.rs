@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::library::Track;
 use crate::library::names::sanitize_component;
 use super::copy::{by_rel, source_key};
-use super::plan::cannot_write;
+use super::plan::{Target, Unplayable, target};
 use super::{Written, materialise, up_to_date};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -47,13 +47,15 @@ pub struct ExportReport {
 pub struct Planned<'a> {
     pub rel: PathBuf,
     pub track: &'a Track,
+    pub target: Target,
     pub label: String,
 }
 
 /// Where each playlist's copies go: `<folder>/<Name>/NN - Artist - Title.ext`.
 /// Returns, per playlist, its folder (relative) and its copies; missing tracks are skipped.
-/// With `skip_unplayable`, tracks RECHO can't play are left out (numbering closes the gap).
-pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, folder: &str, skip_unplayable: bool) -> Vec<(PathBuf, Vec<Planned<'a>>, usize)> {
+/// Tracks RECHO can't play are converted, copied or left out as `unplayable` says (numbering
+/// closes the gaps).
+pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, folder: &str, unplayable: Unplayable) -> Vec<(PathBuf, Vec<Planned<'a>>, usize)> {
     let root = PathBuf::from(sanitize_component(folder, 80));
     playlists
         .iter()
@@ -69,13 +71,13 @@ pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, 
                     if t.is_none() {
                         missing += 1;
                     }
-                    t.filter(|t| cannot_write(t).is_none() && (!skip_unplayable || t.on_recho()))
+                    t.and_then(|t| target(t, unplayable).ok().map(|to| (*t, to)))
                 })
                 .enumerate()
-                .map(|(n, t)| {
+                .map(|(n, (t, to))| {
                     let label = format!("{} - {}", t.artist.as_deref().unwrap_or("Unknown"), t.display_title());
-                    let file = format!("{:0width$} - {}.{}", n + 1, sanitize_component(&label, 110), t.card_ext());
-                    Planned { rel: dir.join(file), track: t, label }
+                    let file = format!("{:0width$} - {}.{}", n + 1, sanitize_component(&label, 110), to.ext(t));
+                    Planned { rel: dir.join(file), track: t, target: to, label }
                 })
                 .collect();
             (dir, copies, missing)
@@ -93,7 +95,7 @@ pub fn export(
     organised: &HashMap<PathBuf, PathBuf>,
     dest: &Path,
     folder: &str,
-    skip_unplayable: bool,
+    unplayable: Unplayable,
     previous: &[Written],
     mut progress: impl FnMut(usize, usize),
 ) -> ExportReport {
@@ -101,7 +103,7 @@ pub fn export(
     let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
     let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
     let previous = by_rel(previous);
-    let plan = planned(playlists, &by_id, folder, skip_unplayable);
+    let plan = planned(playlists, &by_id, folder, unplayable);
     let total: usize = plan.iter().map(|(_, c, _)| c.len()).sum();
     let mut done = 0;
     for (dir_rel, copies, missing) in plan {
@@ -119,16 +121,16 @@ pub fn export(
             let dst = dest.join(&c.rel);
             keep.insert(c.rel.file_name().unwrap().to_string_lossy().into_owned());
             let prev = previous.get(&c.rel.to_string_lossy().to_lowercase()).copied();
-            if up_to_date(c.track, &dst, prev) {
+            if up_to_date(c.track, c.target, &dst, prev) {
                 r.unchanged += 1;
-            } else if let Err(e) = materialise(c.track, &dst) {
+            } else if let Err(e) = materialise(c.track, c.target, &dst) {
                 r.errors.push(format!("{}: {e:#}", c.track.path.display()));
                 continue;
             } else {
                 r.copied += 1;
             }
             let size = fs::metadata(&dst).map(|m| m.len()).unwrap_or(c.track.size);
-            r.written.push(Written { rel: c.rel.clone(), size, source: source_key(c.track) });
+            r.written.push(Written { rel: c.rel.clone(), size, source: source_key(c.track, c.target) });
             let target = organised
                 .get(&c.track.id())
                 .map(|rel| Path::new("..").join(rel))
@@ -185,14 +187,14 @@ mod tests {
             .collect();
         let mut pl = Playlist { name: "Road: Trip".into(), tracks: vec![tracks[1].path.clone(), tracks[0].path.clone()] };
         let dest = root.join("card");
-        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", true, &[], |_, _| {});
+        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", Unplayable::Leave, &[], |_, _| {});
         assert_eq!((r.copied, r.errors.len(), r.written.len()), (2, 0, 3));
         let dir = dest.join("_Playlists/Road - Trip");
         assert!(dir.join("01 - X - B.mp3").exists() && dir.join("02 - X - A.mp3").exists());
         assert!(dest.join("_Playlists/Road - Trip.m3u8").exists());
 
         pl.tracks.pop();
-        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", true, &[], |_, _| {});
+        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", Unplayable::Leave, &[], |_, _| {});
         assert_eq!((r.unchanged, r.removed), (1, 1));
         fs::remove_dir_all(root).unwrap();
     }

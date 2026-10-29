@@ -45,10 +45,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         ui.label(format!("found at {}", p.display()));
                     }
                     muted(ui, "Used to play what the built-in decoder can't: Dolby E-AC-3/AC-3 (e.g. Atmos releases), TrueHD, DTS, Opus, APE, WavPack, WMA.");
+                    if crate::audio::ffmpeg_encodes("libmp3lame") {
+                        muted(ui, "Also converts songs for the card: lossless ones to FLAC, the rest to MP3 320.");
+                    } else {
+                        ui.label(
+                            RichText::new("This ffmpeg can't make MP3s (no LAME encoder): lossless songs are still converted to FLAC for the card, but AAC, Dolby and other lossy ones are left out.")
+                                .color(ink(ui).accent),
+                        );
+                    }
                 }
                 None => {
                     ui.label(RichText::new("not found").color(ink(ui).accent));
-                    muted(ui, "Install it (brew install ffmpeg) to play Dolby, Opus, APE, WavPack and WMA files here.");
+                    muted(ui, "Install it (brew install ffmpeg) to play Dolby, Opus, APE, WavPack and WMA files here, and to convert songs the Echo Mini can't play when writing to the card.");
                 }
             }
         });

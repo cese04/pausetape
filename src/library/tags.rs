@@ -50,6 +50,23 @@ pub fn write_tags(t: &Track, path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Give `dst` the front cover embedded in `src` when `dst` has none: files made by ffmpeg
+/// (converted, or cut from an album file) carry no pictures over.
+pub fn carry_cover(src: &Path, dst: &Path) -> Result<()> {
+    let mut file = lofty::read_from_path(dst).with_context(|| format!("reading {}", dst.display()))?;
+    if file.tags().iter().any(|t| t.pictures().iter().any(|p| p.pic_type() == PictureType::CoverFront)) {
+        return Ok(());
+    }
+    let Some(jpeg) = super::cover::embedded_for_embedding(src) else { return Ok(()) };
+    if file.primary_tag().is_none() {
+        file.insert_tag(Tag::new(file.primary_tag_type()));
+    }
+    let tag = file.primary_tag_mut().expect("tag inserted above");
+    tag.push_picture(Picture::unchecked(jpeg).pic_type(PictureType::CoverFront).mime_type(MimeType::Jpeg).build());
+    tag.save_to_path(dst, WriteOptions::default()).with_context(|| format!("writing {}", dst.display()))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     /// `NEATLIBRARY_EMBED=<song>:<image> cargo test -- --ignored embeds_cover --nocapture`

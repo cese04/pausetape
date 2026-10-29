@@ -24,12 +24,88 @@ pub enum AlbumOrder {
     Custom,
 }
 
+/// What a layout does with songs in formats RECHO can't play (AAC, ALAC, Dolby, Opus…).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Unplayable {
+    /// Leave them off the card.
+    Leave,
+    /// Copy them as they are (for another player, or a future firmware).
+    Copy,
+    /// Convert them: lossless to FLAC, the rest to MP3 320.
+    #[default]
+    Convert,
+}
+
+/// How a song becomes a file on the card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// The file as it is.
+    Copy,
+    /// Encoded to FLAC with ffmpeg: lossless sources RECHO can't read (ALAC, AIFF, APE…), and
+    /// songs cut out of a lossless album file.
+    Flac,
+    /// Encoded to MP3 at 320 kbps, stereo: lossy sources RECHO can't read (AAC, Dolby, Opus…).
+    Mp3,
+}
+
+impl Target {
+    /// The file extension on the card.
+    pub fn ext(self, t: &Track) -> &str {
+        match self {
+            Target::Copy => &t.ext,
+            Target::Flac => "flac",
+            Target::Mp3 => "mp3",
+        }
+    }
+}
+
+/// How `t` reaches the card under `unplayable`, or why it can't. Lossy audio is never encoded
+/// to FLAC (it would only take more space), and never re-encoded unless the user asked for
+/// conversion.
+pub fn target(t: &Track, unplayable: Unplayable) -> Result<Target, &'static str> {
+    let encode = |to: Target| {
+        if crate::audio::ffmpeg().is_none() {
+            Err(if t.cue.is_some() { "needs ffmpeg to cut the album file into songs" } else { "needs ffmpeg to convert" })
+        } else if !t.ffmpeg_can_decode() {
+            Err("no decoder for this format")
+        } else if to == Target::Mp3 && !crate::audio::ffmpeg_encodes("libmp3lame") {
+            Err("this ffmpeg can't make MP3s")
+        } else {
+            Ok(to)
+        }
+    };
+    if t.cue.is_some() {
+        return match (t.lossless(), unplayable) {
+            (true, _) => encode(Target::Flac),
+            (false, Unplayable::Convert) => encode(Target::Mp3),
+            (false, _) => Err("inside a lossy album file; can't be cut out without re-encoding"),
+        };
+    }
+    if t.on_recho() {
+        return Ok(Target::Copy);
+    }
+    match unplayable {
+        Unplayable::Leave => Err("format not playable on RECHO"),
+        Unplayable::Copy => Ok(Target::Copy),
+        Unplayable::Convert => encode(if t.lossless() { Target::Flac } else { Target::Mp3 }),
+    }
+}
+
+/// Bytes `t` takes on the card as `target`. MP3 320 is 40 KB a second; a FLAC made from another
+/// lossless format is about as large as its source.
+pub fn card_size(t: &Track, target: Target) -> u64 {
+    match target {
+        Target::Mp3 => (t.duration.as_secs_f64() * 40_000.0) as u64,
+        _ => t.size,
+    }
+}
+
 /// Naming and filtering rules for one layout (a card write, or tidying the source).
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Options {
     pub album_order: AlbumOrder,
-    pub skip_unplayable: bool,
+    pub unplayable: Unplayable,
     pub write_tags: bool,
     pub clean_mac_files: bool,
     pub singles_folder: String,
@@ -39,7 +115,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             album_order: AlbumOrder::Year,
-            skip_unplayable: true,
+            unplayable: Unplayable::default(),
             write_tags: true,
             clean_mac_files: true,
             singles_folder: "Singles".into(),
@@ -128,6 +204,7 @@ pub struct PlanItem {
     pub track: usize,
     pub rel: PathBuf,
     pub skip: Option<&'static str>,
+    pub target: Target,
 }
 
 /// `position` is the album's 0-based place among the artist's titled albums.
@@ -154,7 +231,7 @@ pub fn album_folder(album: &AlbumNode, title: Option<&str>, position: usize, opt
     sanitize_component(&name, 100)
 }
 
-pub fn file_name(t: &Track, album: &AlbumNode) -> String {
+pub fn file_name(t: &Track, album: &AlbumNode, ext: &str) -> String {
     let mut name = String::new();
     if let Some(n) = t.track {
         if album.multi_disc {
@@ -169,20 +246,7 @@ pub fn file_name(t: &Track, album: &AlbumNode) -> String {
         }
     }
     name.push_str(&t.display_title());
-    format!("{}.{}", sanitize_component(&name, 120), t.card_ext())
-}
-
-/// Why a track can't go on the card at all, not even with "copy anyway". Only songs inside an
-/// album file (CUE): they're cut out with ffmpeg, losslessly, so a lossy album file is left out.
-pub fn cannot_write(t: &Track) -> Option<&'static str> {
-    t.cue.as_ref()?;
-    if !t.on_recho() {
-        Some("inside a lossy album file; can't be cut out without re-encoding")
-    } else if crate::audio::ffmpeg().is_none() {
-        Some("needs ffmpeg to cut the album file into songs")
-    } else {
-        None
-    }
+    format!("{}.{ext}", sanitize_component(&name, 120))
 }
 
 /// The plan for reorganising the music folder in place. Songs inside an album file stay with
@@ -210,16 +274,20 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
             let album_dir = album_folder(album, custom.album_name(ck, album), position, opts);
             for &i in &album.tracks {
                 let t = &tracks[i];
+                let (target, skip) = match target(t, opts.unplayable) {
+                    Ok(to) => (to, None),
+                    Err(why) => (Target::Copy, Some(why)),
+                };
+                let ext = target.ext(t);
                 let base = PathBuf::from(&artist_dir).join(&album_dir);
-                let mut rel = base.join(file_name(t, album));
+                let mut rel = base.join(file_name(t, album, ext));
                 let stem = rel.file_stem().unwrap().to_string_lossy().into_owned();
                 let mut n = 2;
                 while !taken.insert(rel.to_string_lossy().to_lowercase()) {
-                    rel = base.join(format!("{stem} ({n}).{}", t.card_ext()));
+                    rel = base.join(format!("{stem} ({n}).{ext}"));
                     n += 1;
                 }
-                let skip = cannot_write(t).or((opts.skip_unplayable && !t.on_recho()).then_some("format not playable on RECHO"));
-                plan.push(PlanItem { track: i, rel, skip });
+                plan.push(PlanItem { track: i, rel, skip, target });
             }
         }
     }
@@ -233,6 +301,34 @@ mod tests {
 
     fn at(path: &str, album: &str, title: &str, year: u16) -> Track {
         Track { path: path.into(), artist: Some("Band".into()), album: Some(album.into()), track: Some(1), title: Some(title.into()), year: Some(year), ext: "flac".into(), size: 1, ..Default::default() }
+    }
+
+    #[test]
+    fn what_unplayable_formats_become() {
+        let m4a = |codec: &str| Track { ext: "m4a".into(), codec: Some(codec.into()), ..Default::default() };
+        let flac = Track { ext: "flac".into(), ..Default::default() };
+        // RECHO's own formats are copied whatever the setting.
+        for u in [Unplayable::Leave, Unplayable::Copy, Unplayable::Convert] {
+            assert_eq!(target(&flac, u), Ok(Target::Copy));
+        }
+        assert!(target(&m4a("mp4a"), Unplayable::Leave).is_err());
+        assert_eq!(target(&m4a("mp4a"), Unplayable::Copy), Ok(Target::Copy));
+        // A lossy song inside an album file can't be copied as a song of its own.
+        let lossy_cue = Track { cue: Some(Default::default()), ..Track { ext: "mp3".into(), ..Default::default() } };
+        assert!(target(&lossy_cue, Unplayable::Copy).is_err());
+        // Converting needs ffmpeg (and LAME for MP3); without them the reason says so.
+        let ff = crate::audio::ffmpeg().is_some();
+        assert_eq!(target(&m4a("alac"), Unplayable::Convert).is_ok(), ff);
+        if ff {
+            assert_eq!(target(&m4a("alac"), Unplayable::Convert), Ok(Target::Flac), "lossless becomes FLAC");
+            assert_eq!(target(&m4a("ac-4"), Unplayable::Convert), Err("no decoder for this format"));
+            if crate::audio::ffmpeg_encodes("libmp3lame") {
+                assert_eq!(target(&m4a("ec-3"), Unplayable::Convert), Ok(Target::Mp3), "lossy becomes MP3, never FLAC");
+            }
+        }
+        assert_eq!(Target::Mp3.ext(&m4a("mp4a")), "mp3");
+        let song = Track { duration: std::time::Duration::from_secs(100), size: 9_000_000, ..m4a("mp4a") };
+        assert_eq!(card_size(&song, Target::Mp3), 4_000_000);
     }
 
     #[test]

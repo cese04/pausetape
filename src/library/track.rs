@@ -80,11 +80,6 @@ impl Track {
         }
     }
 
-    /// The file extension on the card: songs cut from an album file become FLAC.
-    pub fn card_ext(&self) -> &str {
-        if self.cue.is_some() && self.lossless() { "flac" } else { &self.ext }
-    }
-
     /// FLAC, WAV, APE, WavPack, AIFF, ALAC: no quality lost.
     pub fn lossless(&self) -> bool {
         LOSSLESS.contains(&self.ext.as_str()) || self.codec.as_deref() == Some("alac")

@@ -13,7 +13,8 @@ use walkdir::WalkDir;
 use super::journal::save_journal;
 use super::plan::{Options, PlanItem};
 use crate::library::cue::FRAMES_PER_SEC;
-use crate::library::{Track, write_tags};
+use super::plan::Target;
+use crate::library::{Track, carry_cover, write_tags};
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Mode {
@@ -61,60 +62,81 @@ pub fn by_rel(previous: &[Written]) -> HashMap<String, &Written> {
     previous.iter().map(|w| (w.rel.to_string_lossy().to_lowercase(), w)).collect()
 }
 
-/// What a song inside an album file is cut from: the song, where it lies, the album file's
-/// size and date, and its tags. `None` for ordinary files.
-pub fn source_key(t: &Track) -> Option<String> {
+/// What a card file made by ffmpeg (a converted song, or one cut out of an album file) was
+/// made from: the track, the target format, where it lies in its file, the source's size and
+/// date, its tags and any cover being added. `None` for plain copies, which compare by size.
+pub fn source_key(t: &Track, target: Target) -> Option<String> {
     use std::hash::{Hash, Hasher};
-    let c = t.cue.as_ref()?;
+    let format = match target {
+        Target::Copy => return None,
+        Target::Flac => "flac",
+        Target::Mp3 => "mp3",
+    };
+    let span = t.cue.as_ref().map(|c| format!("{}-{}", c.start, c.end.map(|e| e.to_string()).unwrap_or_default())).unwrap_or_default();
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    (&t.title, &t.artist, &t.album_artist, &t.album, t.track, t.disc, t.year).hash(&mut h);
-    Some(format!("{}|{}-{}|{}|{}|{:016x}", t.id().display(), c.start, c.end.map(|e| e.to_string()).unwrap_or_default(), t.size, t.mtime, h.finish()))
+    (&t.title, &t.artist, &t.album_artist, &t.album, t.track, t.disc, t.year, &t.cover).hash(&mut h);
+    Some(format!("{}|{format}|{span}|{}|{}|{:016x}", t.id().display(), t.size, t.mtime, h.finish()))
 }
 
 /// The card already holds `t` at `dst` as a write would put it there now.
-pub fn up_to_date(t: &Track, dst: &Path, previous: Option<&Written>) -> bool {
+pub fn up_to_date(t: &Track, target: Target, dst: &Path, previous: Option<&Written>) -> bool {
     if t.dirty {
         return false;
     }
     let size = fs::metadata(dst).ok().map(|m| m.len());
-    match source_key(t) {
+    match source_key(t, target) {
         None => size == Some(t.size),
         Some(key) => previous.is_some_and(|w| w.source.as_deref() == Some(key.as_str()) && size == Some(w.size)),
     }
 }
 
-/// Put `t`'s audio at `dst`: a plain copy, or for a song inside an album file, the song cut out
-/// as FLAC, with its tags (the cut carries none over).
-pub fn materialise(t: &Track, dst: &Path) -> Result<()> {
-    match &t.cue {
-        None => plain_copy(&t.path, dst),
-        Some(c) => {
-            cut(&t.path, c.start, c.end, dst)?;
-            write_tags(t, dst)
-        }
+/// Put `t`'s audio at `dst` as `target`: a plain copy, or a file made with ffmpeg, then tagged
+/// (ffmpeg's output carries no tags) and given the source's embedded cover.
+pub fn materialise(t: &Track, target: Target, dst: &Path) -> Result<()> {
+    if target == Target::Copy {
+        return plain_copy(&t.path, dst);
     }
+    encode(t, target, dst)?;
+    write_tags(t, dst)?;
+    carry_cover(&t.path, dst)
 }
 
-/// Cut CD frames `start..end` of an album file into a FLAC file with ffmpeg. The seek before
-/// `-i` is sample-exact when decoding, so consecutive songs join without gaps or overlaps.
-fn cut(image: &Path, start: u64, end: Option<u64>, dst: &Path) -> Result<()> {
-    let ff = crate::audio::ffmpeg().context("ffmpeg is needed to cut songs out of an album file")?;
+/// Make `dst` from `t` with ffmpeg: the song's part of an album file if it is one (the seek
+/// before `-i` is sample-exact when decoding, so consecutive songs join without gaps), as FLAC
+/// or as stereo MP3 at 320 kbps.
+fn encode(t: &Track, target: Target, dst: &Path) -> Result<()> {
+    let ff = crate::audio::ffmpeg().context("ffmpeg is needed to convert or cut songs")?;
     let secs = |f: u64| format!("{}.{:06}", f / FRAMES_PER_SEC, f % FRAMES_PER_SEC * 1_000_000 / FRAMES_PER_SEC);
     let tmp = dst.with_extension("partial");
     let mut cmd = std::process::Command::new(ff);
     cmd.args(["-nostdin", "-v", "error", "-y"]);
-    if start > 0 {
-        cmd.args(["-ss", &secs(start)]);
+    if let Some(c) = t.cue.as_ref().filter(|c| c.start > 0) {
+        cmd.args(["-ss", &secs(c.start)]);
     }
-    cmd.arg("-i").arg(image);
-    if let Some(e) = end {
-        cmd.args(["-t", &secs(e.saturating_sub(start))]);
+    cmd.arg("-i").arg(&t.path);
+    if let Some(c) = &t.cue
+        && let Some(e) = c.end
+    {
+        cmd.args(["-t", &secs(e.saturating_sub(c.start))]);
     }
-    cmd.args(["-map", "0:a:0", "-map_metadata", "-1", "-c:a", "flac", "-f", "flac"]).arg(&tmp);
-    let out = cmd.output().context("running ffmpeg")?;
+    cmd.args(["-map", "0:a:0", "-map_metadata", "-1"]);
+    match target {
+        Target::Flac => {
+            cmd.args(["-c:a", "flac", "-f", "flac"]);
+        }
+        _ => {
+            // LAME takes at most 48 kHz; Dolby and other surround mixes fold down to stereo.
+            cmd.args(["-c:a", "libmp3lame", "-b:a", "320k", "-ac", "2"]);
+            if t.sample_rate.is_some_and(|r| r > 48_000) {
+                cmd.args(["-ar", "48000"]);
+            }
+            cmd.args(["-f", "mp3"]);
+        }
+    }
+    let out = cmd.arg(&tmp).output().context("running ffmpeg")?;
     if !out.status.success() {
         let _ = fs::remove_file(&tmp);
-        anyhow::bail!("ffmpeg couldn't cut the song: {}", String::from_utf8_lossy(&out.stderr).trim());
+        anyhow::bail!("ffmpeg couldn't convert the song: {}", String::from_utf8_lossy(&out.stderr).trim());
     }
     fs::rename(&tmp, dst)?;
     Ok(())
@@ -145,10 +167,10 @@ pub fn execute(
         }
         let dst = dest.join(&item.rel);
         let prev = previous.get(&item.rel.to_string_lossy().to_lowercase()).copied();
-        match place(t, &dst, mode, opts, prev, &mut r) {
+        match place(t, item.target, &dst, mode, opts, prev, &mut r) {
             Ok(()) if mode == Mode::CopyTo => {
                 let size = fs::metadata(&dst).map(|m| m.len()).unwrap_or(t.size);
-                r.written.push(Written { rel: item.rel.clone(), size, source: source_key(t) });
+                r.written.push(Written { rel: item.rel.clone(), size, source: source_key(t, item.target) });
             }
             Ok(()) => {}
             Err(e) => r.errors.push(format!("{}: {e:#}", t.path.display())),
@@ -168,7 +190,7 @@ pub fn execute(
     r
 }
 
-fn place(t: &Track, dst: &Path, mode: Mode, opts: &Options, prev: Option<&Written>, r: &mut Report) -> Result<()> {
+fn place(t: &Track, target: Target, dst: &Path, mode: Mode, opts: &Options, prev: Option<&Written>, r: &mut Report) -> Result<()> {
     let tag = |r: &mut Report| -> Result<()> {
         if t.dirty && opts.write_tags {
             write_tags(t, dst)?;
@@ -185,11 +207,11 @@ fn place(t: &Track, dst: &Path, mode: Mode, opts: &Options, prev: Option<&Writte
     }
     match mode {
         Mode::CopyTo => {
-            if up_to_date(t, dst, prev) {
+            if up_to_date(t, target, dst, prev) {
                 r.unchanged += 1;
                 return Ok(());
             }
-            materialise(t, dst)?;
+            materialise(t, target, dst)?;
             r.copied += 1;
         }
         Mode::MoveInPlace => {

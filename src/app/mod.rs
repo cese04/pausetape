@@ -58,7 +58,7 @@ impl Default for Saved {
             writes: vec![WriteProfile::default()],
             active_write: 0,
             // Tidying keeps every format and leaves Finder files alone: it's the user's own disk.
-            tidy: Options { skip_unplayable: false, clean_mac_files: false, ..Options::default() },
+            tidy: Options { unplayable: card::Unplayable::Copy, clean_mac_files: false, ..Options::default() },
             mb_contact: String::new(),
             prefs: ArtistPrefs::default(),
             playlists: Vec::new(),

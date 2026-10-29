@@ -27,9 +27,9 @@ pub fn format_note(t: &crate::library::Track) -> Option<String> {
         return Some(format!("{label}: no decoder exists for this format yet, here or on the Echo Mini. It's still organised with the rest."));
     }
     Some(match (t.native(), crate::audio::ffmpeg().is_some()) {
-        (true, _) => format!("{label}: plays here, but the Echo Mini (RECHO) won't play it. RECHO plays FLAC, MP3 and WAV only."),
+        (true, _) => format!("{label}: plays here, but the Echo Mini (RECHO) plays FLAC, MP3 and WAV only, so a card write converts it."),
         (false, true) => format!(
-            "{label}: plays here by converting it with ffmpeg first (surround is mixed down to stereo). The Echo Mini (RECHO) won't play it."
+            "{label}: plays here by converting it with ffmpeg first (surround is mixed down to stereo). The Echo Mini (RECHO) won't play it as it is, so a card write converts it."
         ),
         (false, false) => format!("{label}: needs ffmpeg to play here (brew install ffmpeg). The Echo Mini (RECHO) won't play it either."),
     })
