@@ -212,3 +212,29 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   cover, waveform) whenever it's drawn.
 - New opt-in check `queue_advances_without_ui` (plays two one-second parts of a song with no
   window).
+
+### 20. Taking over a card that already holds music (2026-10-28)
+- First step of the "Calibre for music" roadmap (PROGRESS §2): the card as a device view.
+- **Detecting.** *Compare with the card* now counts files the write didn't put there.
+  **Check them against the library** (reads only) sorts them into:
+  - exact copies of songs the write needs (same size, same first and last 64 KB);
+  - exact copies of library songs it leaves out or converts;
+  - other versions of library songs (same artist and title from tags or file name, a
+    different file);
+  - music that isn't in the library;
+  - other files.
+- **Take over the card.**
+  - Exact copies are moved into the write's layout (a rename on the card: instant) and join
+    its manifest, so they aren't copied again.
+  - Optionally, everything else goes into one folder, `_Before NeatLibrary`. Nothing is
+    deleted.
+  - Folders emptied by the moves are removed.
+  - **undo taking over the card** puts every file back (a record per take-over in the app's
+    data folder).
+- **On the test card:**
+  - 936 songs (23.9 GB) can be moved into place;
+  - 535 files are other versions of library songs;
+  - 1,840 songs (29.8 GB) aren't in the library;
+  - the survey takes about 80 s.
+- Debug demo: `NEATLIBRARY_SHOT_SURVEY=1` runs the check. New tests: a take-over and its undo
+  on a fake card; opt-in `survey_a_real_card` (reads only).

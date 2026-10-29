@@ -73,6 +73,7 @@ src/
 │   ├── plan.rs        Options + Custom → planned paths (album order, names, exclusions)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
+│   ├── adopt.rs       taking over a card's existing music: survey, move into place, undo
 │   ├── write.rs       saved writes (WriteProfile), compare-with-card, write
 │   ├── volumes.rs     mounted drives, free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
@@ -126,6 +127,7 @@ src/
 | Settings, writes (with manifests), playlists, artist decisions | `app.ron` in the app data folder | eframe persistence; serde defaults make new fields safe |
 | Library database | `library.sqlite3` in the app data folder | `SCHEMA_VERSION` bump clears the cache (it's re-derivable) |
 | Undo journals for *Reorganise* | `journals/` in the app data folder | |
+| Undo records for taking over a card | `journals/card/` in the app data folder | One per take-over, named by write |
 | ffmpeg conversions | `<temp>/neatlibrary-converted/` | Last 6 kept; cleared at start-up |
 
 App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
@@ -137,7 +139,8 @@ App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
 - The **music folder is read-only** unless the user runs *Reorganise* (with preview and undo)
   or *write corrected tags to source files*.
 - A **card write never deletes a file it didn't create**, and not even those if the size
-  changed since.
+  changed since. *Take over the card* only moves files on the card (with an undo record), on
+  the user's request.
 - Copies are **plain byte copies** (`card::plain_copy`): `std::fs::copy` on macOS would
   copy extended attributes, which appear as `._` files on FAT cards.
 - Copies go to a `.partial` file first and are renamed when complete.
@@ -154,7 +157,7 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 32 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 33 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
@@ -163,11 +166,12 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 (live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
 `cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
-(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`).
+(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `queue_advances_without_ui`
+(`NEATLIBRARY_PLAY=<song>`), `survey_a_real_card` (`NEATLIBRARY_SURVEY=<card>:<music folder>`).
 
 ## Conventions
 
 - Comments explain *why*, not what.
-- Long lines (~160 characters); see PROGRESS §5 about `rustfmt.toml` before running `cargo fmt`.
+- Long lines (~160 characters); see PROGRESS §6 about `rustfmt.toml` before running `cargo fmt`.
 - UI copy uses plain words ("Write to the card", "songs") and avoids file-system jargon where
   possible.

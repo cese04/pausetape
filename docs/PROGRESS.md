@@ -103,12 +103,47 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 
 ---
 
-## 2. Pending suggestions (offered in conversation)
+## 2. Roadmap: Calibre for music
 
-Ordered by value. Effort: **S** = an hour or two, **M** = about a day, **L** = several days.
+*Agreed 2026-10-28.* The direction: like Calibre for books, the library is the source of truth,
+the card is a device view of it, metadata and covers are first-class and fixable in bulk, and
+sending to the device converts as needed. Steps in order of importance. Effort: **S** = an hour
+or two, **M** = about a day, **L** = several days.
 
-Agreed and designed in detail, to do first: [NEXT](NEXT.md) (safer MusicBrainz lookups, folder
-name reading, CUE sheets).
+| Calibre | NeatLibrary | Status |
+|---|---|---|
+| Convert on send | FLAC / MP3 320, CUE albums cut into songs | Done |
+| Download metadata | MusicBrainz suggestions, checked against your songs | Done |
+| Duplicate finder | Editions; copies covered by a same-or-better copy | Done (no actions yet) |
+| Device view | Card writes with a manifest; taking over a card's existing music | Step 1 (take-over done) |
+| Edit metadata, bulk edit | — | Step 2 |
+| Download covers | Covers beside the files can be embedded | Step 3 |
+| Sortable, searchable library | Artist list and text filter | Step 4 |
+| Jobs panel | One busy line | Step 5 |
+| Add books | Reads the music folder as it is | Step 6 |
+| Virtual libraries | Writes choose by artist and album | Step 8 |
+
+| Step | What | Why here | Effort |
+|---|---|---|---|
+| 1 | **The card as a device view.** Take over music already on a card (match exact copies of library songs, move them into the organised layout instead of copying again, never delete what doesn't match; undo). Then "on card" marks, the card's free space at hand, send/remove a selection. | The test card already holds 67 GB copied by hand: a first write would duplicate it and not fit. Every later device feature builds on knowing what's on the card. | M–L |
+| 2 | **Edit metadata, also in bulk:** click a field to fix it; select songs or albums and set album artist, year, genre… for all. Same correction model as MusicBrainz suggestions (in-app, card copies, files on request). | Turns an organiser into a library manager; small, and reuses what exists. | M |
+| 3 | **Covers:** fetch from the Cover Art Archive for albums with none; choose between found, embedded and downloaded; "add covers to all albums missing one". | The Echo Mini shows embedded art; missing covers are visible on the device. | S–M |
+| 4 | **Browsable library:** a sortable album table (artist, album, year, format/quality, songs, size, on card, cover, edited), search fields (`format:m4a`, `quality:lossy`, `on:card`, `cover:no`, `year:1979..1985`), multiple selection for bulk actions. The artist list stays as a second view. | The Calibre feel itself; makes steps 2, 3 and 7 work on many albums at once. Largest piece, so done once 1–3 show which columns and actions matter. | M–L |
+| 5 | **Jobs panel:** running and finished jobs (writes, conversions, lookups, scans) with progress, errors and what changed. | Work now runs for minutes; one busy line hides it. | S |
+| 6 | **Add new music:** pick a folder (e.g. Downloads), see each album as new / edition / better copy / duplicate, copy or move it into the music folder in the organised layout. | Calibre's "Add books"; keeps the library growing without manual sorting. | M |
+| 7 | **Duplicates, actions:** prefer this copy, these are different albums, move covered copies to the Trash with undo. | Frees disk space; search (step 4) makes it quick. | M |
+| 8 | **Saved selections** (virtual libraries): saved searches usable as card selections and smart playlists ("lossless jazz", "gym"). | Builds on step 4. | M |
+| 9 | **Windows and Linux builds:** drive detection, bundled ffmpeg, installers ([DISTRIBUTION](DISTRIBUTION.md)). | Distribution. | M–L |
+
+Folded in along the way: choosing among alternative MusicBrainz releases, the artist from tagged
+neighbours ([NEXT](NEXT.md) B4), shorter folder names if the device test shows cut-off names,
+gapless playback between songs of one album file.
+
+---
+
+## 3. Other pending suggestions (offered in conversation)
+
+Smaller items, ordered by value.
 
 | # | Suggestion | Why | Effort |
 |---|---|---|---|
@@ -120,7 +155,7 @@ name reading, CUE sheets).
 
 ---
 
-## 3. Further UI/UX ideas
+## 4. Further UI/UX ideas
 
 ### Card and device
 
@@ -188,7 +223,7 @@ name reading, CUE sheets).
 
 ---
 
-## 4. Decisions and why
+## 5. Decisions and why
 
 | Decision | Reason |
 |---|---|
@@ -203,7 +238,7 @@ name reading, CUE sheets).
 
 ---
 
-## 5. Technical housekeeping
+## 6. Technical housekeeping
 
 - **Cross-platform release**: see [DISTRIBUTION](DISTRIBUTION.md). Its §1 lists ten code
   changes needed before Windows/Linux builds behave (drive detection on Windows is the big one).
@@ -219,7 +254,7 @@ name reading, CUE sheets).
 
 ---
 
-## 6. Handy commands
+## 7. Handy commands
 
 ```sh
 cargo run --release                         # the app

@@ -77,7 +77,7 @@ Linux the audio/windowing headers (exact commands per distribution in
 cargo run --release                          # the app
 cargo run --release -- --version             # version, and which ffmpeg it uses
 cargo run --release -- --plan ~/Music        # dry run: print the planned layout, change nothing
-cargo test                                   # 31 offline tests
+cargo test                                   # 33 offline tests
 ```
 
 ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
