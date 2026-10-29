@@ -1,6 +1,7 @@
 //! Debug builds only: `NEATLIBRARY_SHOT=<dir>` stages a demo (expand, play, look up, playlist),
 //! saves a screenshot of every tab as PPM, then quits. `NEATLIBRARY_SHOT_ARTIST` (default
-//! Radiohead) chooses the album played and looked up. Handy for checking the look headlessly.
+//! Radiohead) chooses the album played and looked up; more switches below. Handy for checking
+//! the look headlessly.
 //! The demo changes playlists and the active write in memory only: `App::save` skips saving
 //! while it runs, so a tester's real settings are left alone.
 
@@ -94,6 +95,20 @@ impl Shooter {
                 }
                 app.write_mut().manifest = written;
                 app.refresh_on_card();
+            }
+            // NEATLIBRARY_SHOT_TOGGLE=<text>: send albums whose title contains <text> to the card,
+            // or take them off, in memory, to show the marks of changes waiting for Sync.
+            if let Ok(what) = std::env::var("NEATLIBRARY_SHOT_TOGGLE") {
+                let mut toggle = Vec::new();
+                for (ai, a) in app.index.artists.iter().enumerate() {
+                    let ck = &app.index.clusters[a.cluster].key;
+                    for (bi, al) in a.albums.iter().enumerate().filter(|(_, al)| al.title.as_deref().is_some_and(|t| t.to_lowercase().contains(&what.to_lowercase()))) {
+                        toggle.push((ai, bi, !app.write().custom.includes(ck, al, &a.albums)));
+                    }
+                }
+                for (ai, bi, on) in toggle {
+                    app.card_album(ai, bi, on);
+                }
             }
             app.preview_write();
         }

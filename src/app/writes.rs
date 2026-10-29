@@ -59,8 +59,36 @@ impl App {
         self.card_renaming = None;
     }
 
+    /// Put an album on the active write's card, or take it off. Like everything chosen, it
+    /// reaches the card at the next Sync.
+    pub fn card_album(&mut self, artist: usize, album: usize, on: bool) {
+        let a = &self.index.artists[artist];
+        let ck = self.index.clusters[a.cluster].key.clone();
+        let al = &a.albums[album];
+        self.saved.writes[self.saved.active_write].custom.set_album(&ck, al, on);
+        self.chosen_changed();
+    }
+
+    /// Put a whole artist on the card (albums added later too), or take all of it off.
+    pub fn card_artist(&mut self, artist: usize, on: bool) {
+        let a = &self.index.artists[artist];
+        let ck = self.index.clusters[a.cluster].key.clone();
+        self.saved.writes[self.saved.active_write].custom.set_artist(&ck, &a.albums, on);
+        self.chosen_changed();
+    }
+
+    /// After the choice of music changed: the old comparison with the card is stale.
+    pub fn chosen_changed(&mut self) {
+        self.write_mut();
+        self.refresh_on_card();
+    }
+
     pub fn new_write(&mut self, copy_current: bool) {
         let mut w = if copy_current { self.write().clone() } else { WriteProfile::default() };
+        if !copy_current {
+            // A new card starts empty: music goes on as it's chosen.
+            w.custom.chosen = Some(Default::default());
+        }
         w.name = format!("{} {}", if copy_current { w.name.as_str() } else { "Card" }, self.saved.writes.len() + 1);
         // A new layout hasn't written anything yet, even if it targets the same card.
         w.manifest.clear();

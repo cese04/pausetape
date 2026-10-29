@@ -52,19 +52,62 @@ impl App {
                 .count(),
             None => 0,
         };
+        // Layouts saved before the card was "what you chose" choose what they used to put there.
+        if !self.index.artists.is_empty() {
+            let keys: Vec<String> = self.index.artists.iter().map(|a| self.index.clusters[a.cluster].key.clone()).collect();
+            for w in &mut self.saved.writes {
+                w.custom.choose_from_exclusions(&keys);
+            }
+        }
         self.refresh_on_card();
     }
 
-    /// Which tracks the active write has on its card: planned files its manifest records. Works
-    /// without the card connected (it's the state of the last write).
+    /// Compare the active write's choice with what its manifest says is on the card (see
+    /// `CardState`). Cheap enough to run on every change of the choice.
     pub fn refresh_on_card(&mut self) {
         let w = self.write();
-        let have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
-        self.on_card = if have.is_empty() {
-            HashSet::new()
-        } else {
-            w.plan(&self.tracks, &self.index).iter().filter(|p| p.skip.is_none() && have.contains(&p.rel.to_string_lossy().to_lowercase())).map(|p| p.track).collect()
-        };
+        let plan = w.plan(&self.tracks, &self.index);
+        let planned: HashMap<usize, &PlanItem> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (p.track, p)).collect();
+        // Card files back to tracks: by a plan with every album, for those no longer chosen,
+        // then by the plan as chosen, which wins where names coincide.
+        let mut by_rel: HashMap<String, usize> = HashMap::new();
+        if !w.manifest.is_empty() {
+            let mut all = w.custom.clone();
+            all.chosen = Some(card::Chosen { artists: self.index.artists.iter().map(|a| self.index.clusters[a.cluster].key.clone()).collect(), albums: Default::default() });
+            all.excluded_albums.clear();
+            let everything = card::build_plan(&self.tracks, &self.index, &w.options, &all);
+            for p in everything.iter().chain(&plan).filter(|p| p.skip.is_none()) {
+                by_rel.insert(p.rel.to_string_lossy().to_lowercase(), p.track);
+            }
+        }
+        let on_card: HashMap<usize, u64> = w.manifest.iter().filter_map(|m| by_rel.get(&m.rel.to_string_lossy().to_lowercase()).map(|&t| (t, m.size))).collect();
+        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), ..Default::default() };
+        s.planned_bytes = planned.values().map(|p| card::card_size(&self.tracks[p.track], p.target)).sum();
+        let ids: Vec<PathBuf> = self.tracks.iter().map(Track::id).collect();
+        let by_path = ids.iter().map(PathBuf::as_path).zip(&self.tracks).collect();
+        s.planned_bytes += playlist::planned(&w.chosen_playlists(&self.saved.playlists), &by_path, &w.playlists_folder, w.options.rules())
+            .iter()
+            .flat_map(|(_, copies, _)| copies.iter().map(|c| card::card_size(c.track, c.target)))
+            .sum::<u64>();
+        let (mut adds, mut removes) = (HashSet::new(), HashSet::new());
+        for a in &self.index.artists {
+            let ck = &self.index.clusters[a.cluster].key;
+            for al in &a.albums {
+                let add: Vec<usize> = al.tracks.iter().copied().filter(|t| planned.contains_key(t) && !on_card.contains_key(t)).collect();
+                let remove: Vec<usize> = al.tracks.iter().copied().filter(|t| on_card.contains_key(t) && !planned.contains_key(t)).collect();
+                s.add_bytes += add.iter().map(|t| card::card_size(&self.tracks[*t], planned[t].target)).sum::<u64>();
+                s.remove_bytes += remove.iter().map(|t| on_card[t]).sum::<u64>();
+                if !add.is_empty() {
+                    adds.insert(al.base_id(ck));
+                }
+                if !remove.is_empty() {
+                    removes.insert(al.base_id(ck));
+                }
+            }
+        }
+        s.replaced = adds.intersection(&removes).count();
+        (s.added, s.removed) = (adds.len() - s.replaced, removes.len() - s.replaced);
+        self.card_state = s;
     }
 
     pub fn dirty_count(&self) -> usize {

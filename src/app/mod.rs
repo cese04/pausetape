@@ -113,6 +113,25 @@ pub struct Busy {
     pub total: usize,
 }
 
+/// The active write against its card, for the library's marks and the Sync strip. Works
+/// without the card connected: "on the card" is what the write's manifest records.
+#[derive(Default)]
+pub struct CardState {
+    /// Tracks on the card, as of the last write or take-over.
+    pub on_card: HashSet<usize>,
+    /// Tracks the write puts on the card as chosen now.
+    pub planned: HashSet<usize>,
+    /// Albums Sync adds (or completes), swaps for another copy, and takes off.
+    pub added: usize,
+    pub replaced: usize,
+    pub removed: usize,
+    /// Bytes Sync copies, and frees.
+    pub add_bytes: u64,
+    pub remove_bytes: u64,
+    /// What the chosen music takes on the card, playlist copies included.
+    pub planned_bytes: u64,
+}
+
 /// Files a card operation couldn't handle, and where the full list was saved.
 pub struct Problems {
     pub what: String,
@@ -146,9 +165,8 @@ pub struct App {
     pub in_place: usize,
     /// Preview of the active write, tagged with the write's name.
     pub write_preview: Option<(String, Preview)>,
-    /// Tracks the active write has put on its card (by its manifest, as of its last write or
-    /// take-over), for the library's "on card" marks.
-    pub on_card: HashSet<usize>,
+    /// The active write against its card: what's there, what's chosen, what Sync changes.
+    pub card_state: CardState,
     /// The card surveyed for taking over, by write name.
     pub card_survey: Option<(String, card::adopt::Survey)>,
     /// Gather what a take-over doesn't use into one folder on the card.
@@ -220,7 +238,7 @@ impl App {
             in_place: 0,
             write_preview: None,
             card_survey: None,
-            on_card: HashSet::new(),
+            card_state: CardState::default(),
             gather_on_take_over: true,
             delete_clutter_on_take_over: false,
             problems: None,

@@ -16,24 +16,140 @@ use crate::card::{AlbumOrder, Rules, Target, Unplayable, album_folder, card_size
 use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    if app.tracks.is_empty() {
+        writes_bar(app, ui);
+        ui.add_space(14.0);
+        muted(ui, "Choose a source in the folders tab first.");
+        return;
+    }
+    let sizes = Sizes::compute(app);
+    // Pinned while the rest scrolls: how full the card gets and what Sync changes, in view
+    // while choosing music below.
+    capacity(app, ui, &sizes);
+    ui.add_space(6.0);
+    sync_row(app, ui);
+    ui.add_space(8.0);
+    let ink = ink(ui);
+    let r = ui.max_rect();
+    ui.painter().hline(r.left()..=r.right(), ui.cursor().top(), Stroke::new(0.5, ink.faint));
     ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+        ui.add_space(14.0);
         writes_bar(app, ui);
         ui.add_space(14.0);
         problems(app, ui);
-        if app.tracks.is_empty() {
-            muted(ui, "Choose a source in the folders tab first.");
-            return;
-        }
-        let sizes = Sizes::compute(app);
-        capacity(app, ui, &sizes);
-        ui.add_space(14.0);
-        actions(app, ui);
+        comparison(app, ui);
         ui.add_space(14.0);
         selection(app, ui, &sizes);
         ui.add_space(14.0);
         playlists(app, ui);
         ui.add_space(14.0);
         layout_options(app, ui);
+    });
+}
+
+/// What Sync changes on the card, in words, or None if nothing.
+pub fn pending_text(app: &App) -> Option<String> {
+    let s = &app.card_state;
+    let mut parts = Vec::new();
+    if s.added > 0 {
+        parts.push(format!("{} to add ({})", plural(s.added, "album"), text::bytes(s.add_bytes)));
+    }
+    if s.replaced > 0 {
+        parts.push(format!("{} to swap for another copy", plural(s.replaced, "album")));
+    }
+    if s.removed > 0 {
+        parts.push(format!("{} to take off", plural(s.removed, "album")));
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+/// The card's space and what this write's choice needs: (space, room the write can use).
+/// The room is what's free plus what its own earlier files occupy, plus the copies a take-over
+/// of the card (once checked) would move into place.
+fn room(app: &App) -> Option<(crate::card::SpaceInfo, u64)> {
+    let w = app.write();
+    let info = w.dest.as_deref().and_then(crate::card::space)?;
+    let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
+    let room = info.free + w.manifest_bytes() + adoptable;
+    Some((info, room))
+}
+
+/// A hairline as long as the room, and over it a bar as long as what's needed; red past the end.
+fn space_bar(ui: &mut Ui, need: u64, room: u64, width: f32) {
+    let ink = ink(ui);
+    let (rect, _) = ui.allocate_exact_size(vec2(width, 12.0), Sense::hover());
+    let scale = width / room.max(need).max(1) as f32;
+    let y = rect.center().y;
+    ui.painter().hline(rect.left()..=rect.left() + room as f32 * scale, y, Stroke::new(1.0, ink.faint));
+    let used = rect.left() + need.min(room) as f32 * scale;
+    ui.painter().hline(rect.left()..=used, y, Stroke::new(3.0, ink.text));
+    if need > room {
+        ui.painter().hline(used..=rect.left() + need as f32 * scale, y, Stroke::new(3.0, ink.accent));
+    }
+}
+
+/// Changes since the last write, and the buttons that compare and sync.
+fn sync_row(app: &mut App, ui: &mut Ui) {
+    let w = app.write();
+    let ready = w.dest.is_some() && app.saved.source.is_some();
+    let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+    let state = match pending_text(app) {
+        Some(t) => format!("at the next sync: {t}"),
+        None if w.last_written.is_none() && w.manifest.is_empty() => "nothing written to the card yet".into(),
+        None => "the card has what you chose".into(),
+    };
+    ui.horizontal(|ui| {
+        if !ready {
+            muted(ui, "choose a destination below to sync");
+            return;
+        }
+        ui.label(RichText::new(state).color(ink(ui).text));
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.add_space(10.0);
+            if !connected {
+                muted(ui, "card not connected");
+                return;
+            }
+            if app.busy.is_none() && widgets::primary_button(ui, "Sync").on_hover_text("copy what you added, take off what you removed, update what changed").clicked() {
+                app.run_write();
+            }
+            if app.busy.is_none() && widgets::button(ui, "Compare").on_hover_text("look at the card: what would be copied and removed; changes nothing").clicked() {
+                app.preview_write();
+            }
+        });
+    });
+}
+
+/// The library's view of the card, one line above the list: how full it gets, what Sync changes,
+/// and Sync.
+pub fn strip(app: &mut App, ui: &mut Ui) {
+    let w = app.write();
+    if w.dest.is_none() {
+        return;
+    }
+    let name = w.name.clone();
+    let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+    let need = app.card_state.planned_bytes;
+    let pending = pending_text(app);
+    ui.horizontal(|ui| {
+        caps(ui, &name);
+        match room(app) {
+            Some((_, room)) => {
+                space_bar(ui, need, room, 120.0);
+                let over = if need > room { format!(" · {} over", text::bytes(need - room)) } else { String::new() };
+                ui.label(RichText::new(format!("{} chosen, room for {}{over}", text::bytes(need), text::bytes(room))).size(13.0).color(if need > room { ink(ui).accent } else { ink(ui).muted }))
+                    .on_hover_text("Room: what's free on the card plus what this write's own files take there.");
+            }
+            None => {
+                muted(ui, format!("{} chosen · card not connected", text::bytes(need)));
+            }
+        }
+        if let Some(p) = &pending {
+            ui.label(RichText::new(format!("· {p}")).size(13.0).color(ink(ui).text));
+        }
+        if connected && pending.is_some() && app.busy.is_none() && link(ui, "sync now").clicked() {
+            app.run_write();
+        }
     });
 }
 
@@ -109,6 +225,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     let w = app.write();
     let last = match w.last_written {
         Some(t) => format!("last written {} · {} on the card from this write ({})", ago(t), plural(w.manifest.len(), "file"), text::bytes(w.manifest_bytes())),
+        None if !w.manifest.is_empty() => format!("not written yet · {} on the card from taking it over ({})", plural(w.manifest.len(), "file"), text::bytes(w.manifest_bytes())),
         None => "never written".into(),
     };
     muted(ui, last);
@@ -161,12 +278,11 @@ impl Sizes {
                     .map(|&i| &app.tracks[i])
                     .filter_map(|t| target(t, rules).ok().map(|to| card_size(t, to)))
                     .sum();
-                let on_card = w.custom.on_card(ck, al, &a.albums);
                 // Of several editions, only the one going on the card counts towards the artist.
-                if al.edition.is_none() || on_card {
+                if al.edition.is_none() || w.custom.on_card(ck, al, &a.albums) {
                     *s.artist.entry(ck.clone()).or_default() += bytes;
                 }
-                if !w.custom.excluded_artists.contains(ck) && on_card {
+                if w.custom.includes(ck, al, &a.albums) {
                     s.selected += bytes;
                     if !rules.cd_quality {
                         let at_cd: u64 = al.tracks.iter().map(|&i| &app.tracks[i]).filter_map(|t| target(t, cd).ok().map(|to| card_size(t, to))).sum();
@@ -190,37 +306,26 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     let ink = ink(ui);
     let w = app.write();
     let need = sizes.selected + sizes.playlists;
-    let info = w.dest.as_deref().and_then(crate::card::space);
+    let space = room(app);
     ui.horizontal(|ui| {
-        caps(ui, "size");
-        let mut s = format!("this write {}", text::bytes(need));
+        caps(ui, &w.name);
+        let mut s = format!("chosen {}", text::bytes(need));
         if sizes.playlists > 0 {
             s.push_str(&format!(" (playlist copies {})", text::bytes(sizes.playlists)));
         }
-        if let Some(i) = &info {
+        if let Some((i, _)) = &space {
             s.push_str(&format!(" · card {}", describe_space(i)));
         }
         muted(ui, s);
     });
-    let Some(info) = info else { return };
-    // Space this write can use: what's free plus what its own earlier files occupy, plus the
-    // copies a take-over of the card (once checked) would move into place.
+    let Some((_, room)) = space else { return };
     let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
-    let room = info.free + w.manifest_bytes() + adoptable;
     if adoptable > 0 {
         muted(ui, format!("counting the {} a take-over moves into place as already there", text::bytes(adoptable)));
     }
-    let width = ui.available_width().min(560.0);
-    let (rect, _) = ui.allocate_exact_size(vec2(width, 12.0), Sense::hover());
-    let scale = width / room.max(need).max(1) as f32;
-    let y = rect.center().y;
-    ui.painter().hline(rect.left()..=rect.left() + room as f32 * scale, y, Stroke::new(1.0, ink.faint));
-    let fits = need <= room;
-    let used = rect.left() + need.min(room) as f32 * scale;
-    ui.painter().hline(rect.left()..=used, y, Stroke::new(3.0, ink.text));
-    if !fits {
-        ui.painter().hline(used..=rect.left() + need as f32 * scale, y, Stroke::new(3.0, ink.accent));
-        ui.label(RichText::new(format!("doesn't fit: {} over. Leave out some artists or albums below.", text::bytes(need - room))).color(ink.accent).size(13.0));
+    space_bar(ui, need, room, ui.available_width().min(560.0));
+    if need > room {
+        ui.label(RichText::new(format!("doesn't fit: {} over. Take some artists or albums off below, or in the library.", text::bytes(need - room))).color(ink.accent).size(13.0));
         // Hi-res songs at CD quality may be enough on their own.
         if sizes.cd_saving > 0 {
             ui.horizontal_wrapped(|ui| {
@@ -228,27 +333,16 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                 muted(ui, format!("Writing hi-res FLAC at CD quality would save about {}{}.", text::bytes(sizes.cd_saving), if enough { ", enough to fit" } else { "" }));
                 if link(ui, "do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
                     app.write_mut().options.cd_quality = true;
+                    app.refresh_on_card();
                 }
             });
         }
     }
 }
 
-fn actions(app: &mut App, ui: &mut Ui) {
+/// The last comparison with the card, and what else is on it.
+fn comparison(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let ready = app.write().dest.is_some() && app.saved.source.is_some();
-    ui.horizontal(|ui| {
-        if !ready {
-            muted(ui, "choose a destination to compare or write");
-            return;
-        }
-        if app.busy.is_none() && widgets::button(ui, "Compare with the card").on_hover_text("see what would be copied and removed; changes nothing").clicked() {
-            app.preview_write();
-        }
-        if app.busy.is_none() && widgets::primary_button(ui, "Write to the card").clicked() {
-            app.run_write();
-        }
-    });
     if let Some((_, p)) = &app.write_preview {
         let converting = if p.to_convert > 0 { format!(", {} of them converted or cut", p.to_convert) } else { String::new() };
         let mut parts = vec![format!("{} to copy ({}{converting})", p.to_copy, text::bytes(p.copy_bytes)), format!("{} already there", p.unchanged)];
@@ -261,7 +355,7 @@ fn actions(app: &mut App, ui: &mut Ui) {
         if p.playlist_files > 0 {
             parts.push(format!("{} playlist copies", p.playlist_files));
         }
-        ui.label(parts.join(" · "));
+        ui.label(format!("Compared with the card: {}", parts.join(" · ")));
         take_over(app, ui);
         let Some((_, p)) = &app.write_preview else { return };
         if !p.to_remove.is_empty() {
@@ -486,15 +580,14 @@ fn playlists(app: &mut App, ui: &mut Ui) {
 }
 
 enum Edit {
-    Artist(String, bool),
-    Album(String, bool),
+    /// Artist and album, by index; for one of several editions, on picks that edition.
+    Artist(usize, bool),
+    Album(usize, usize, bool),
     All(bool),
     Expand(String),
     Rename(bool, String, String),
     StartRename(bool, String, String),
     Move(String, Vec<String>, usize, isize),
-    /// Put this edition (id) of an album (base id) on the card instead of the others.
-    Edition(String, String),
 }
 
 fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
@@ -510,12 +603,12 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             edits.push(Edit::All(false));
         }
     });
-    muted(ui, "Names on the right are the folder names on the card; rename changes them only for this write.");
+    muted(ui, "Tick what goes on the card, here or in the library; Sync copies it. Names on the right are the folder names on the card; rename changes them only for this write.");
     ui.add_space(4.0);
     let w = app.write();
     let needle = app.card_filter.to_lowercase();
     let custom_order = w.options.album_order == AlbumOrder::Custom;
-    for artist in &app.index.artists {
+    for (ai, artist) in app.index.artists.iter().enumerate() {
         let ck = &app.index.clusters[artist.cluster].key;
         if !needle.is_empty()
             && !artist.name.to_lowercase().contains(&needle)
@@ -523,17 +616,19 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         {
             continue;
         }
-        let included = !w.custom.excluded_artists.contains(ck);
-        let ids: Vec<String> = artist.albums.iter().map(|a| a.id(ck)).collect();
-        let partly = included && ids.iter().any(|id| w.custom.excluded_albums.contains(id));
+        // Ticked when everything goes, half when some does.
+        let chosen: Vec<bool> = artist.albums.iter().map(|al| w.custom.includes(ck, al, &artist.albums)).collect();
+        let (any, all) = (chosen.iter().any(|&c| c), chosen.iter().all(|&c| c));
+        let whole = w.custom.whole_artist(ck);
         let card_name = w.custom.artist_names.get(ck).cloned().unwrap_or_else(|| artist.name.clone());
         let open = app.card_expanded.contains(ck);
         ui.horizontal(|ui| {
-            let mut on = included;
-            if ui.add(egui::Checkbox::without_text(&mut on).indeterminate(partly)).changed() {
-                edits.push(Edit::Artist(ck.clone(), on));
+            let mut on = all && any;
+            let hint = if whole { "the whole artist goes on the card, albums added later too" } else { "tick to put the whole artist on the card, albums added later too" };
+            if ui.add(egui::Checkbox::without_text(&mut on).indeterminate(any && !all)).on_hover_text(hint).changed() {
+                edits.push(Edit::Artist(ai, on));
             }
-            let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(16.0).color(if included { ink.text } else { ink.muted });
+            let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(16.0).color(if any { ink.text } else { ink.muted });
             // Leave room for the size and the "rename" link on the right.
             let r = widgets::fitted(ui, name, ui.available_width() - 180.0, Sense::click()).on_hover_text(&artist.name);
             if r.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
@@ -556,17 +651,15 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             let id = &order_ids[n];
             let title = w.custom.album_name(ck, al);
             let folder = album_folder(al, title, positions[n], &w.options);
-            let mut on = w.custom.on_card(ck, al, &artist.albums);
-            let on_card = included && on;
+            let mut on = w.custom.includes(ck, al, &artist.albums);
+            let on_card = on;
+            let bi = artist.albums.iter().position(|a| std::ptr::eq(a, *al)).unwrap_or_default();
             ui.horizontal(|ui| {
                 ui.add_space(26.0);
                 let hint = if al.edition.is_some() { "One edition of this album goes on the card; ticking this one replaces the other." } else { "" };
-                let r = ui.add_enabled(included, egui::Checkbox::without_text(&mut on));
+                let r = ui.add(egui::Checkbox::without_text(&mut on));
                 if (if hint.is_empty() { r } else { r.on_hover_text(hint) }).changed() {
-                    edits.push(match (&al.edition, on) {
-                        (Some(_), true) => Edit::Edition(al.base_id(ck), id.clone()),
-                        _ => Edit::Album(id.clone(), on),
-                    });
+                    edits.push(Edit::Album(ai, bi, on));
                 }
                 let shown = al.title.as_deref().unwrap_or("Loose tracks");
                 let title_text = RichText::new(shown).italics().color(if on_card { ink.text } else { ink.muted });
@@ -619,7 +712,6 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     if edits.is_empty() {
         return;
     }
-    let artist_keys: Vec<String> = app.index.artists.iter().map(|a| app.index.clusters[a.cluster].key.clone()).collect();
     let mut touched_layout = false;
     for e in edits {
         let w = &mut app.saved.writes[app.saved.active_write];
@@ -640,36 +732,12 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                 app.card_renaming = None;
                 touched_layout = true;
             }
-            Edit::Artist(k, on) => {
-                if on {
-                    w.custom.excluded_artists.remove(&k);
-                } else {
-                    w.custom.excluded_artists.insert(k);
-                }
-                touched_layout = true;
-            }
-            Edit::Album(id, on) => {
-                if on {
-                    // Also an exclusion saved before the album had editions.
-                    let base = id.split_once('#').map(|(b, _)| b.to_string());
-                    w.custom.excluded_albums.remove(&id);
-                    if let Some(b) = base {
-                        w.custom.excluded_albums.remove(&b);
-                    }
-                } else {
-                    w.custom.excluded_albums.insert(id);
-                }
-                touched_layout = true;
-            }
+            Edit::Artist(ai, on) => app.card_artist(ai, on),
+            Edit::Album(ai, bi, on) => app.card_album(ai, bi, on),
             Edit::All(on) => {
-                w.custom.excluded_albums.clear();
-                w.custom.excluded_artists = if on { Default::default() } else { artist_keys.iter().cloned().collect() };
-                touched_layout = true;
-            }
-            Edit::Edition(base, id) => {
-                w.custom.excluded_albums.remove(&id);
-                w.custom.excluded_albums.remove(&base);
-                w.custom.editions.insert(base, id);
+                for a in &app.index.artists {
+                    w.custom.set_artist(&app.index.clusters[a.cluster].key, &a.albums, on);
+                }
                 touched_layout = true;
             }
             Edit::Move(ck, mut ids, n, d) => {
@@ -683,7 +751,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         }
     }
     if touched_layout {
-        app.write_preview = None;
+        app.chosen_changed();
     }
 }
 

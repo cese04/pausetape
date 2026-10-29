@@ -14,6 +14,10 @@ pub(super) enum Action {
     Reject(usize, usize),
     LookupArtist(usize),
     Name(usize, String),
+    /// Artist and album by index: on the card or off it, at the next Sync.
+    CardAlbum(usize, usize, bool),
+    /// The whole artist on the card or off it.
+    CardArtist(usize, bool),
 }
 
 pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
@@ -34,6 +38,8 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::Merge(a, b) => app.merge(a, b),
             Action::Reject(a, b) => app.reject(a, b),
             Action::LookupArtist(c) => app.lookup_artist(c),
+            Action::CardAlbum(a, b, on) => app.card_album(a, b, on),
+            Action::CardArtist(a, on) => app.card_artist(a, on),
             Action::Name(c, n) => {
                 app.set_cluster_name(c, n);
                 app.renaming = None;

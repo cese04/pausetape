@@ -174,12 +174,16 @@ impl Default for Options {
     }
 }
 
-/// Per-layout choices layered over the library: what to leave out, what to call it, in what order.
-/// Artists are keyed by cluster key, albums by `AlbumNode::id`.
+/// Per-layout choices layered over the library: what goes on the card, what to call it, in what
+/// order. Artists are keyed by cluster key, albums by `AlbumNode::id`.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Custom {
+    /// What the user chose to put on the card. None in layouts saved before choosing existed:
+    /// then everything goes but `excluded_artists` (see `choose_from_exclusions`).
+    pub chosen: Option<Chosen>,
     pub excluded_artists: BTreeSet<String>,
+    /// Albums left out of an artist chosen whole (or of everything, in old layouts).
     pub excluded_albums: BTreeSet<String>,
     pub artist_names: BTreeMap<String, String>,
     pub album_names: BTreeMap<String, String>,
@@ -189,7 +193,80 @@ pub struct Custom {
     pub editions: BTreeMap<String, String>,
 }
 
+/// The music a write puts on its card, as Calibre sends books to a device: artists taken whole
+/// (albums added to the library later too) and single albums, by `AlbumNode::base_id` (of
+/// several editions, the one `Custom::editions` picks).
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Chosen {
+    pub artists: BTreeSet<String>,
+    pub albums: BTreeSet<String>,
+}
+
 impl Custom {
+    /// Turn an old "everything but these artists" layout into a chosen one that puts the same
+    /// music on the card: every other artist, whole. `artists` are the library's cluster keys.
+    pub fn choose_from_exclusions<'a>(&mut self, artists: impl IntoIterator<Item = &'a String>) {
+        if self.chosen.is_some() {
+            return;
+        }
+        let whole = artists.into_iter().filter(|k| !self.excluded_artists.contains(*k)).cloned().collect();
+        self.chosen = Some(Chosen { artists: whole, albums: BTreeSet::new() });
+        self.excluded_artists.clear();
+    }
+
+    /// Whether the artist is chosen whole.
+    pub fn whole_artist(&self, cluster_key: &str) -> bool {
+        match &self.chosen {
+            Some(c) => c.artists.contains(cluster_key),
+            None => !self.excluded_artists.contains(cluster_key),
+        }
+    }
+
+    /// Whether this write puts the album on the card.
+    pub fn includes(&self, cluster_key: &str, album: &AlbumNode, siblings: &[AlbumNode]) -> bool {
+        let chosen = self.whole_artist(cluster_key) || self.chosen.as_ref().is_some_and(|c| c.albums.contains(&album.base_id(cluster_key)));
+        chosen && self.on_card(cluster_key, album, siblings)
+    }
+
+    /// Put an album on the card or take it off. For one of several editions, putting it on
+    /// picks that edition.
+    pub fn set_album(&mut self, cluster_key: &str, album: &AlbumNode, on: bool) {
+        let (id, base) = (album.id(cluster_key), album.base_id(cluster_key));
+        let whole = self.whole_artist(cluster_key);
+        let c = self.chosen.get_or_insert_with(Default::default);
+        if on {
+            self.excluded_albums.remove(&id);
+            self.excluded_albums.remove(&base);
+            if !whole {
+                c.albums.insert(base.clone());
+            }
+            if album.edition.is_some() {
+                self.editions.insert(base, id);
+            }
+        } else {
+            c.albums.remove(&base);
+            if whole {
+                self.excluded_albums.insert(id);
+            }
+        }
+    }
+
+    /// Put an artist on the card whole, all albums, or take all of it off.
+    pub fn set_artist(&mut self, cluster_key: &str, albums: &[AlbumNode], on: bool) {
+        let c = self.chosen.get_or_insert_with(Default::default);
+        for a in albums {
+            c.albums.remove(&a.base_id(cluster_key));
+            self.excluded_albums.remove(&a.id(cluster_key));
+            self.excluded_albums.remove(&a.base_id(cluster_key));
+        }
+        if on {
+            c.artists.insert(cluster_key.to_string());
+        } else {
+            c.artists.remove(cluster_key);
+        }
+    }
+
     /// Whether this write puts the album on the card (its artist aside). Of several editions,
     /// only one goes: the one chosen for this write, else the first-ranked. Exclusions and
     /// names saved before the album had editions (under its base id) still apply.
@@ -312,14 +389,11 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
     let mut taken: HashSet<String> = HashSet::new();
     for artist in &index.artists {
         let ck = &index.clusters[artist.cluster].key;
-        if custom.excluded_artists.contains(ck) {
-            continue;
-        }
         let artist_dir = sanitize_component(custom.artist_names.get(ck).unwrap_or(&artist.name), 80);
         let ordered = custom.ordered_albums(ck, &artist.albums);
         let positions = custom.positions(ck, &ordered);
         for (album, position) in ordered.into_iter().zip(positions) {
-            if !custom.on_card(ck, album, &artist.albums) {
+            if !custom.includes(ck, album, &artist.albums) {
                 continue;
             }
             let album_dir = album_folder(album, custom.album_name(ck, album), position, opts);
@@ -431,5 +505,50 @@ mod tests {
         let positions = Custom::default().positions("band", &ordered);
         let up: Vec<usize> = albums.iter().zip(&positions).filter(|(a, _)| a.edition.is_some()).map(|(_, p)| *p).collect();
         assert_eq!(up[0], up[1]);
+    }
+
+    #[test]
+    fn the_card_holds_what_was_chosen() {
+        let tracks = vec![
+            at("/m/Band/UP {1986}/1.flac", "Unknown Pleasures", "Disorder", 1979),
+            at("/m/Band/UP {1989}/1.flac", "Unknown Pleasures", "Disorder", 1979),
+            at("/m/Band/1999 - Band/1.flac", "Band", "Never Meant", 1999),
+            Track { artist: Some("Other".into()), ..at("/m/Other/2000 - Solo/1.flac", "Solo", "Alone", 2000) },
+        ];
+        let index = build(&tracks, &ArtistPrefs::default());
+        let opts = Options::default();
+        let band = index.artists.iter().find(|a| a.name == "Band").unwrap();
+        let keys: Vec<String> = index.clusters.iter().map(|c| c.key.clone()).collect();
+        let sources = |c: &Custom| {
+            let mut v: Vec<String> = build_plan(&tracks, &index, &opts, c).iter().map(|p| tracks[p.track].path.to_string_lossy().into_owned()).collect();
+            v.sort();
+            v
+        };
+
+        // An old layout that left out "Other" becomes "Band, whole", with the same plan.
+        let mut old = Custom::default();
+        old.excluded_artists.insert("other".into());
+        let before = sources(&old);
+        old.choose_from_exclusions(&keys);
+        assert_eq!(sources(&old), before);
+        assert!(old.whole_artist("band") && !old.whole_artist("other"));
+
+        // A new layout starts empty; one album at a time, then a whole artist.
+        let mut c = Custom { chosen: Some(Chosen::default()), ..Default::default() };
+        assert!(sources(&c).is_empty());
+        let later = band.albums.iter().find(|a| a.edition.as_ref().is_some_and(|e| e.rank == 1)).unwrap();
+        c.set_album("band", later, true);
+        assert_eq!(sources(&c), ["/m/Band/UP {1989}/1.flac"], "that edition, not the first-ranked");
+        c.set_album("band", later, false);
+        assert!(sources(&c).is_empty());
+        c.set_artist("band", &band.albums, true);
+        assert_eq!(sources(&c).len(), 2, "one edition of each album");
+        let solo = band.albums.iter().find(|a| a.title.as_deref() == Some("Band")).unwrap();
+        c.set_album("band", solo, false);
+        assert_eq!(sources(&c).len(), 1, "an album left out of a whole artist");
+        c.set_album("band", solo, true);
+        assert_eq!(sources(&c).len(), 2);
+        c.set_artist("band", &band.albums, false);
+        assert!(sources(&c).is_empty());
     }
 }

@@ -18,8 +18,46 @@ use crate::library::Track;
 /// Longest folder path shown before it's shortened with "…" in the middle.
 const FOLDER_CHARS: usize = 60;
 
+/// Where a song or album stands with the card, as of the last write against what's chosen now.
+#[derive(Clone, Copy, PartialEq)]
+enum Mark {
+    /// On the card and staying.
+    On,
+    /// Chosen; the next Sync copies it (for an album, some of it may be there already).
+    Adding,
+    /// On the card; the next Sync takes it off.
+    Removing,
+}
+
+impl Mark {
+    fn of(on_card: bool, planned: bool) -> Option<Mark> {
+        match (on_card, planned) {
+            (true, true) => Some(Mark::On),
+            (false, true) => Some(Mark::Adding),
+            (true, false) => Some(Mark::Removing),
+            (false, false) => None,
+        }
+    }
+
+    /// A dot like a library card's stamp: filled when there, a ring while waiting for Sync.
+    fn paint(self, p: &egui::Painter, at: egui::Pos2, r: f32, ink: &theme::Ink) {
+        match self {
+            Mark::On => {
+                p.circle_filled(at, r, ink.muted);
+            }
+            Mark::Adding => {
+                p.circle_stroke(at, r, Stroke::new(1.2, ink.text));
+            }
+            Mark::Removing => {
+                p.circle_stroke(at, r, Stroke::new(1.2, ink.accent));
+                p.hline(at.x - r - 1.5..=at.x + r + 1.5, at.y, Stroke::new(1.2, ink.accent));
+            }
+        }
+    }
+}
+
 /// A track row painted directly so columns line up like a table without any grid lines.
-fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, on_card: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -31,9 +69,8 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
     let font = FontId::proportional(14.5);
     let num_color = if playing { ink.accent } else { ink.muted };
     p.text(egui::pos2(rect.left() + 30.0, y), Align2::RIGHT_CENTER, if playing { "▸" } else { number }, font.clone(), num_color);
-    // On the card (as of the last write): a small dot in the margin, like a library card's stamp.
-    if on_card {
-        p.circle_filled(egui::pos2(rect.left() + 6.0, y), 2.2, ink.muted);
+    if let Some(m) = mark {
+        m.paint(&p, egui::pos2(rect.left() + 6.0, y), 2.4, &ink);
     }
 
     let mut title = t.display_title();
@@ -131,6 +168,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         return;
     }
 
+    if app.write().dest.is_some() {
+        crate::ui::card::strip(app, ui);
+        ui.add_space(6.0);
+    }
     if app.duplicates_only {
         ui.horizontal(|ui| {
             ui.label(RichText::new("Showing albums with a copy that another copy covers in the same or higher quality.").color(ink.text));
@@ -200,13 +241,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     ui.add_space(6.0);
+                    let custom = &app.write().custom;
+                    let whole = custom.whole_artist(ck);
                     let r = ui
                         .horizontal(|ui| {
                             let meta = format!("{} · {}", plural(artist.albums.len(), "album"), plural(n_tracks, "track"));
-                            let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - 16.0;
+                            let card_link = if whole { "take all off the card" } else { "send all to the card" };
+                            let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - widgets::text_width(ui, card_link, 14.0) - 40.0;
                             let name = RichText::new(&artist.name).size(20.0).color(ink.text);
                             let r = widgets::fitted(ui, name, name_w, Sense::click()).on_hover_text(&artist.name);
                             muted(ui, meta);
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                let hint = if whole {
+                                    "The whole artist is chosen for the card, albums added later too. Takes every album off at the next Sync."
+                                } else {
+                                    "Chooses the whole artist for the card, albums added later too (one edition of each). Copied at the next Sync."
+                                };
+                                if link(ui, card_link).on_hover_text(hint).clicked() {
+                                    actions.push(Action::CardArtist(ai, !whole));
+                                }
+                            });
                             r
                         })
                         .inner;
@@ -227,11 +281,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             if let Some(e) = &al.edition {
                                 meta = format!("edition {} of {} · {} · {meta}", e.rank + 1, e.count, e.format);
                             }
-                            match al.tracks.iter().filter(|i| app.on_card.contains(i)).count() {
-                                0 => {}
-                                n if n == al.tracks.len() => meta.push_str(" · on card"),
-                                n => meta.push_str(&format!(" · {n} of {} on card", al.tracks.len())),
-                            }
+                            let (mark, status) = album_status(app, ck, artist, al);
                             let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
                             let off_text = match off {
                                 0 => String::new(),
@@ -239,7 +289,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 n => format!("{n} won't play on RECHO"),
                             };
                             // The title gets whatever the counts, warning and "play · look up" leave.
-                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + 150.0;
+                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 330.0;
                             let shown = RichText::new(title).italics().size(17.0);
                             widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
                             let r = ui.label(RichText::new(meta).color(ink.muted));
@@ -249,7 +299,31 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             if off > 0 {
                                 ui.label(RichText::new(off_text).size(12.5).color(ink.accent));
                             }
+                            if let Some(m) = mark {
+                                let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+                                m.paint(ui.painter(), rect.center(), 3.5, &ink);
+                                ui.label(RichText::new(&status).size(13.0).color(if m == Mark::Removing { ink.accent } else { ink.muted }));
+                            }
+                            let chosen = app.write().custom.includes(ck, al, &artist.albums);
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                let (text, hint) = if chosen {
+                                    ("take off card", "Takes it off the card at the next Sync.")
+                                } else {
+                                    ("send to card", "Copies it to the card at the next Sync. Of several editions, this one goes.")
+                                };
+                                if link(ui, text).on_hover_text(hint).clicked() {
+                                    actions.push(Action::CardAlbum(ai, bi, !chosen));
+                                }
+                                // A copy with all these songs in higher quality: offer it instead.
+                                if chosen
+                                    && let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()).filter(|s| s.higher)
+                                    && let Some(better) = artist.albums.iter().position(|o| o.base_id(ck) == al.base_id(ck) && o.edition.as_ref().is_some_and(|e| e.rank == s.rank))
+                                    && link(ui, format!("use the {} copy", s.format))
+                                        .on_hover_text(format!("{} has all these songs in higher quality. It replaces this copy on the card at the next Sync.", s.label))
+                                        .clicked()
+                                {
+                                    actions.push(Action::CardAlbum(ai, better, true));
+                                }
                                 if link(ui, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
                                     actions.push(Action::LookupAlbum(ai, bi));
                                 }
@@ -279,7 +353,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 (Some(n), false) => n.to_string(),
                                 (None, _) => String::new(),
                             };
-                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, app.on_card.contains(&ti));
+                            let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
+                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark);
                             if r.double_clicked() || r.clicked() {
                                 actions.push(Action::Play(al.tracks.clone(), pos));
                             }
@@ -300,6 +375,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         app.jump_to = Some(c);
     }
     apply(app, actions);
+}
+
+/// An album's mark and words for where it stands with the card ("on card", "added at the next
+/// sync"…), or no mark and "" when it isn't chosen and isn't there.
+fn album_status(app: &App, ck: &str, artist: &crate::library::grouping::ArtistNode, al: &crate::library::grouping::AlbumNode) -> (Option<Mark>, String) {
+    let cs = &app.card_state;
+    let planned = al.tracks.iter().filter(|i| cs.planned.contains(i)).count();
+    let there = al.tracks.iter().filter(|i| cs.on_card.contains(i)).count();
+    let staying = al.tracks.iter().filter(|i| cs.planned.contains(i) && cs.on_card.contains(i)).count();
+    match (planned, there) {
+        (0, 0) => (None, String::new()),
+        (0, _) => {
+            // Another copy of the album taking its place?
+            let swapped = artist.albums.iter().any(|o| o.base_id(ck) == al.base_id(ck) && o.tracks.iter().any(|i| cs.planned.contains(i)));
+            (Some(Mark::Removing), if swapped { "swapped for the other copy at the next sync" } else { "taken off at the next sync" }.into())
+        }
+        (p, _) if staying == p => (Some(Mark::On), "on card".into()),
+        (_, 0) => (Some(Mark::Adding), "added at the next sync".into()),
+        (p, _) => (Some(Mark::Adding), format!("{staying} of {p} on card, the rest at the next sync")),
+    }
 }
 
 /// Index letter for an artist: "The Beatles" → B, "Beyoncé" → B, "2Pac" → #.
