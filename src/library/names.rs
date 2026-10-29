@@ -121,6 +121,28 @@ pub fn split_artist_album(s: &str) -> Option<(String, AlbumName)> {
     (evidence && !name.album.is_empty() && name.album != tidy(s)).then(|| (tidy(&artist), name))
 }
 
+/// A folder that holds music without naming an artist: "Music", iTunes' "Música", a downloads
+/// folder, or the one NeatLibrary copies a card's music into.
+pub fn container_folder(s: &str) -> bool {
+    const NAMES: &[&str] = &[
+        "music", "música", "musica", "musique", "musik", "muziek", "itunes", "itunes media", "itunes music", "media", "downloads", "download", "descargas",
+        "new music", "unsorted",
+    ];
+    let s = s.trim().to_lowercase();
+    NAMES.contains(&s.as_str()) || s == crate::card::adopt::IMPORT_FOLDER.to_lowercase()
+}
+
+/// "Guns N' Roses-Appetite For Destruction": a folder that starts with an artist the library
+/// knows (`known` takes an `artist_key`), joined to the album by a dash with or without spaces.
+/// Tries the shortest artist first, so "Jay-Z-The Blueprint" needs "Jay-Z" known, not "Jay".
+pub fn split_known_artist(s: &str, known: impl Fn(&str) -> bool) -> Option<(String, AlbumName)> {
+    s.char_indices().filter(|(_, c)| matches!(c, '-' | '–' | '—')).find_map(|(i, c)| {
+        let (artist, rest) = (s[..i].trim(), s[i + c.len_utf8()..].trim());
+        let name = clean_album(rest, Some(artist));
+        (!artist.is_empty() && !name.album.is_empty() && known(&artist_key(artist))).then(|| (tidy(artist), name))
+    })
+}
+
 /// An artist folder without collection wording: "Joy Division - коллекция" → "Joy Division",
 /// "Haken [restored]" → "Haken", "American Football FLAC" → "American Football".
 pub fn clean_artist_folder(s: &str) -> String {

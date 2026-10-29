@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 use super::cue;
 use super::db::Db;
 use super::mp4::{MP4_EXTS, mp4_audio_codec};
-use super::names::{clean_album, clean_artist_folder, disc_folder, parse_file_stem, split_artist_album};
+use super::names::{artist_key, clean_album, clean_artist_folder, container_folder, disc_folder, parse_file_stem, split_artist_album, split_known_artist};
 use super::track::Track;
 
 /// Everything scanned. Opus, APE, WavPack and WMA have no Rust decoder: listed, organised, not playable.
@@ -112,7 +112,7 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
 
     // Folder-name inference depends on `root`, so it runs every scan rather than being cached.
     let mut stale_edits: HashSet<PathBuf> = HashSet::new();
-    let tracks = raw
+    let mut tracks: Vec<Track> = raw
         .into_iter()
         .map(|mut t| {
             infer_from_path(&mut t, root);
@@ -130,6 +130,7 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
             }
         })
         .collect();
+    artists_from_known(&mut tracks);
     if let Some(db) = db
         && !stale_edits.is_empty()
         && let Err(e) = db.drop_edits(stale_edits.iter().map(PathBuf::as_path))
@@ -200,7 +201,8 @@ fn infer_from_path(t: &mut Track, root: &Path) {
     // The artist is the nearest folder above that isn't itself an album, e.g. skipping
     // "1979. Unknown Pleasures {3 editions}" that holds several editions.
     let album_like = |d: &str| disc_folder(d).is_some() || clean_album(d, None).year.is_some();
-    let mut folder_artist = above.iter().rev().find(|d| !album_like(d)).map(|d| clean_artist_folder(d));
+    // Nor a folder like "Music" or "From the card" that holds albums of many artists.
+    let mut folder_artist = above.iter().rev().find(|d| !album_like(d) && !container_folder(d)).map(|d| clean_artist_folder(d));
     let hint = t.album_artist.clone().or(t.artist.clone()).or(folder_artist.clone());
     let mut name = clean_album(album_dir, hint.as_deref());
     // A lone "Artist - Album (1997)" folder names both; a lone "Downloads" isn't an album.
@@ -219,6 +221,28 @@ fn infer_from_path(t: &mut Track, root: &Path) {
     t.year = t.year.or(name.year);
     if t.artist.is_none() && t.album_artist.is_none() {
         t.artist = folder_artist;
+    }
+}
+
+/// Songs left without an artist whose album folder starts with an artist the library knows
+/// from other songs: "Guns N' Roses-Appetite For Destruction" when another album is tagged
+/// "Guns N' Roses". Folder names alone are too ambiguous to split on a bare dash otherwise.
+fn artists_from_known(tracks: &mut [Track]) {
+    let known: HashSet<String> = tracks.iter().filter_map(|t| t.album_artist.as_deref().or(t.artist.as_deref())).map(artist_key).collect();
+    for t in tracks.iter_mut().filter(|t| t.artist.is_none() && t.album_artist.is_none() && !t.dirty) {
+        let mut dirs = t.path.ancestors().skip(1).filter_map(|d| d.file_name()).map(|d| d.to_string_lossy());
+        let Some(mut dir) = dirs.next() else { continue };
+        if disc_folder(&dir).is_some() {
+            let Some(d) = dirs.next() else { continue };
+            dir = d;
+        }
+        let Some((artist, name)) = split_known_artist(&dir, |k| known.contains(k)) else { continue };
+        // Replace an album named after the whole folder, not one from the tags.
+        if t.album.as_ref().is_none_or(|a| *a == clean_album(&dir, None).album) {
+            t.album = Some(name.album);
+        }
+        t.year = t.year.or(name.year);
+        t.artist = Some(artist);
     }
 }
 
@@ -246,6 +270,12 @@ mod tests {
         let t = inferred("Radiohead/1997 - OK Computer/02 - Paranoid Android.mp3");
         assert_eq!((t.artist.as_deref(), t.album.as_deref(), t.year, t.title.as_deref()), (Some("Radiohead"), Some("OK Computer"), Some(1997), Some("Paranoid Android")));
 
+        // A folder of many artists' albums isn't an artist.
+        let t = inferred("From the card/50 Cent (2003) - Get Rich Or Die Tryin/01. Intro (2015_05_21 08_09_57 UTC).mp3");
+        assert_eq!((t.artist.as_deref(), t.album.as_deref(), t.year), (Some("50 Cent"), Some("Get Rich Or Die Tryin"), Some(2003)));
+        let t = inferred("From the card/Guns N' Roses-Appetite For Destruction/1. Welcome To The Jungle (2015_05_21 08_09_57 UTC).mp3");
+        assert_eq!(t.artist, None);
+
         let t = inferred("Downloads/03 - Song.mp3");
         assert_eq!((t.artist, t.album), (None, None));
 
@@ -254,5 +284,20 @@ mod tests {
         let mut t = Track { path: root.join("Joy Division - коллекция/1980. Closer {x}/a.flac"), artist: Some("JOY DIVISION".into()), ..Default::default() };
         infer_from_path(&mut t, root);
         assert_eq!((t.artist.as_deref(), t.album.as_deref()), (Some("JOY DIVISION"), Some("Closer")));
+    }
+
+    #[test]
+    fn artist_from_a_folder_starting_with_a_known_artist() {
+        let mut tracks = vec![
+            inferred("From the card/Guns N' Roses-Appetite For Destruction/1. Welcome To The Jungle (2015_05_21 08_09_57 UTC).mp3"),
+            inferred("Jay-Z-The Blueprint/01 - The Ruler's Back.mp3"),
+            inferred("Bits-Pieces/01 - Song.mp3"),
+            Track { artist: Some("Guns n' Roses".into()), ..inferred("Guns n' Roses/1991 - Use Your Illusion I/01 - Right Next Door to Hell.flac") },
+            Track { artist: Some("JAY-Z".into()), ..Default::default() },
+        ];
+        artists_from_known(&mut tracks);
+        assert_eq!((tracks[0].artist.as_deref(), tracks[0].album.as_deref()), (Some("Guns N' Roses"), Some("Appetite For Destruction")));
+        assert_eq!((tracks[1].artist.as_deref(), tracks[1].album.as_deref()), (Some("Jay-Z"), Some("The Blueprint")));
+        assert_eq!(tracks[2].artist, None, "no artist called Bits in the library");
     }
 }
