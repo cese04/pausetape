@@ -238,3 +238,53 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   - the survey takes about 80 s.
 - Debug demo: `NEATLIBRARY_SHOT_SURVEY=1` runs the check. New tests: a take-over and its undo
   on a fake card; opt-in `survey_a_real_card` (reads only).
+- **Delete clutter** (opt-in, unticked by default, can't be undone).
+  - What counts as clutter: iTunes library data (`.itc2` artwork cache, `.itl`/`.itdb`
+    libraries, `.ipa` apps, the `iTunes` folder's XML), Windows and macOS folder files
+    (`desktop.ini`, `Thumbs.db`, also when a backup tool renamed them
+    `desktop (2015_05_12 …).ini`), and rip logs and checksums.
+  - Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.
+  - On the test card: 2,781 files, 2.6 GB.
+
+### 21. Card space, "on card" marks, and saving the card's own music (2026-10-28)
+- **CD quality for hi-res** (per write, off by default): 24-bit and over-48 kHz FLAC go on the
+  card as 16-bit FLAC at 48 or 44.1 kHz (whichever family the source is), dithered. Your music
+  folder keeps the originals.
+  - Measured: 24/192 → 17% of the size, 24/96 → 32%.
+  - On the test library, about 27.5 GB saved, which brings a full write from 129 GB to about
+    102 GB.
+  - *AM* (12 songs, 24/192) took 42 s, with the same lengths.
+  - When a write doesn't fit, the card tab says what this would save and offers "do that".
+- **Covers in converted files:** files made by ffmpeg take the source's embedded cover, else
+  the cover image beside it (the Echo Mini shows embedded covers only).
+- **"On card" marks** (Calibre's "on device"): album rows say "on card" or "8 of 9 on card",
+  and songs on the card get a small dot. They come from the write's manifest, so they work
+  without the card connected.
+- **Copy the card's own music into the library:** after checking the card, "copy them into
+  your music folder" copies the songs that aren't in the library (with their covers, CUE sheets
+  and booklets) into `<music folder>/From the card/`, keeping the card's folder names; the card
+  isn't changed. The library is rescanned. Checking the card again then finds those songs as
+  copies a take-over can move into place.
+- **Space estimate:** once the card is checked, the songs a take-over would move into place
+  count as already there.
+- Debug demo: `NEATLIBRARY_SHOT_ON_CARD=<album text>` fakes "on card" marks in memory.
+
+### 22. The first real take-over, and what it taught (2026-10-29)
+- The first take-over of the test card took 3½ minutes but moved only 659 files. The other
+  songs were **locked**: macOS shows a FAT/exFAT read-only attribute as the "locked" flag and
+  then refuses to rename or delete the file. Only the first error showed, in a notice.
+  - The take-over now unlocks a locked file and tries again (the Echo Mini doesn't care), and
+    undo does the same.
+  - It shows progress (files done / total).
+  - Every problem is listed in the card tab and saved to `journals/problems/<time> <what>.txt`;
+    the same goes for writes, copying from the card and undo.
+  - A move that fails no longer leaves behind the folders made for it.
+  - macOS keeps extended attributes on exFAT as `._` files beside each file and folder it
+    touches (here about 3,000, some named like songs). With the write's "delete macOS ._ files"
+    option (on by default), the take-over deletes them afterwards, along with empty folders.
+- **Folders that aren't artists:** music copied from the card sits in `From the card/`, and
+  untagged albums in it were filed under an artist called "From the card". Folders like that
+  (Music, iTunes' Música, Downloads) are now skipped when looking for the artist. A folder like
+  "Guns N' Roses-Appetite For Destruction" (no spaces round the dash) is split when the library
+  knows that artist from other songs.
+- 46 tests (36 offline).

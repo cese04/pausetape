@@ -73,7 +73,7 @@ src/
 │   ├── plan.rs        Options + Custom → planned paths (album order, names, exclusions)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
-│   ├── adopt.rs       taking over a card's existing music: survey, move into place, undo
+│   ├── adopt.rs       a card's existing music: survey, take over (move into place, undo), copy into the library
 │   ├── write.rs       saved writes (WriteProfile), compare-with-card, write
 │   ├── volumes.rs     mounted drives, free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
@@ -157,7 +157,7 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 33 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 35 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,

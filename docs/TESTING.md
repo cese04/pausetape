@@ -17,7 +17,7 @@ portability fixes) · [ARCHITECTURE](ARCHITECTURE.md) (where things live in the 
 Once the repository is on GitHub, every push runs `.github/workflows/ci.yml`. It builds and
 tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
 
-- **Green on all three:** it compiles and the 33 tests pass everywhere. Go on to the hands-on
+- **Green on all three:** it compiles and the 35 tests pass everywhere. Go on to the hands-on
   test below.
 - **Red on Windows or Linux:** open the failed step's log; that's the first thing to fix. A
   compile error there is likely, since this code has never met those compilers.
@@ -68,7 +68,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/<you>/<repo>.git
 cd <repo>
-cargo test                          # 33 tests should pass (9 more are skipped on purpose)
+cargo test                          # 35 tests should pass (9 more are skipped on purpose)
 cargo run --release -- --version    # e.g. "NeatLibrary 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -167,7 +167,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 18c. On a stick that already has music copied by hand: **Compare with the card** says how many
     files the write didn't put there; **Check them against the library** sorts them; **Take
     over the card** moves the copies into the layout (and, if ticked, the rest into
-    `_Before NeatLibrary`); **undo taking over the card** puts everything back.
+    `_Before NeatLibrary`; with **delete clutter** ticked, iTunes data, `desktop.ini`/`Thumbs.db`
+    and rip logs are deleted); **undo taking over the card** puts everything back (except deleted
+    clutter). **copy them into your music folder** puts the card's songs that aren't in the
+    library under `From the card` in the music folder.
+18d. Tick **write hi-res FLAC at CD quality**: 24-bit songs are 16-bit FLAC on the stick. After
+    a write, the library shows "on card" on the albums written.
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.

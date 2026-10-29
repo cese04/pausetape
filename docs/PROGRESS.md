@@ -115,12 +115,12 @@ or two, **M** = about a day, **L** = several days.
 | Convert on send | FLAC / MP3 320, CUE albums cut into songs | Done |
 | Download metadata | MusicBrainz suggestions, checked against your songs | Done |
 | Duplicate finder | Editions; copies covered by a same-or-better copy | Done (no actions yet) |
-| Device view | Card writes with a manifest; taking over a card's existing music | Step 1 (take-over done) |
+| Device view | Card writes with a manifest; taking over a card's existing music; "on card" marks; copying music only on the card into the library | Step 1 (mostly done) |
 | Edit metadata, bulk edit | — | Step 2 |
 | Download covers | Covers beside the files can be embedded | Step 3 |
 | Sortable, searchable library | Artist list and text filter | Step 4 |
 | Jobs panel | One busy line | Step 5 |
-| Add books | Reads the music folder as it is | Step 6 |
+| Add books | Reads the music folder as it is; copies music only on the card into it | Step 6 (from the card: done) |
 | Virtual libraries | Writes choose by artist and album | Step 8 |
 
 | Step | What | Why here | Effort |
@@ -134,6 +134,24 @@ or two, **M** = about a day, **L** = several days.
 | 7 | **Duplicates, actions:** prefer this copy, these are different albums, move covered copies to the Trash with undo. | Frees disk space; search (step 4) makes it quick. | M |
 | 8 | **Saved selections** (virtual libraries): saved searches usable as card selections and smart playlists ("lossless jazz", "gym"). | Builds on step 4. | M |
 | 9 | **Windows and Linux builds:** drive detection, bundled ffmpeg, installers ([DISTRIBUTION](DISTRIBUTION.md)). | Distribution. | M–L |
+
+**Route to the first real write on the test card** (2026-10-28). The card holds 67 GB copied by
+hand: 936 songs are exact copies of what a write needs, 1,840 songs (29.8 GB) aren't in the
+library, and 2.6 GB is iTunes and system clutter.
+
+1. *Check them against the library* → **copy them into your music folder** (the 1,840 songs
+   join the library under `From the card`; the card is unchanged).
+2. Rescan, then decide what goes on the card. The library is then about 160 GB, so it won't
+   all fit: tick **CD quality** (saves about 28 GB) and leave out some artists or albums.
+3. *Check them against the library* again → **Take over the card** with *move everything else*
+   ticked and *delete clutter* ticked. Undo is available.
+4. **Write to the card**, then test on the Echo Mini: folder sorting, songs cut from CUE
+   albums, converted MP3s, covers, names on its screen.
+5. Delete `_Before NeatLibrary` from the card once happy.
+
+Where it stands (2026-10-29): steps 1–2 done. The first take-over moved 659 files and stopped
+on locked files (see CHANGELOG §22); the take-over now unlocks them, so check the card again and
+take it over once more.
 
 Folded in along the way: choosing among alternative MusicBrainz releases, the artist from tagged
 neighbours ([NEXT](NEXT.md) B4), shorter folder names if the device test shows cut-off names,
