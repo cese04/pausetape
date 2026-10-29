@@ -11,14 +11,15 @@ use super::text::{self, plural};
 use super::theme::{self, ink};
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
-use crate::card::adopt::{Survey, gather_folder};
-use crate::card::{AlbumOrder, Target, Unplayable, album_folder, card_size, target};
+use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
+use crate::card::{AlbumOrder, Rules, Target, Unplayable, album_folder, card_size, target};
 use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
         writes_bar(app, ui);
         ui.add_space(14.0);
+        problems(app, ui);
         if app.tracks.is_empty() {
             muted(ui, "Choose a source in the folders tab first.");
             return;
@@ -34,6 +35,41 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(14.0);
         layout_options(app, ui);
     });
+}
+
+/// What the last card operation couldn't do, one line per file, with the saved full list.
+fn problems(app: &mut App, ui: &mut Ui) {
+    let Some(p) = &app.problems else { return };
+    let ink = ink(ui);
+    let mut dismiss = false;
+    theme::panel_frame(ui).show(ui, |ui| {
+        ui.set_max_width(760.0);
+        let n = p.list.len();
+        ui.label(RichText::new(format!("{}: {}", p.what, plural(n, "problem"))).color(ink.accent));
+        const SHOWN: usize = 8;
+        for e in p.list.iter().take(SHOWN) {
+            ui.add(egui::Label::new(RichText::new(e).size(12.5).color(ink.muted)).truncate());
+        }
+        if n > SHOWN {
+            ui.collapsing(RichText::new(format!("{} more", n - SHOWN)).size(12.5).color(ink.muted), |ui| {
+                for e in p.list.iter().skip(SHOWN).take(500) {
+                    ui.add(egui::Label::new(RichText::new(e).size(12.5).color(ink.muted)).truncate());
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            if let Some(log) = &p.log
+                && link(ui, "open the full list").on_hover_text(log.display().to_string()).clicked()
+            {
+                crate::platform::reveal(log);
+            }
+            dismiss = link(ui, "dismiss").clicked();
+        });
+    });
+    if dismiss {
+        app.problems = None;
+    }
+    ui.add_space(14.0);
 }
 
 fn writes_bar(app: &mut App, ui: &mut Ui) {
@@ -104,12 +140,17 @@ struct Sizes {
     album: HashMap<String, u64>,
     selected: u64,
     playlists: u64,
+    /// What writing hi-res songs at CD quality would save on the selected music, when the
+    /// write doesn't already.
+    cd_saving: u64,
 }
 
 impl Sizes {
     fn compute(app: &App) -> Self {
         let w = app.write();
-        let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0 };
+        let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0, cd_saving: 0 };
+        let rules = w.options.rules();
+        let cd = Rules { cd_quality: true, ..rules };
         for a in &app.index.artists {
             let ck = &app.index.clusters[a.cluster].key;
             for al in &a.albums {
@@ -118,7 +159,7 @@ impl Sizes {
                     .tracks
                     .iter()
                     .map(|&i| &app.tracks[i])
-                    .filter_map(|t| target(t, w.options.unplayable).ok().map(|to| card_size(t, to)))
+                    .filter_map(|t| target(t, rules).ok().map(|to| card_size(t, to)))
                     .sum();
                 let on_card = w.custom.on_card(ck, al, &a.albums);
                 // Of several editions, only the one going on the card counts towards the artist.
@@ -127,13 +168,17 @@ impl Sizes {
                 }
                 if !w.custom.excluded_artists.contains(ck) && on_card {
                     s.selected += bytes;
+                    if !rules.cd_quality {
+                        let at_cd: u64 = al.tracks.iter().map(|&i| &app.tracks[i]).filter_map(|t| target(t, cd).ok().map(|to| card_size(t, to))).sum();
+                        s.cd_saving += bytes.saturating_sub(at_cd);
+                    }
                 }
                 s.album.insert(id, bytes);
             }
         }
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, w.options.unplayable)
+        s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules)
             .iter()
             .flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target)))
             .sum();
@@ -141,7 +186,7 @@ impl Sizes {
     }
 }
 
-fn capacity(app: &App, ui: &mut Ui, sizes: &Sizes) {
+fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     let ink = ink(ui);
     let w = app.write();
     let need = sizes.selected + sizes.playlists;
@@ -158,8 +203,13 @@ fn capacity(app: &App, ui: &mut Ui, sizes: &Sizes) {
         muted(ui, s);
     });
     let Some(info) = info else { return };
-    // Space this write can use: what's free plus what its own earlier files occupy.
-    let room = info.free + w.manifest_bytes();
+    // Space this write can use: what's free plus what its own earlier files occupy, plus the
+    // copies a take-over of the card (once checked) would move into place.
+    let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
+    let room = info.free + w.manifest_bytes() + adoptable;
+    if adoptable > 0 {
+        muted(ui, format!("counting the {} a take-over moves into place as already there", text::bytes(adoptable)));
+    }
     let width = ui.available_width().min(560.0);
     let (rect, _) = ui.allocate_exact_size(vec2(width, 12.0), Sense::hover());
     let scale = width / room.max(need).max(1) as f32;
@@ -171,6 +221,16 @@ fn capacity(app: &App, ui: &mut Ui, sizes: &Sizes) {
     if !fits {
         ui.painter().hline(used..=rect.left() + need as f32 * scale, y, Stroke::new(3.0, ink.accent));
         ui.label(RichText::new(format!("doesn't fit: {} over. Leave out some artists or albums below.", text::bytes(need - room))).color(ink.accent).size(13.0));
+        // Hi-res songs at CD quality may be enough on their own.
+        if sizes.cd_saving > 0 {
+            ui.horizontal_wrapped(|ui| {
+                let enough = need - sizes.cd_saving <= room;
+                muted(ui, format!("Writing hi-res FLAC at CD quality would save about {}{}.", text::bytes(sizes.cd_saving), if enough { ", enough to fit" } else { "" }));
+                if link(ui, "do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
+                    app.write_mut().options.cd_quality = true;
+                }
+            });
+        }
     }
 }
 
@@ -225,6 +285,7 @@ fn take_over(app: &mut App, ui: &mut Ui) {
         let c = |l: &[(PathBuf, u64)]| (l.len(), Survey::bytes(l));
         ((s.used.len(), s.used_bytes()), c(&s.spare), c(&s.versions), c(&s.unknown), c(&s.other))
     });
+    let clutter = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| s.clutter()).unwrap_or_default();
     if foreign == 0 && !can_undo {
         return;
     }
@@ -261,8 +322,24 @@ fn take_over(app: &mut App, ui: &mut Ui) {
                     ));
                 }
                 if unknown > 0 {
-                    ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
-                        .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder.");
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
+                            .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder first.");
+                        // Room on the music folder's drive, so the copy can't fill it up.
+                        let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
+                        let fits = room.is_none_or(|free| free > unknown_bytes + 1_000_000_000);
+                        if app.busy.is_none() && fits {
+                            let hint = format!(
+                                "Copies them, with their covers, into “{}” in your music folder, keeping the card's folder names; the card isn't changed. Then the library is rescanned, and checking the card again lets a take-over move them into place too.",
+                                IMPORT_FOLDER
+                            );
+                            if link(ui, "copy them into your music folder").on_hover_text(hint).clicked() {
+                                app.import_from_card();
+                            }
+                        } else if !fits {
+                            ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(12.5).color(ink.accent));
+                        }
+                    });
                 }
                 if other > 0 {
                     muted(ui, format!("{} of other kinds: covers, logs, playlists, other devices' data… ({}).", plural(other, "file"), text::bytes(other_bytes)));
@@ -271,6 +348,15 @@ fn take_over(app: &mut App, ui: &mut Ui) {
                 let gather = format!("move everything else into one folder, “{}” (nothing is deleted)", gather_folder());
                 ui.checkbox(&mut app.gather_on_take_over, gather)
                     .on_hover_text("Keeps the player's top level to this write's artists. Delete the folder yourself once you're happy; or untick to leave those files where they are.");
+                if !clutter.is_empty() {
+                    let (n, bytes): (usize, u64) = clutter.iter().fold((0, 0), |(a, b), (_, n, s)| (a + n, b + s));
+                    let kinds: Vec<String> = clutter.iter().map(|(k, n, s)| format!("{k}: {} ({})", plural(*n, "file"), text::bytes(*s))).collect();
+                    ui.checkbox(&mut app.delete_clutter_on_take_over, format!("delete clutter: {} ({}) of iTunes data, system files and rip logs; can't be undone", plural(n, "file"), text::bytes(bytes)))
+                        .on_hover_text(format!(
+                            "{}\n\nThe Echo Mini can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
+                            kinds.join("\n")
+                        ));
+                }
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if app.busy.is_none() && used + spare + versions + unknown + other > 0 && widgets::primary_button(ui, "Take over the card").on_hover_text("only moves files on the card; undo puts everything back").clicked() {
@@ -321,9 +407,10 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         if w.options.unplayable == Unplayable::Convert {
             // What converting would make of them, and what still can't go (no ffmpeg, AC-4…).
             let (mut flac, mut mp3, mut left) = (0, 0, BTreeMap::<&str, usize>::new());
+            let rules = Rules { unplayable: Unplayable::Convert, cd_quality: w.options.cd_quality };
             for t in app.tracks.iter().filter(|t| !t.on_recho() && t.cue.is_none()) {
-                match target(t, Unplayable::Convert) {
-                    Ok(Target::Flac) => flac += 1,
+                match target(t, rules) {
+                    Ok(Target::Flac | Target::FlacCd) => flac += 1,
                     Ok(Target::Mp3) => mp3 += 1,
                     Ok(Target::Copy) => {}
                     Err(why) => *left.entry(why).or_default() += 1,
@@ -357,6 +444,10 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         }
         ui.add_space(4.0);
     }
+    changed |= ui
+        .checkbox(&mut w.options.cd_quality, "write hi-res FLAC at CD quality (16-bit, 44.1 or 48 kHz) to save space")
+        .on_hover_text("Songs above CD quality (24-bit, 96 or 192 kHz) take 3 to 6 times the space. The Echo Mini plays them, but through earbuds the difference isn't audible. Your music folder keeps the originals.")
+        .changed();
     changed |= ui.checkbox(&mut w.options.write_tags, "write corrected tags into the copies").changed();
     changed |= ui.checkbox(&mut w.prune, "remove files this write put on the card before that are no longer selected").changed();
     changed |= ui.checkbox(&mut w.options.clean_mac_files, "delete macOS ._ and .DS_Store files on the card").changed();
@@ -490,10 +581,10 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                 }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
                 // Songs RECHO can't read as they are: converted, copied anyway, or left out.
-                let fates: Vec<Result<Target, &str>> = al.tracks.iter().map(|&i| &app.tracks[i]).filter(|t| !t.on_recho() && t.cue.is_none()).map(|t| target(t, w.options.unplayable)).collect();
-                let converted = fates.iter().filter(|f| matches!(f, Ok(Target::Flac | Target::Mp3))).count();
+                let fates: Vec<Result<Target, &str>> = al.tracks.iter().map(|&i| &app.tracks[i]).filter(|t| !t.on_recho() && t.cue.is_none()).map(|t| target(t, w.options.rules())).collect();
+                let converted = fates.iter().filter(|f| matches!(f, Ok(Target::Flac | Target::FlacCd | Target::Mp3))).count();
                 let copied = fates.iter().filter(|f| matches!(f, Ok(Target::Copy))).count();
-                let left: Vec<&str> = al.tracks.iter().filter_map(|&i| target(&app.tracks[i], w.options.unplayable).err()).collect();
+                let left: Vec<&str> = al.tracks.iter().filter_map(|&i| target(&app.tracks[i], w.options.rules()).err()).collect();
                 if converted > 0 {
                     muted(ui, format!("{converted} converted")).on_hover_text("RECHO plays FLAC, MP3 and WAV only; these are converted on the way (lossless to FLAC, the rest to MP3 320)");
                 }

@@ -95,6 +95,8 @@ enum Msg {
     /// What's on the card besides the write's own files, for taking it over.
     Surveyed(String, Box<card::adopt::Survey>),
     TookOver(String, Box<card::adopt::Outcome>),
+    /// Music copied from the card into the music folder.
+    ImportedFromCard(Box<card::adopt::Imported>),
     /// Card paths no longer the write's, files put back, errors.
     UndidTakeOver(String, Result<(Vec<PathBuf>, usize, Vec<String>), String>),
     /// (track index, new size, new mtime) for files whose tags were written.
@@ -109,6 +111,13 @@ pub struct Busy {
     pub label: String,
     pub done: usize,
     pub total: usize,
+}
+
+/// Files a card operation couldn't handle, and where the full list was saved.
+pub struct Problems {
+    pub what: String,
+    pub list: Vec<String>,
+    pub log: Option<PathBuf>,
 }
 
 pub struct App {
@@ -137,10 +146,17 @@ pub struct App {
     pub in_place: usize,
     /// Preview of the active write, tagged with the write's name.
     pub write_preview: Option<(String, Preview)>,
+    /// Tracks the active write has put on its card (by its manifest, as of its last write or
+    /// take-over), for the library's "on card" marks.
+    pub on_card: HashSet<usize>,
     /// The card surveyed for taking over, by write name.
     pub card_survey: Option<(String, card::adopt::Survey)>,
     /// Gather what a take-over doesn't use into one folder on the card.
     pub gather_on_take_over: bool,
+    /// Delete clutter (iTunes data, system files, rip logs) when taking over a card.
+    pub delete_clutter_on_take_over: bool,
+    /// What went wrong in the last card operation, listed in the card tab.
+    pub problems: Option<Problems>,
     /// Open folder/card dialog.
     pub picker: Option<crate::ui::folders::Picker>,
     /// Library A–Z rail: jump to the first artist under this letter on the next frame.
@@ -204,7 +220,10 @@ impl App {
             in_place: 0,
             write_preview: None,
             card_survey: None,
+            on_card: HashSet::new(),
             gather_on_take_over: true,
+            delete_clutter_on_take_over: false,
+            problems: None,
             picker: None,
             jump_to: None,
             volumes: card::volumes(),
@@ -233,6 +252,18 @@ impl App {
             ThemePref::Light => egui::ThemePreference::Light,
             ThemePref::Dark => egui::ThemePreference::Dark,
         });
+    }
+
+    /// Keep the errors of a card operation for the card tab, saved to a file too, and return the
+    /// note for its notice ("" if there were none).
+    pub fn report_problems(&mut self, what: &str, errors: Vec<String>) -> String {
+        if errors.is_empty() {
+            return String::new();
+        }
+        let note = format!(" · {} {}, listed in the card tab", errors.len(), if errors.len() == 1 { "problem" } else { "problems" });
+        let log = card::save_problems(what, &errors);
+        self.problems = Some(Problems { what: what.into(), list: errors, log });
+        note
     }
 
     pub fn notice(&mut self, s: impl Into<String>) {

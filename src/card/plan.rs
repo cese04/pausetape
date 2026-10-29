@@ -44,6 +44,9 @@ pub enum Target {
     /// Encoded to FLAC with ffmpeg: lossless sources RECHO can't read (ALAC, AIFF, APE…), and
     /// songs cut out of a lossless album file.
     Flac,
+    /// Encoded to FLAC at CD quality: 16-bit, 44.1 or 48 kHz (`cd_rate`), dithered. For hi-res
+    /// lossless songs when the write asks to save space.
+    FlacCd,
     /// Encoded to MP3 at 320 kbps, stereo: lossy sources RECHO can't read (AAC, Dolby, Opus…).
     Mp3,
 }
@@ -53,16 +56,50 @@ impl Target {
     pub fn ext(self, t: &Track) -> &str {
         match self {
             Target::Copy => &t.ext,
-            Target::Flac => "flac",
+            Target::Flac | Target::FlacCd => "flac",
             Target::Mp3 => "mp3",
         }
     }
 }
 
-/// How `t` reaches the card under `unplayable`, or why it can't. Lossy audio is never encoded
-/// to FLAC (it would only take more space), and never re-encoded unless the user asked for
-/// conversion.
-pub fn target(t: &Track, unplayable: Unplayable) -> Result<Target, &'static str> {
+/// What decides how songs reach the card, from a write's options.
+#[derive(Clone, Copy, Debug)]
+pub struct Rules {
+    pub unplayable: Unplayable,
+    /// Write hi-res lossless songs at CD quality to save space.
+    pub cd_quality: bool,
+}
+
+/// More than CD quality: over 16 bits or 48 kHz.
+pub fn hires(t: &Track) -> bool {
+    t.bit_depth.is_some_and(|b| b > 16) || t.sample_rate.is_some_and(|r| r > 48_000)
+}
+
+/// The CD-quality rate for a hi-res rate: 48 kHz for its family (96, 192…), 44.1 for its own
+/// (88.2, 176.4…), so resampling is by a whole ratio where possible.
+pub fn cd_rate(rate: u32) -> u32 {
+    if rate <= 48_000 {
+        rate
+    } else if rate % 44_100 == 0 {
+        44_100
+    } else {
+        48_000
+    }
+}
+
+/// How `t` reaches the card under `rules`, or why it can't. Lossy audio is never encoded to
+/// FLAC (it would only take more space), and never re-encoded unless the user asked for
+/// conversion. CD quality is a preference: without ffmpeg, hi-res songs go as they are.
+pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
+    let to = base_target(t, rules.unplayable)?;
+    let can_cd = crate::audio::ffmpeg().is_some() && t.ffmpeg_can_decode();
+    Ok(match to {
+        Target::Copy | Target::Flac if rules.cd_quality && t.lossless() && hires(t) && can_cd => Target::FlacCd,
+        to => to,
+    })
+}
+
+fn base_target(t: &Track, unplayable: Unplayable) -> Result<Target, &'static str> {
     let encode = |to: Target| {
         if crate::audio::ffmpeg().is_none() {
             Err(if t.cue.is_some() { "needs ffmpeg to cut the album file into songs" } else { "needs ffmpeg to convert" })
@@ -92,10 +129,15 @@ pub fn target(t: &Track, unplayable: Unplayable) -> Result<Target, &'static str>
 }
 
 /// Bytes `t` takes on the card as `target`. MP3 320 is 40 KB a second; a FLAC made from another
-/// lossless format is about as large as its source.
+/// lossless format is about as large as its source; at CD quality it shrinks with bits × rate
+/// (measured: 24/192 → 17%, 24/96 → 32%).
 pub fn card_size(t: &Track, target: Target) -> u64 {
     match target {
         Target::Mp3 => (t.duration.as_secs_f64() * 40_000.0) as u64,
+        Target::FlacCd => {
+            let (bits, rate) = (t.bit_depth.unwrap_or(24).max(16) as u64, t.sample_rate.unwrap_or(96_000).max(1) as u64);
+            t.size * 16 * cd_rate(rate as u32) as u64 / (bits * rate)
+        }
         _ => t.size,
     }
 }
@@ -106,9 +148,17 @@ pub fn card_size(t: &Track, target: Target) -> u64 {
 pub struct Options {
     pub album_order: AlbumOrder,
     pub unplayable: Unplayable,
+    /// Write hi-res lossless songs at CD quality (16-bit, 44.1/48 kHz) to save space.
+    pub cd_quality: bool,
     pub write_tags: bool,
     pub clean_mac_files: bool,
     pub singles_folder: String,
+}
+
+impl Options {
+    pub fn rules(&self) -> Rules {
+        Rules { unplayable: self.unplayable, cd_quality: self.cd_quality }
+    }
 }
 
 impl Default for Options {
@@ -116,6 +166,7 @@ impl Default for Options {
         Options {
             album_order: AlbumOrder::Year,
             unplayable: Unplayable::default(),
+            cd_quality: false,
             write_tags: true,
             clean_mac_files: true,
             singles_folder: "Singles".into(),
@@ -274,7 +325,7 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
             let album_dir = album_folder(album, custom.album_name(ck, album), position, opts);
             for &i in &album.tracks {
                 let t = &tracks[i];
-                let (target, skip) = match target(t, opts.unplayable) {
+                let (target, skip) = match target(t, opts.rules()) {
                     Ok(to) => (to, None),
                     Err(why) => (Target::Copy, Some(why)),
                 };
@@ -305,30 +356,44 @@ mod tests {
 
     #[test]
     fn what_unplayable_formats_become() {
+        let r = |unplayable| Rules { unplayable, cd_quality: false };
         let m4a = |codec: &str| Track { ext: "m4a".into(), codec: Some(codec.into()), ..Default::default() };
         let flac = Track { ext: "flac".into(), ..Default::default() };
         // RECHO's own formats are copied whatever the setting.
         for u in [Unplayable::Leave, Unplayable::Copy, Unplayable::Convert] {
-            assert_eq!(target(&flac, u), Ok(Target::Copy));
+            assert_eq!(target(&flac, r(u)), Ok(Target::Copy));
         }
-        assert!(target(&m4a("mp4a"), Unplayable::Leave).is_err());
-        assert_eq!(target(&m4a("mp4a"), Unplayable::Copy), Ok(Target::Copy));
+        assert!(target(&m4a("mp4a"), r(Unplayable::Leave)).is_err());
+        assert_eq!(target(&m4a("mp4a"), r(Unplayable::Copy)), Ok(Target::Copy));
         // A lossy song inside an album file can't be copied as a song of its own.
         let lossy_cue = Track { cue: Some(Default::default()), ..Track { ext: "mp3".into(), ..Default::default() } };
-        assert!(target(&lossy_cue, Unplayable::Copy).is_err());
+        assert!(target(&lossy_cue, r(Unplayable::Copy)).is_err());
         // Converting needs ffmpeg (and LAME for MP3); without them the reason says so.
         let ff = crate::audio::ffmpeg().is_some();
-        assert_eq!(target(&m4a("alac"), Unplayable::Convert).is_ok(), ff);
+        assert_eq!(target(&m4a("alac"), r(Unplayable::Convert)).is_ok(), ff);
         if ff {
-            assert_eq!(target(&m4a("alac"), Unplayable::Convert), Ok(Target::Flac), "lossless becomes FLAC");
-            assert_eq!(target(&m4a("ac-4"), Unplayable::Convert), Err("no decoder for this format"));
+            assert_eq!(target(&m4a("alac"), r(Unplayable::Convert)), Ok(Target::Flac), "lossless becomes FLAC");
+            assert_eq!(target(&m4a("ac-4"), r(Unplayable::Convert)), Err("no decoder for this format"));
             if crate::audio::ffmpeg_encodes("libmp3lame") {
-                assert_eq!(target(&m4a("ec-3"), Unplayable::Convert), Ok(Target::Mp3), "lossy becomes MP3, never FLAC");
+                assert_eq!(target(&m4a("ec-3"), r(Unplayable::Convert)), Ok(Target::Mp3), "lossy becomes MP3, never FLAC");
             }
         }
         assert_eq!(Target::Mp3.ext(&m4a("mp4a")), "mp3");
         let song = Track { duration: std::time::Duration::from_secs(100), size: 9_000_000, ..m4a("mp4a") };
         assert_eq!(card_size(&song, Target::Mp3), 4_000_000);
+    }
+
+    #[test]
+    fn cd_quality_for_hires() {
+        let flac = |bits, rate| Track { ext: "flac".into(), bit_depth: Some(bits), sample_rate: Some(rate), size: 100_000_000, ..Default::default() };
+        let cd = Rules { unplayable: Unplayable::Convert, cd_quality: true };
+        let ff = crate::audio::ffmpeg().is_some();
+        assert_eq!(target(&flac(24, 192_000), cd), Ok(if ff { Target::FlacCd } else { Target::Copy }), "only with ffmpeg; else as it is");
+        assert_eq!(target(&flac(16, 44_100), cd), Ok(Target::Copy), "already CD quality");
+        assert_eq!(target(&flac(24, 192_000), Rules { cd_quality: false, ..cd }), Ok(Target::Copy));
+        assert_eq!((cd_rate(192_000), cd_rate(96_000), cd_rate(88_200), cd_rate(44_100)), (48_000, 48_000, 44_100, 44_100));
+        assert_eq!(card_size(&flac(24, 192_000), Target::FlacCd), 16_666_666);
+        assert_eq!(card_size(&flac(24, 96_000), Target::FlacCd), 33_333_333);
     }
 
     #[test]

@@ -112,7 +112,7 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     }
     let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
     let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
-    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.unplayable) {
+    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.rules()) {
         p.playlist_files += copies.len();
         for c in copies {
             check(&c.rel, c.track, c.target, &mut p, &mut keep);
@@ -154,7 +154,7 @@ pub fn write(
     let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, &mut progress);
 
     let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
-    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.unplayable, &w.manifest, |_, _| {});
+    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.rules(), &w.manifest, |_, _| {});
 
     let mut manifest = r.written;
     manifest.extend(pl.written);
@@ -186,7 +186,7 @@ mod tests {
 
     use super::*;
 
-    /// `NEATLIBRARY_CONVERT=<folder> cargo test -- --ignored convert_write --nocapture`
+    /// `NEATLIBRARY_CONVERT=<folder> [NEATLIBRARY_CD=1] cargo test -- --ignored convert_write --nocapture`
     /// Writes a folder of songs RECHO can't play (ALAC, AAC, Dolby…) to a temporary "card" with
     /// conversion on, reports what each became, and checks that a second write converts nothing.
     #[test]
@@ -200,6 +200,8 @@ mod tests {
         let index = crate::library::grouping::build(&tracks, &Default::default());
         let mut w = WriteProfile::default();
         assert!(w.options.unplayable == super::super::Unplayable::Convert, "converting is the default");
+        // NEATLIBRARY_CD=1: hi-res at CD quality too.
+        w.options.cd_quality = std::env::var_os("NEATLIBRARY_CD").is_some();
         let plan = w.plan(&tracks, &index);
         for p in plan.iter().filter(|p| p.skip.is_some()) {
             println!("  left out: {} ({})", tracks[p.track].path.display(), p.skip.unwrap());

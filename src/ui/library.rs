@@ -19,7 +19,7 @@ use crate::library::Track;
 const FOLDER_CHARS: usize = 60;
 
 /// A track row painted directly so columns line up like a table without any grid lines.
-fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, on_card: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -31,6 +31,10 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
     let font = FontId::proportional(14.5);
     let num_color = if playing { ink.accent } else { ink.muted };
     p.text(egui::pos2(rect.left() + 30.0, y), Align2::RIGHT_CENTER, if playing { "▸" } else { number }, font.clone(), num_color);
+    // On the card (as of the last write): a small dot in the margin, like a library card's stamp.
+    if on_card {
+        p.circle_filled(egui::pos2(rect.left() + 6.0, y), 2.2, ink.muted);
+    }
 
     let mut title = t.display_title();
     if show_artist && let Some(a) = &t.artist {
@@ -223,6 +227,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             if let Some(e) = &al.edition {
                                 meta = format!("edition {} of {} · {} · {meta}", e.rank + 1, e.count, e.format);
                             }
+                            match al.tracks.iter().filter(|i| app.on_card.contains(i)).count() {
+                                0 => {}
+                                n if n == al.tracks.len() => meta.push_str(" · on card"),
+                                n => meta.push_str(&format!(" · {n} of {} on card", al.tracks.len())),
+                            }
                             let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
                             let off_text = match off {
                                 0 => String::new(),
@@ -270,7 +279,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 (Some(n), false) => n.to_string(),
                                 (None, _) => String::new(),
                             };
-                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add);
+                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, app.on_card.contains(&ti));
                             if r.double_clicked() || r.clicked() {
                                 actions.push(Action::Play(al.tracks.clone(), pos));
                             }

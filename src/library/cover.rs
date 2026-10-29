@@ -80,9 +80,11 @@ pub fn for_embedding(image: &Path) -> anyhow::Result<Vec<u8>> {
     shrink(&std::fs::read(image).with_context(|| format!("reading {}", image.display()))?)
 }
 
-/// The front cover embedded in a file, ready to embed in another (see `for_embedding`).
-pub fn embedded_for_embedding(path: &Path) -> Option<Vec<u8>> {
-    shrink(&embedded(path)?).ok()
+/// The front cover of a file, ready to embed in another (see `for_embedding`): the one embedded
+/// in it, else the image beside it.
+pub fn cover_for_embedding(path: &Path) -> Option<Vec<u8>> {
+    let bytes = embedded(path).or_else(|| std::fs::read(beside(path)?).ok())?;
+    shrink(&bytes).ok()
 }
 
 fn shrink(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {

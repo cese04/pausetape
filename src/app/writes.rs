@@ -55,6 +55,7 @@ impl App {
         self.saved.active_write = i.min(self.saved.writes.len() - 1);
         self.write_preview = None;
         self.card_survey = None;
+        self.refresh_on_card();
         self.card_renaming = None;
     }
 
@@ -121,11 +122,44 @@ impl App {
             self.card_survey = Some((name, survey));
             return;
         }
-        let gather = self.gather_on_take_over;
+        let (gather, clean, clean_mac) = (self.gather_on_take_over, self.delete_clutter_on_take_over, self.write().options.clean_mac_files);
+        let ctx = self.ctx.clone();
         self.busy = Some(Busy { label: "taking over the card".into(), done: 0, total: 0 });
+        self.problems = None;
         self.spawn(move |tx| {
-            let out = card::adopt::take_over(&survey, &dest, gather, &name);
+            let out = card::adopt::take_over(&survey, &dest, gather, clean, clean_mac, &name, |done, total| {
+                if done % 10 == 0 || done == total {
+                    let _ = tx.send(Msg::WriteProgress(done, total));
+                    ctx.request_repaint();
+                }
+            });
             let _ = tx.send(Msg::TookOver(name, Box::new(out)));
+        });
+    }
+
+    /// Copy the card's music that isn't in the library into the music folder (see
+    /// `card::adopt::import`), then rescan so it joins the library.
+    pub fn import_from_card(&mut self) {
+        let Some((name, survey)) = self.card_survey.take() else { return };
+        let (Some(dest), Some(music)) = (self.write().dest.clone(), self.saved.source.clone()) else {
+            self.card_survey = Some((name, survey));
+            return;
+        };
+        if self.busy.is_some() {
+            self.card_survey = Some((name, survey));
+            return;
+        }
+        let ctx = self.ctx.clone();
+        self.busy = Some(Busy { label: "copying music from the card".into(), done: 0, total: 0 });
+        self.problems = None;
+        self.spawn(move |tx| {
+            let out = card::adopt::import(&survey, &dest, &music, |done, total| {
+                if done % 10 == 0 {
+                    let _ = tx.send(Msg::WriteProgress(done, total));
+                    ctx.request_repaint();
+                }
+            });
+            let _ = tx.send(Msg::ImportedFromCard(Box::new(out)));
         });
     }
 
@@ -136,6 +170,7 @@ impl App {
             return;
         }
         self.busy = Some(Busy { label: "putting the card back".into(), done: 0, total: 0 });
+        self.problems = None;
         self.spawn(move |tx| {
             let r = card::adopt::undo_latest(&w.name, &dest).map_err(|e| format!("{e:#}"));
             let _ = tx.send(Msg::UndidTakeOver(w.name, r));
@@ -150,6 +185,7 @@ impl App {
         }
         let plan = w.plan(&self.tracks, &self.index);
         self.busy = Some(Busy { label: format!("writing “{}”", w.name), done: 0, total: plan.len() });
+        self.problems = None;
         let tracks = self.tracks.clone();
         let playlists = self.saved.playlists.clone();
         let ctx = self.ctx.clone();

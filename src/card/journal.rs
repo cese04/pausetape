@@ -20,6 +20,16 @@ pub(super) fn save_journal(moves: &[(PathBuf, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
+/// Save the problems of a card operation as a text file people can read or send; its path.
+pub fn save_problems(what: &str, errors: &[String]) -> Option<PathBuf> {
+    let dir = journal_dir().join("problems");
+    fs::create_dir_all(&dir).ok()?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    let path = dir.join(format!("{stamp} {what}.txt"));
+    fs::write(&path, format!("{what}: {} problems\n\n{}\n", errors.len(), errors.join("\n"))).ok()?;
+    Some(path)
+}
+
 pub fn latest_journal() -> Option<PathBuf> {
     let mut files: Vec<PathBuf> = fs::read_dir(journal_dir()).ok()?.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
     files.sort();

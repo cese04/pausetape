@@ -78,6 +78,23 @@ impl Shooter {
                 app.card_expanded.insert(app.index.clusters[a.cluster].key.clone());
             }
             app.write_mut().playlists.insert("Road Trip".into());
+            // NEATLIBRARY_SHOT_ON_CARD=<text>: pretend, in memory, that the write put the albums
+            // whose title contains <text> (all but one song of the first) on the card.
+            if let Ok(what) = std::env::var("NEATLIBRARY_SHOT_ON_CARD") {
+                let plan = app.write().plan(&app.tracks, &app.index);
+                let mut first = true;
+                let mut written = Vec::new();
+                for a in &app.index.artists {
+                    for al in a.albums.iter().filter(|al| al.title.as_deref().is_some_and(|t| t.to_lowercase().contains(&what.to_lowercase()))) {
+                        let skip_one = std::mem::take(&mut first);
+                        for p in plan.iter().filter(|p| al.tracks.contains(&p.track)).skip(skip_one as usize) {
+                            written.push(crate::card::Written { rel: p.rel.clone(), size: 0, source: None });
+                        }
+                    }
+                }
+                app.write_mut().manifest = written;
+                app.refresh_on_card();
+            }
             app.preview_write();
         }
         let (n, half) = (self.step / 2, self.step % 2);

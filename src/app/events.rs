@@ -68,15 +68,10 @@ impl App {
                 }
                 Msg::Written(name, out) => {
                     self.busy = None;
+                    let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
                     self.notice(format!(
-                        "“{name}”: {} copied · {} unchanged · {} removed · {} left out · {} retagged · {} mac files cleaned{}",
-                        out.copied,
-                        out.unchanged,
-                        out.removed,
-                        out.skipped,
-                        out.tagged,
-                        out.cleaned,
-                        if out.errors.is_empty() { String::new() } else { format!(" · {} errors (first: {})", out.errors.len(), out.errors[0]) }
+                        "“{name}”: {} copied · {} unchanged · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
+                        out.copied, out.unchanged, out.removed, out.skipped, out.tagged, out.cleaned,
                     ));
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
                         w.manifest = out.manifest;
@@ -84,6 +79,7 @@ impl App {
                     }
                     self.write_preview = None;
                     self.volumes = card::volumes();
+                    self.refresh_on_card();
                 }
                 Msg::Surveyed(name, s) => {
                     self.busy = None;
@@ -91,7 +87,7 @@ impl App {
                         self.card_survey = Some((name, *s));
                     }
                 }
-                Msg::TookOver(name, out) => {
+                Msg::TookOver(name, mut out) => {
                     self.busy = None;
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
                         // The moved files are now this write's, as if it had copied them.
@@ -102,9 +98,23 @@ impl App {
                             }
                         }
                     }
-                    let errors = if out.errors.is_empty() { String::new() } else { format!(" · {} problems (first: {})", out.errors.len(), out.errors[0]) };
-                    self.notice(format!("card taken over: {} songs moved into place, {} other files gathered{errors}", out.moved, out.gathered));
+                    let errors = self.report_problems("taking over the card", std::mem::take(&mut out.errors));
+                    let deleted = if out.deleted > 0 { format!(", {} clutter files deleted ({})", out.deleted, crate::ui::text::bytes(out.deleted_bytes)) } else { String::new() };
+                    let cleaned = if out.cleaned > 0 { format!(", {} macOS ._ files removed", out.cleaned) } else { String::new() };
+                    self.notice(format!("card taken over: {} songs moved into place, {} other files gathered{deleted}{cleaned}{errors}", out.moved, out.gathered));
+                    self.refresh_on_card();
                     self.preview_write();
+                }
+                Msg::ImportedFromCard(mut out) => {
+                    self.busy = None;
+                    let errors = self.report_problems("copying music from the card", std::mem::take(&mut out.errors));
+                    self.notice(format!(
+                        "copied {} files ({}) from the card into “{}” in your music folder{errors}. Check the card again once the library is rescanned: those songs can then be taken over too.",
+                        out.copied,
+                        crate::ui::text::bytes(out.bytes),
+                        card::adopt::IMPORT_FOLDER
+                    ));
+                    self.scan();
                 }
                 Msg::UndidTakeOver(name, r) => {
                     self.busy = None;
@@ -114,8 +124,9 @@ impl App {
                                 let gone: HashSet<String> = released.iter().map(|r| r.to_string_lossy().to_lowercase()).collect();
                                 w.manifest.retain(|m| !gone.contains(&m.rel.to_string_lossy().to_lowercase()));
                             }
-                            let errors = if errors.is_empty() { String::new() } else { format!(" · {} problems (first: {})", errors.len(), errors[0]) };
+                            let errors = self.report_problems("putting the card back", errors);
                             self.notice(format!("card put back as it was: {restored} files{errors}"));
+                            self.refresh_on_card();
                         }
                         Err(e) => self.notice(format!("undo: {e}")),
                     }

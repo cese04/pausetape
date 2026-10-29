@@ -70,6 +70,7 @@ pub fn source_key(t: &Track, target: Target) -> Option<String> {
     let format = match target {
         Target::Copy => return None,
         Target::Flac => "flac",
+        Target::FlacCd => "flac16",
         Target::Mp3 => "mp3",
     };
     let span = t.cue.as_ref().map(|c| format!("{}-{}", c.start, c.end.map(|e| e.to_string()).unwrap_or_default())).unwrap_or_default();
@@ -123,6 +124,10 @@ fn encode(t: &Track, target: Target, dst: &Path) -> Result<()> {
     match target {
         Target::Flac => {
             cmd.args(["-c:a", "flac", "-f", "flac"]);
+        }
+        Target::FlacCd => {
+            let rate = super::plan::cd_rate(t.sample_rate.unwrap_or(48_000));
+            cmd.args(["-af", &format!("aresample=osr={rate}:osf=s16:dither_method=triangular"), "-c:a", "flac", "-f", "flac"]);
         }
         _ => {
             // LAME takes at most 48 kHz; Dolby and other surround mixes fold down to stereo.
@@ -274,12 +279,15 @@ pub fn prune(dest: &Path, previous: &[Written], keep: &HashSet<String>) -> usize
     removed
 }
 
-fn remove_empty_dirs(root: &Path) {
-    // Deepest first, so parents become empty after their children go. Ignore Finder droppings.
+/// Remove folders under `root` that hold nothing (or only Finder droppings). Hidden folders,
+/// such as the system's own on a card, are left alone.
+pub(super) fn remove_empty_dirs(root: &Path) {
+    // Deepest first, so parents become empty after their children go.
     let dirs: Vec<PathBuf> = WalkDir::new(root)
         .min_depth(1)
         .contents_first(true)
         .into_iter()
+        .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'))
         .flatten()
         .filter(|e| e.file_type().is_dir())
         .map(|e| e.into_path())

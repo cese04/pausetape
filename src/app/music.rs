@@ -52,6 +52,19 @@ impl App {
                 .count(),
             None => 0,
         };
+        self.refresh_on_card();
+    }
+
+    /// Which tracks the active write has on its card: planned files its manifest records. Works
+    /// without the card connected (it's the state of the last write).
+    pub fn refresh_on_card(&mut self) {
+        let w = self.write();
+        let have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
+        self.on_card = if have.is_empty() {
+            HashSet::new()
+        } else {
+            w.plan(&self.tracks, &self.index).iter().filter(|p| p.skip.is_none() && have.contains(&p.rel.to_string_lossy().to_lowercase())).map(|p| p.track).collect()
+        };
     }
 
     pub fn dirty_count(&self) -> usize {

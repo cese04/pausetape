@@ -10,7 +10,7 @@ pub fn data_dir() -> PathBuf {
     eframe::storage_dir(crate::APP_ID).unwrap_or_else(std::env::temp_dir)
 }
 
-/// Open a folder in Finder, Explorer, or the desktop's file manager.
+/// Open a folder in Finder, Explorer, or the desktop's file manager (a file in its usual app).
 pub fn reveal(path: &Path) {
     let cmd = if cfg!(target_os = "macos") {
         "open"
