@@ -288,3 +288,27 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   "Guns N' Roses-Appetite For Destruction" (no spaces round the dash) is split when the library
   knows that artist from other songs.
 - 46 tests (36 offline).
+
+### 23. The card as "what you chose", with one Sync (2026-10-29)
+Calibre's device view, for music: the library is where you choose what goes on the card.
+- **What you chose:** a write now holds a chosen set: artists taken whole (albums added to the
+  library later go too) and single albums. An album left out of a whole artist stays out. New
+  writes start empty. Writes saved before this become "every artist that wasn't left out,
+  whole", which puts the same music on the card as before.
+- **Library rows:** each album has *send to card* / *take off card*, each artist *send all to
+  the card* / *take all off the card*. A mark beside albums and songs says where they stand:
+  a dot when on the card, a ring when the next Sync adds them, a struck red ring when it takes
+  them off ("swapped for the other copy" when another edition replaces it). When the album on
+  the card has a copy in higher quality, *use the FLAC copy* (or whichever format) swaps it.
+- **One Sync:** clicks only change the choice; the card changes when you press **Sync** (the
+  write, which copies, converts, removes and retags only what changed). The pending changes come
+  from comparing the choice with the write's manifest, so they're right with the card unplugged.
+- **The strip:** above the library list, while the write has a card: a space bar, "156 GB
+  chosen, room for 67 GB · 89 GB over", the albums Sync adds, swaps and takes off, and *sync
+  now*.
+- **Card tab:** its header is pinned: the space bar, "doesn't fit" with the CD-quality offer,
+  what the next Sync changes, and **Compare** / **Sync**. Everything else scrolls under it. The
+  list's ticks are the same choice as the library's buttons.
+- Debug demo: `NEATLIBRARY_SHOT_TOGGLE=<album text>` sends matching albums to the card or takes
+  them off, in memory.
+- 47 tests (37 offline).

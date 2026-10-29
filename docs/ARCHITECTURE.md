@@ -35,7 +35,8 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    or separate same-name albums.
    Result: `Index` = clusters, suggestions, and `artists → albums → track indices`.
 3. **Plan** (`card/plan.rs`): `Options` (album order, what to do with formats RECHO can't play,
-   …) + `Custom` (per-write exclusions, editions, names, order) → list of
+   …) + `Custom` (what the user chose: whole artists and single albums, `Chosen`; editions,
+   names, order) → list of
    `PlanItem { track, rel path, skip reason, target }`, FAT-safe and collision-free
    (case-insensitive). `target` says how the song becomes a card file: copied, or made by
    ffmpeg as FLAC or MP3 320 (`card::target`).
@@ -70,7 +71,7 @@ src/
 │   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
 │   └── grouping.rs    clusters, merge suggestions, artist → album → track index
 ├── card/              putting music on the SD card (and tidying the music folder)
-│   ├── plan.rs        Options + Custom → planned paths (album order, names, exclusions)
+│   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
 │   ├── adopt.rs       a card's existing music: survey, take over (move into place, undo), copy into the library

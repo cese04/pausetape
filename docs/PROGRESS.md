@@ -115,7 +115,7 @@ or two, **M** = about a day, **L** = several days.
 | Convert on send | FLAC / MP3 320, CUE albums cut into songs | Done |
 | Download metadata | MusicBrainz suggestions, checked against your songs | Done |
 | Duplicate finder | Editions; copies covered by a same-or-better copy | Done (no actions yet) |
-| Device view | Card writes with a manifest; taking over a card's existing music; "on card" marks; copying music only on the card into the library | Step 1 (mostly done) |
+| Device view | Card writes with a manifest; taking over a card's existing music; send to / take off the card from the library with one Sync; on-card and pending marks; copying music only on the card into the library | Step 1 (done but the guided take-over) |
 | Edit metadata, bulk edit | — | Step 2 |
 | Download covers | Covers beside the files can be embedded | Step 3 |
 | Sortable, searchable library | Artist list and text filter | Step 4 |
@@ -152,6 +152,15 @@ library, and 2.6 GB is iTunes and system clutter.
 Where it stands (2026-10-29): steps 1–2 done. The first take-over moved 659 files and stopped
 on locked files (see CHANGELOG §22); the take-over now unlocks them, so check the card again and
 take it over once more.
+
+**Card UX, from the plan of 2026-10-29.** Done: (1) each album and artist row says where it
+stands with the card and has one button; a better copy can replace the one on the card;
+(2) clicks wait for one **Sync**, with a strip above the library and a pinned header in the
+card tab; (3) the card is what you chose, not everything minus exclusions. Still to do:
+(4) fold the card tab's settings (formats, CD quality, album order, tags, singles folder,
+playlists) away by default; (5) the take-over as a one-time guided dialog behind a banner;
+(6) a "Card" filter in the library (on card, not on card, better copy available), with step 4's
+table.
 
 Folded in along the way: choosing among alternative MusicBrainz releases, the artist from tagged
 neighbours ([NEXT](NEXT.md) B4), shorter folder names if the device test shows cut-off names,

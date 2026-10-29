@@ -175,6 +175,14 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     a write, the library shows "on card" on the albums written.
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).
+19a. In the library, **take off card** on an album that's on the card: its songs get a struck red
+    ring and "taken off at the next sync"; **send to card** on another: rings and "added at the
+    next sync". The strip above the list and the card tab's pinned header count both. **Sync**
+    (or *sync now*): the marks become dots, and the card has exactly that change. With the card
+    unplugged, the marks and counts stay the same; *Sync* says "card not connected".
+19b. **New** write: nothing is chosen. **send all to the card** on an artist: all its albums
+    (one edition each) are chosen; a new album of that artist added to the music folder is
+    chosen after a rescan.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 
 ### F. Playlists
