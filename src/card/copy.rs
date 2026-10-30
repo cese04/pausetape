@@ -162,32 +162,30 @@ pub fn execute(
 ) -> Report {
     let mut r = Report::default();
     let previous = by_rel(previous);
+    if mode == Mode::CopyTo {
+        copy_to(tracks, plan, dest, opts, &previous, &mut progress, &mut r);
+        if opts.clean_mac_files {
+            r.cleaned = clean_mac_files(dest);
+        }
+        return r;
+    }
     for (n, item) in plan.iter().enumerate() {
         let t = &tracks[item.track];
         progress(Progress::Step { done: n, total: plan.len() });
         // A song inside an album file can be cut out for the card, but never moved.
-        if item.skip.is_some() || (mode == Mode::MoveInPlace && t.cue.is_some()) {
+        if item.skip.is_some() || t.cue.is_some() {
             r.skipped += 1;
             continue;
         }
-        let dst = dest.join(&item.rel);
-        let prev = previous.get(&item.rel.to_string_lossy().to_lowercase()).copied();
-        match place(t, item.target, &dst, mode, opts, prev, &mut r) {
-            Ok(()) if mode == Mode::CopyTo => {
-                let size = fs::metadata(&dst).map(|m| m.len()).unwrap_or(t.size);
-                r.written.push(Written { rel: item.rel.clone(), size, source: source_key(t, item.target) });
-            }
-            Ok(()) => {}
-            Err(e) => r.errors.push(format!("{}: {e:#}", t.path.display())),
+        if let Err(e) = move_into_place(t, &dest.join(&item.rel), opts, &mut r) {
+            r.errors.push(format!("{}: {e:#}", t.path.display()));
         }
     }
-    if mode == Mode::MoveInPlace {
-        remove_empty_dirs(source);
-        if !r.moves.is_empty()
-            && let Err(e) = save_journal(&r.moves)
-        {
-            r.errors.push(format!("saving undo journal: {e:#}"));
-        }
+    remove_empty_dirs(source);
+    if !r.moves.is_empty()
+        && let Err(e) = save_journal(&r.moves)
+    {
+        r.errors.push(format!("saving undo journal: {e:#}"));
     }
     if opts.clean_mac_files {
         r.cleaned = clean_mac_files(dest);
@@ -195,45 +193,151 @@ pub fn execute(
     r
 }
 
-fn place(t: &Track, target: Target, dst: &Path, mode: Mode, opts: &Options, prev: Option<&Written>, r: &mut Report) -> Result<()> {
-    let tag = |r: &mut Report| -> Result<()> {
-        if t.dirty && opts.write_tags {
-            write_tags(t, dst)?;
-            r.tagged += 1;
+/// Copy mode. Songs that ffmpeg has to make (converted, or cut from an album file) are made by
+/// a pool of workers, one per spare core, in a work folder on this computer; one writer puts
+/// files on the card: a finished song as soon as there is one, plain copies in between. A card
+/// writes one file at a time at best, so the writer never waits on ffmpeg while there's
+/// something it could copy.
+fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, previous: &HashMap<String, &Written>, progress: &mut impl FnMut(Progress), r: &mut Report) {
+    use std::sync::{Mutex, mpsc};
+    let total = plan.len();
+    let mut done = 0;
+    let mut written: Vec<(usize, Written)> = Vec::new();
+    let (mut plain, mut made) = (Vec::new(), Vec::new());
+    for (n, item) in plan.iter().enumerate() {
+        let t = &tracks[item.track];
+        let dst = dest.join(&item.rel);
+        if item.skip.is_some() {
+            r.skipped += 1;
+        } else if t.path == dst || up_to_date(t, item.target, &dst, previous.get(&item.rel.to_string_lossy().to_lowercase()).copied()) {
+            r.unchanged += 1;
+            written.push((n, Written { rel: item.rel.clone(), size: fs::metadata(&dst).map(|m| m.len()).unwrap_or(t.size), source: source_key(t, item.target) }));
+        } else if item.target == Target::Copy {
+            plain.push(n);
+            continue;
+        } else {
+            made.push(n);
+            continue;
         }
-        Ok(())
-    };
-    if t.path == dst {
+        done += 1;
+    }
+    progress(Progress::Step { done, total });
+
+    let work = std::env::temp_dir().join(format!("neatlibrary-card-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&work);
+    if !made.is_empty()
+        && let Err(e) = fs::create_dir_all(&work)
+    {
+        r.errors.push(format!("making a work folder for conversions: {e}"));
+        made.clear();
+    }
+    let workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).saturating_sub(1).clamp(1, 8).min(made.len().max(1));
+    let queue = Mutex::new(made.iter().copied());
+    // Bounded, so finished songs can't pile up in the work folder while the card is slow.
+    let (tx, rx) = mpsc::sync_channel::<(usize, Result<PathBuf>)>(workers);
+    std::thread::scope(|s| {
+        for _ in 0..if made.is_empty() { 0 } else { workers } {
+            let (tx, queue, work) = (tx.clone(), &queue, &work);
+            s.spawn(move || {
+                loop {
+                    let Some(n) = queue.lock().unwrap_or_else(|e| e.into_inner()).next() else { break };
+                    let item = &plan[n];
+                    let ext = item.rel.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+                    let out = work.join(format!("{n}.{ext}"));
+                    let res = materialise(&tracks[item.track], item.target, &out).map(|()| out.clone());
+                    if res.is_err() {
+                        let _ = fs::remove_file(&out);
+                    }
+                    if tx.send((n, res)).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(tx);
+        let mut plain = plain.into_iter();
+        let mut waiting = made.len();
+        loop {
+            // A finished song first (its work file goes once it's on the card), else a plain copy,
+            // else wait for ffmpeg.
+            let (n, res) = match rx.try_recv() {
+                Ok(m) => m,
+                Err(_) => match plain.next() {
+                    Some(n) => (n, Ok(tracks[plan[n].track].path.clone())),
+                    None if waiting == 0 => break,
+                    None => match rx.recv() {
+                        Ok(m) => m,
+                        Err(_) => break,
+                    },
+                },
+            };
+            let item = &plan[n];
+            let t = &tracks[item.track];
+            let is_made = item.target != Target::Copy;
+            if is_made {
+                waiting -= 1;
+            }
+            let dst = dest.join(&item.rel);
+            let placed = res.and_then(|from| {
+                let copied = dst
+                    .parent()
+                    .map_or(Ok(()), |p| fs::create_dir_all(p).with_context(|| format!("creating {}", p.display())))
+                    .and_then(|()| plain_copy(&from, &dst));
+                if is_made {
+                    let _ = fs::remove_file(&from);
+                }
+                copied
+            });
+            let tagged = placed.and_then(|()| {
+                if t.dirty && opts.write_tags {
+                    write_tags(t, &dst)?;
+                    r.tagged += 1;
+                }
+                Ok(())
+            });
+            match tagged {
+                Ok(()) => {
+                    r.copied += 1;
+                    let size = fs::metadata(&dst).map(|m| m.len()).unwrap_or(t.size);
+                    written.push((n, Written { rel: item.rel.clone(), size, source: source_key(t, item.target) }));
+                }
+                Err(e) => r.errors.push(format!("{}: {e:#}", t.path.display())),
+            }
+            done += 1;
+            progress(Progress::Step { done, total });
+        }
+    });
+    let _ = fs::remove_dir_all(&work);
+    // In plan order, as callers (and the manifest) expect.
+    written.sort_by_key(|(n, _)| *n);
+    r.written = written.into_iter().map(|(_, w)| w).collect();
+}
+
+/// Reorganising: move `t` to `dst` within the music folder, then save its corrected tags.
+fn move_into_place(t: &Track, dst: &Path, opts: &Options, r: &mut Report) -> Result<()> {
+    if t.path != dst {
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        // Case-only renames report the destination as existing on case-insensitive volumes.
+        let case_only = t.path.to_string_lossy().to_lowercase() == dst.to_string_lossy().to_lowercase();
+        if dst.exists() && !case_only {
+            anyhow::bail!("{} already exists; not overwriting", dst.display());
+        }
+        if fs::rename(&t.path, dst).is_err() {
+            plain_copy(&t.path, dst)?;
+            fs::remove_file(&t.path)?;
+        }
+        r.moves.push((t.path.clone(), dst.to_path_buf()));
+        r.moved += 1;
+    } else {
         r.unchanged += 1;
-        return tag(r);
     }
-    if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    if t.dirty && opts.write_tags {
+        write_tags(t, dst)?;
+        r.tagged += 1;
     }
-    match mode {
-        Mode::CopyTo => {
-            if up_to_date(t, target, dst, prev) {
-                r.unchanged += 1;
-                return Ok(());
-            }
-            materialise(t, target, dst)?;
-            r.copied += 1;
-        }
-        Mode::MoveInPlace => {
-            // Case-only renames report the destination as existing on case-insensitive volumes.
-            let case_only = t.path.to_string_lossy().to_lowercase() == dst.to_string_lossy().to_lowercase();
-            if dst.exists() && !case_only {
-                anyhow::bail!("{} already exists; not overwriting", dst.display());
-            }
-            if fs::rename(&t.path, dst).is_err() {
-                plain_copy(&t.path, dst)?;
-                fs::remove_file(&t.path)?;
-            }
-            r.moves.push((t.path.clone(), dst.to_path_buf()));
-            r.moved += 1;
-        }
-    }
-    tag(r)
+    Ok(())
 }
 
 /// Byte-for-byte copy. `std::fs::copy` on macOS also copies extended attributes, which on a
