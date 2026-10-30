@@ -183,6 +183,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 19b. **New** write: nothing is chosen. **send all to the card** on an artist: all its albums
     (one edition each) are chosen; a new album of that artist added to the music folder is
     chosen after a rescan.
+19c. An album whose songs name different artists (a duet without an album-artist tag, a
+    compilation flag on some songs) shows once, under one artist. In the header, **N songs
+    stored twice** opens the duplicates view; on such an album the extra copies say *stored
+    twice*, and **move the extra copies to the Trash** puts them in the Trash (Finder shows
+    them there) and rescans. A repeat already on the card gets a struck red ring, and the next
+    Sync takes it off.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 
 ### F. Playlists

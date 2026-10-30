@@ -31,8 +31,11 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    Result: `Vec<Track>`.
 2. **Group** (`library/names.rs`, `library/grouping.rs`): artist spellings collapse to a *key* ("The Beatles",
    "Beatles, The" → `beatles`); keys merge by user decisions; near-misses become suggestions.
+   An album (same name, same folder) whose songs name different artists stays under one: its
+   album artist, an artist with ¾ of the songs, or Various Artists (`keep_albums_together`).
    Albums with the same name are split by folder into editions (copies sharing their songs)
-   or separate same-name albums.
+   or separate same-name albums. Songs an album holds twice (same number, size and length)
+   are its `repeats`; the plan leaves them out.
    Result: `Index` = clusters, suggestions, and `artists → albums → track indices`.
 3. **Plan** (`card/plan.rs`): `Options` (album order, what to do with formats RECHO can't play,
    …) + `Custom` (what the user chose: whole artists and single albums, `Chosen`; editions,
@@ -40,12 +43,12 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    `PlanItem { track, rel path, skip reason, target }`, FAT-safe and collision-free
    (case-insensitive). `target` says how the song becomes a card file: copied, or made by
    ffmpeg as FLAC or MP3 320 (`card::target`).
-4. **Write** (`card/write.rs`, using `card/copy.rs` and `card/playlist.rs`): copy what
-   differs (songs inside an album file are cut out, and formats RECHO can't play converted,
-   with ffmpeg), export playlists,
-   prune files the *previous* write created that are no longer wanted (only if their size
-   still matches the manifest), clean macOS `._` files, and store the new manifest in the
-   write profile.
+4. **Write** (`card/write.rs`, using `card/copy.rs` and `card/playlist.rs`): prune songs the
+   *previous* write created that the plan no longer wants (only if their size still matches
+   the manifest; first, so the card has room), copy what differs (songs inside an album file
+   are cut out, and formats RECHO can't play converted, with ffmpeg), export playlists, prune
+   what's left over (old playlist files, songs that failed), clean macOS `._` files, and store
+   the new manifest in the write profile.
 5. **Play** (`audio/`, `library/cover.rs`): `audio::open` tries Symphonia, else converts with
    ffmpeg to a cached stereo WAV; `audio::Section` keeps to one song of an album file. The
    waveform (loudness every 100 ms) and the cover load in background threads.

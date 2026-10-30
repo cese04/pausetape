@@ -114,7 +114,7 @@ or two, **M** = about a day, **L** = several days.
 |---|---|---|
 | Convert on send | FLAC / MP3 320, CUE albums cut into songs | Done |
 | Download metadata | MusicBrainz suggestions, checked against your songs | Done |
-| Duplicate finder | Editions; copies covered by a same-or-better copy | Done (no actions yet) |
+| Duplicate finder | Editions; copies covered by a same-or-better copy; songs stored twice in an album, which can go to the Trash | Done (no actions for editions yet) |
 | Device view | Card writes with a manifest; taking over a card's existing music; send to / take off the card from the library with one Sync; on-card and pending marks; copying music only on the card into the library | Step 1 (done but the guided take-over) |
 | Edit metadata, bulk edit | — | Step 2 |
 | Download covers | Covers beside the files can be embedded | Step 3 |
@@ -209,7 +209,8 @@ Smaller items, ordered by value.
 - **Look up every album** in one go, as a queue with progress, then review the suggestions
   album by album. *M*
 - **Duplicate-track detection** (same recording in two places or formats). *M* Editions now
-  catch whole duplicate albums; single duplicate tracks are still unhandled.
+  catch whole duplicate albums, and exact repeats inside an album are found and can go to the
+  Trash; the same song in two albums or formats is still unhandled.
 - **Duplicate copies, next steps** (discussed 2026-10-28; for now copies are only pointed out):
   - a "prefer this copy" choice for all writes, folding the others in the library;
   - "these are different albums" to unlink a remaster or deluxe edition;

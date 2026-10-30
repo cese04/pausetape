@@ -312,3 +312,32 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Debug demo: `NEATLIBRARY_SHOT_TOGGLE=<album text>` sends matching albums to the card or takes
   them off, in memory.
 - 47 tests (37 offline).
+
+### 24. One album, one folder; songs stored twice (2026-10-29)
+- **Albums split over artists:** an album's songs went wherever each song's artist pointed, so
+  *Duality* landed half under "Lisa Gerrard & Pieter Bourke" and half under "Lisa Gerrard" (two
+  songs had no album-artist tag), *Suspended Animation* half under Various Artists (a
+  compilation flag on some songs only), and about 25 more, mostly soundtracks. An album (same
+  name, same folder) now stays together: under its album artist when the songs that have one
+  agree on it, else under an artist with three quarters of the songs, else under Various
+  Artists (split releases, soundtracks). Artists merged by hand count as one.
+- **Songs stored twice:** Windows' backup copies ("Black Dog (2015_05_12 05_18_04 UTC).mp3"
+  beside "… (2015_06_05 …).mp3") came along with the card's music: 478 songs (3.8 GB) were in
+  their albums twice, and 346 were on the card twice, as "Song" and "Song (2)". A song with the
+  same disc, number, size and length as another in its album is now an extra copy:
+  - the card gets it once, and the next Sync takes the extra copies off;
+  - the library marks it *stored twice*, notes it under the album with *move the extra copies to
+    the Trash*, and the header's "478 songs stored twice" opens the duplicates view, which can
+    move all of them at once. Each copy goes only if it is still the same file as the one that
+    stays (size, first and last 64 KB); the one with the shorter name stays.
+- The library's Sync strip and the card tab's pinned row wrap instead of pushing *sync now* and
+  the buttons off the edge.
+- **"Doesn't fit" growing during a write:** the room is what's free plus the write's own files,
+  but the files a running write adds count as its own only once it finishes, so the room shrank
+  as it went and an "over" amount appeared and grew. The room now holds at what it was when the
+  write started.
+- **Removing first:** a write removed deselected albums (and the songs on the card twice) only
+  after copying, so a choice that fits only once they're gone could fill the card halfway and
+  fail its last songs. Songs no longer wanted now go before anything is copied; playlist files
+  still wait for the end. A copy that fails (a full card) no longer leaves its `.partial` behind.
+- 49 tests (40 offline).
