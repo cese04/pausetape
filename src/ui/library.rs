@@ -8,6 +8,7 @@ use std::time::Duration;
 use egui::{Align, Align2, FontId, Layout, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
 
 use super::actions::{Action, apply};
+use super::icons::{self, Icon};
 use super::text::{self, plural};
 use super::theme::{self, ink};
 use super::widgets::{self, caps, link, muted, truncated};
@@ -122,26 +123,61 @@ fn album_minutes(tracks: &[Track], idxs: &[usize]) -> String {
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    ui.horizontal(|ui| {
-        caps(ui, "music folder");
+    // The music folder and what's in it.
+    ui.horizontal_wrapped(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Folder, ink.text);
         let name = app.saved.source.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "not chosen".into());
-        ui.label(RichText::new(name).strong()).on_hover_text(app.saved.source.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
-        if link(ui, "change").clicked() {
+        ui.label(RichText::new(name).size(18.0).color(ink.text)).on_hover_text(app.saved.source.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
+        let albums: usize = app.index.artists.iter().map(|a| a.albums.len()).sum();
+        let mut facts = format!("{} · {} · {}", plural(app.tracks.len(), "song"), plural(app.index.artists.len(), "artist"), plural(albums, "album"));
+        let dirty = app.dirty_count();
+        if dirty > 0 {
+            facts.push_str(&format!(" · {} with corrected tags", plural(dirty, "song")));
+        }
+        muted(ui, facts);
+        if widgets::icon_link(ui, Icon::Folder, "change folder").clicked() {
             app.picker = Some(crate::ui::folders::Picker::Source(crate::ui::navigator::Navigator::new(app.saved.source.as_deref())));
         }
-    });
-    ui.horizontal(|ui| {
-        caps(ui, "filter");
-        ui.add(egui::TextEdit::singleline(&mut app.filter).hint_text("artist, album or title").desired_width(260.0));
-        if link(ui, "rescan").clicked() {
+        if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text("pick up files added or changed since").clicked() {
             app.scan();
         }
-        if link(ui, "collapse all").clicked() {
+    });
+    ui.add_space(4.0);
+    // Searching, and what's worth a look.
+    ui.horizontal_wrapped(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
+        ui.add(egui::TextEdit::singleline(&mut app.filter).hint_text("filter by artist, album or title").desired_width(280.0));
+        if widgets::icon_link(ui, Icon::Collapse, "collapse all").clicked() {
             app.expanded.clear();
         }
         let dirty = app.dirty_in_files();
-        if dirty > 0 && link(ui, format!("write {dirty} corrected tags to source files")).clicked() {
+        if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("write {dirty} corrected tags to source files")).clicked() {
             app.save_tags_to_source();
+        }
+        ui.add_space(8.0);
+        let spare = app.index.superseded();
+        if !spare.is_empty() {
+            let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
+            let copies = if spare.len() == 1 { "album copy" } else { "album copies" };
+            let hint = "Copies whose songs are all in another copy of the album, in the same or higher quality. Click to show only them.";
+            if widgets::chip(ui, Icon::Copy, format!("{} {copies} covered by another ({})", spare.len(), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
+                app.duplicates_only = true;
+            }
+        }
+        let repeats = app.index.repeats();
+        if !repeats.is_empty() {
+            let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
+            let hint = "Songs kept twice in the same album, like the copies a backup tool leaves. Click to show only their albums.";
+            if widgets::chip(ui, Icon::Copy, format!("{} stored twice ({})", plural(repeats.len(), "song"), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
+                app.duplicates_only = true;
+            }
+        }
+        if !app.index.suggestions.is_empty()
+            && widgets::chip(ui, Icon::Artists, format!("{} possible duplicate artists", app.index.suggestions.len()), ink.text).on_hover_text("Artists whose names look alike. Decide in the artists tab.").clicked()
+        {
+            app.tab = crate::app::Tab::Artists;
         }
     });
     if let Some((n, formats)) = crate::library::non_recho_summary(&app.tracks) {
@@ -199,7 +235,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         theme::panel_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                if widgets::button(ui, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                if widgets::button_with(ui, Icon::Back, "back to the whole library").on_hover_text("or press Esc").clicked() {
                     app.duplicates_only = false;
                 }
                 ui.add_space(8.0);
@@ -210,7 +246,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.add_space(6.0);
                 let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
                 let hint = "Each extra copy is checked against the copy that stays first, and goes only if they're still the same file. You can put them back from the Trash.";
-                if app.busy.is_none() && link(ui, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
                     actions.push(Action::TrashRepeats(repeats));
                 }
             }
@@ -275,7 +311,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         .horizontal(|ui| {
                             let meta = format!("{} · {}", plural(artist.albums.len(), "album"), plural(n_tracks, "track"));
                             let card_link = if whole { "take all off the card" } else { "send all to the card" };
-                            let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - widgets::text_width(ui, card_link, 14.0) - 40.0;
+                            let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - widgets::text_width(ui, card_link, 14.0) - 70.0;
                             let name = RichText::new(&artist.name).size(20.0).color(ink.text);
                             let r = widgets::fitted(ui, name, name_w, Sense::click()).on_hover_text(&artist.name);
                             muted(ui, meta);
@@ -285,7 +321,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 } else {
                                     "Chooses the whole artist for the card, albums added later too (one edition of each). Copied at the next Sync."
                                 };
-                                if link(ui, card_link).on_hover_text(hint).clicked() {
+                                if widgets::icon_link(ui, if whole { Icon::Remove } else { Icon::Add }, card_link).on_hover_text(hint).clicked() {
                                     actions.push(Action::CardArtist(ai, !whole));
                                 }
                             });
@@ -317,7 +353,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 n => format!("{n} won't play on RECHO"),
                             };
                             // The title gets whatever the counts, warning and "play · look up" leave.
-                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 330.0;
+                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 420.0;
                             let shown = RichText::new(title).italics().size(17.0);
                             widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
                             let r = ui.label(RichText::new(meta).color(ink.muted));
@@ -339,23 +375,23 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 } else {
                                     ("send to card", "Copies it to the card at the next Sync. Of several editions, this one goes.")
                                 };
-                                if link(ui, text).on_hover_text(hint).clicked() {
+                                if widgets::icon_link(ui, if chosen { Icon::Remove } else { Icon::Add }, text).on_hover_text(hint).clicked() {
                                     actions.push(Action::CardAlbum(ai, bi, !chosen));
                                 }
                                 // A copy with all these songs in higher quality: offer it instead.
                                 if chosen
                                     && let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()).filter(|s| s.higher)
                                     && let Some(better) = artist.albums.iter().position(|o| o.base_id(ck) == al.base_id(ck) && o.edition.as_ref().is_some_and(|e| e.rank == s.rank))
-                                    && link(ui, format!("use the {} copy", s.format))
+                                    && widgets::icon_link(ui, Icon::Copy, format!("use the {} copy", s.format))
                                         .on_hover_text(format!("{} has all these songs in higher quality. It replaces this copy on the card at the next Sync.", s.label))
                                         .clicked()
                                 {
                                     actions.push(Action::CardAlbum(ai, better, true));
                                 }
-                                if link(ui, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
+                                if widgets::icon_link(ui, Icon::Search, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
                                     actions.push(Action::LookupAlbum(ai, bi));
                                 }
-                                if link(ui, "play").clicked() {
+                                if widgets::icon_link(ui, Icon::Play, "play").clicked() {
                                     actions.push(Action::Play(al.tracks.clone(), 0));
                                 }
                             });
@@ -490,7 +526,7 @@ fn repeats_note(ui: &mut Ui, app: &App, al: &crate::library::grouping::AlbumNode
         let songs = if n == 1 { "1 song is".to_string() } else { format!("{n} songs are") };
         ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(12.5).italics().color(ink.accent));
         let hint = "Moves the extra copies to the Trash, each only if it's still the same file as the copy that stays (the one with the shorter name). You can put them back from the Trash.";
-        if app.busy.is_none() && link(ui, "move the extra copies to the Trash").on_hover_text(hint).clicked() {
+        if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, "move the extra copies to the Trash").on_hover_text(hint).clicked() {
             actions.push(Action::TrashRepeats(al.repeats.clone()));
         }
     });
@@ -510,13 +546,12 @@ fn album_folders(ui: &mut Ui, tracks: &[Track], idxs: &[usize], root: &Path) {
     ui.horizontal(|ui| {
         ui.add_space(52.0);
         ui.spacing_mut().item_spacing.x = 6.0;
-        widgets::folder_icon(ui, 13.0, ink.muted);
         let text = match dirs.len() {
             1 => text::shorten(&rel(first), FOLDER_CHARS),
             n => format!("{} and {} more folders", text::shorten(&rel(first), FOLDER_CHARS - 20), n - 1),
         };
         // "open folder" goes first so a long path can never push it out of view.
-        if link(ui, "open folder").clicked() {
+        if widgets::icon_link(ui, Icon::Folder, "open folder").clicked() {
             crate::platform::reveal(first);
         }
         if idxs.iter().any(|&i| tracks[i].cue.is_some()) {
@@ -539,7 +574,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
             Lookup::Failed(e) => {
                 ui.horizontal_wrapped(|ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
-                    if link(ui, "dismiss").clicked() {
+                    if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
                         actions.push(Action::Dismiss(id.to_string()));
                     }
                 });
@@ -552,7 +587,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                 if changes.is_empty() {
                     ui.horizontal(|ui| {
                         muted(ui, "tags already agree.");
-                        if link(ui, "dismiss").clicked() {
+                        if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
                             actions.push(Action::Dismiss(id.to_string()));
                         }
                     });
@@ -587,10 +622,10 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                     });
                 }
                 ui.horizontal(|ui| {
-                    if link(ui, "apply selected").clicked() {
+                    if widgets::icon_link(ui, Icon::Check, "apply selected").clicked() {
                         actions.push(Action::ApplyLookup(id.to_string()));
                     }
-                    if link(ui, "dismiss").clicked() {
+                    if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
                         actions.push(Action::Dismiss(id.to_string()));
                     }
                 });

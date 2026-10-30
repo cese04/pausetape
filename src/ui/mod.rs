@@ -5,6 +5,7 @@ mod actions;
 mod artists;
 mod card;
 pub mod folders;
+pub mod icons;
 mod library;
 pub mod navigator;
 mod player;
@@ -16,11 +17,12 @@ pub mod text;
 pub mod theme;
 pub mod widgets;
 
-use egui::{RichText, Ui};
+use egui::{RichText, Stroke, Ui};
 
 use crate::app::{App, Tab};
 use theme::ink;
-use widgets::{hairline_progress, muted};
+use icons::Icon;
+use widgets::hairline_progress;
 
 const MAX_W: f32 = 820.0;
 
@@ -29,9 +31,17 @@ const ROW_H: f32 = 22.0;
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let pad = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin::symmetric(40, 18));
-    egui::Panel::top("nav").frame(pad).show_separator_line(false).show(ui, |ui| header(app, ui));
+    // The tab bar is tinted and ruled off, so the app's own frame never reads as content.
+    let bar = egui::Frame::new().fill(ink.bar).inner_margin(egui::Margin::symmetric(32, 10));
+    let r = egui::Panel::top("nav").frame(bar).show_separator_line(false).show(ui, |ui| header(app, ui));
+    let edge = r.response.rect;
+    ui.painter().hline(edge.x_range(), edge.bottom(), Stroke::new(1.0, ink.faint));
+    if let Some(n) = app.notices.last().cloned() {
+        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: 40, right: 40, top: 10, bottom: 0 });
+        egui::Panel::top("notice").frame(frame).show_separator_line(false).show(ui, |ui| notice(app, ui, &n));
+    }
     egui::Panel::bottom("player").frame(pad).show_separator_line(false).show(ui, |ui| player::show(app, ui));
-    egui::CentralPanel::default().frame(pad.inner_margin(egui::Margin { left: 40, right: 40, top: 4, bottom: 0 })).show(ui, |ui| {
+    egui::CentralPanel::default().frame(pad.inner_margin(egui::Margin { left: 40, right: 40, top: 16, bottom: 0 })).show(ui, |ui| {
         // The library uses the whole width (its A–Z rail belongs at the window's edge); the other
         // tabs are forms and read better at a fixed measure.
         if app.tab != Tab::Library {
@@ -49,74 +59,55 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     folders::pickers(app, ui);
 }
 
+/// The tab bar: the app's name, the tabs, and what's running in the background.
 fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(crate::APP_NAME).size(24.0).color(ink.text));
-        ui.add_space(24.0);
-        for (t, name) in [
-            (Tab::Folders, "folders"),
-            (Tab::Library, "library"),
-            (Tab::Artists, "artists"),
-            (Tab::Card, "card"),
-            (Tab::Playlists, "playlists"),
-            (Tab::Settings, "settings"),
+        ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
+        ui.add_space(18.0);
+        ui.spacing_mut().item_spacing.x = 4.0;
+        // In a narrow window only the open tab keeps its name; the others show their icon.
+        let compact = ui.available_width() < 900.0;
+        for (t, icon, name) in [
+            (Tab::Folders, Icon::Folder, "folders"),
+            (Tab::Library, Icon::Library, "library"),
+            (Tab::Artists, Icon::Artists, "artists"),
+            (Tab::Card, Icon::Card, "card"),
+            (Tab::Playlists, Icon::Playlists, "playlists"),
+            (Tab::Settings, Icon::Settings, "settings"),
         ] {
-            if widgets::tab(ui, name, app.tab == t).clicked() {
+            let active = app.tab == t;
+            let label = if compact && !active { "" } else { name };
+            if widgets::nav_tab(ui, icon, label, active).on_hover_text(name).clicked() {
                 app.tab = t;
                 // The library tab always opens on the whole library.
                 app.duplicates_only = false;
             }
-            ui.add_space(6.0);
-        }
-    });
-    ui.horizontal_wrapped(|ui| {
-        let albums: usize = app.index.artists.iter().map(|a| a.albums.len()).sum();
-        let mut facts = vec![
-            format!("{} tracks", app.tracks.len()),
-            format!("{} artists", app.index.artists.len()),
-            format!("{albums} albums"),
-        ];
-        if !app.index.suggestions.is_empty() {
-            facts.push(format!("{} possible duplicate artists", app.index.suggestions.len()));
-        }
-        let dirty = app.dirty_count();
-        if dirty > 0 {
-            facts.push(format!("{dirty} tracks with corrected tags"));
-        }
-        muted(ui, facts.join(" · "));
-        let spare = app.index.superseded();
-        if !spare.is_empty() {
-            let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
-            muted(ui, "·");
-            let copies = if spare.len() == 1 { "copy" } else { "copies" };
-            let text = format!("{} album {copies} with a same-or-better copy ({})", spare.len(), text::bytes(bytes));
-            let hint = "Copies whose songs are all in another copy of the album, in the same or higher quality. Show them in the library.";
-            if widgets::link(ui, text).on_hover_text(hint).clicked() {
-                app.tab = Tab::Library;
-                app.duplicates_only = true;
-            }
-        }
-        let repeats = app.index.repeats();
-        if !repeats.is_empty() {
-            let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
-            muted(ui, "·");
-            let hint = "Songs kept twice in the same album, like the copies a backup tool leaves. Show them in the library.";
-            if widgets::link(ui, format!("{} stored twice ({})", text::plural(repeats.len(), "song"), text::bytes(bytes))).on_hover_text(hint).clicked() {
-                app.tab = Tab::Library;
-                app.duplicates_only = true;
-            }
         }
         if let Some(b) = &app.busy {
-            ui.add_space(12.0);
-            let txt = if b.total > 0 { format!("{} {}/{}", b.label, b.done, b.total) } else { format!("{} {}…", b.label, if b.done > 0 { b.done.to_string() } else { String::new() }) };
-            ui.label(RichText::new(txt).color(ink.accent));
-            if b.total > 0 {
-                hairline_progress(ui, b.done as f32 / b.total as f32, 120.0);
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                if b.total > 0 {
+                    hairline_progress(ui, b.done as f32 / b.total as f32, 110.0);
+                }
+                let txt = if b.total > 0 { format!("{} {}/{}", b.label, b.done, b.total) } else { format!("{} {}…", b.label, if b.done > 0 { b.done.to_string() } else { String::new() }) };
+                ui.add(egui::Label::new(RichText::new(txt).size(13.5).color(ink.accent)).truncate());
+            });
         }
     });
-    for n in app.notices.iter().rev().take(1) {
-        ui.label(RichText::new(n).size(12.5).color(ink.muted).italics());
-    }
+}
+
+/// The latest message from the app, until the next one or until closed.
+fn notice(app: &mut App, ui: &mut Ui, text: &str) {
+    let ink = ink(ui);
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Info, ink.muted);
+        ui.allocate_ui(egui::vec2(ui.available_width() - 40.0, 0.0), |ui| {
+            ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
+        });
+        if widgets::icon_button(ui, Icon::Close).on_hover_text("dismiss").clicked() {
+            app.notices.clear();
+        }
+    });
 }

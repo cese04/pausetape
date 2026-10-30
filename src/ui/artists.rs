@@ -5,7 +5,8 @@ use egui::{Align, Layout, RichText, ScrollArea, Ui};
 use super::MAX_W;
 use super::actions::{Action, apply};
 use super::theme::ink;
-use super::widgets::{caps, link, muted};
+use super::icons::Icon;
+use super::widgets::{caps, icon_link, muted};
 use crate::app::App;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -27,10 +28,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.label(&b.name);
                 muted(ui, format!("({})", count(b)));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if link(ui, "different artists").clicked() {
+                    if icon_link(ui, Icon::Close, "different artists").clicked() {
                         actions.push(Action::Reject(s.a, s.b));
                     }
-                    if link(ui, "same artist").clicked() {
+                    if icon_link(ui, Icon::Check, "same artist").clicked() {
                         actions.push(Action::Merge(s.a, s.b));
                     }
                 });
@@ -42,7 +43,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             caps(ui, "all artists");
             muted(ui, "the first name is the folder name; greyed ones are other spellings in your tags.");
         });
-        if link(ui, format!("ask MusicBrainz about all {} artists (~1 per second)", app.index.clusters.len())).clicked() {
+        if icon_link(ui, Icon::Search, format!("ask MusicBrainz about all {} artists (~1 per second)", app.index.clusters.len())).clicked() {
             for c in 0..app.index.clusters.len() {
                 if !app.artist_hits.contains_key(&app.index.clusters[c].key) {
                     actions.push(Action::LookupArtist(c));
@@ -58,7 +59,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     && *rc == ci
                 {
                     let r = ui.text_edit_singleline(buf);
-                    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) || link(ui, "save").clicked() {
+                    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) || icon_link(ui, Icon::Check, "save").clicked() {
                         actions.push(Action::Name(ci, buf.clone()));
                     }
                 } else {
@@ -69,10 +70,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if link(ui, "musicbrainz").clicked() {
+                    if icon_link(ui, Icon::Search, "musicbrainz").clicked() {
                         actions.push(Action::LookupArtist(ci));
                     }
-                    if link(ui, "rename").clicked() {
+                    if icon_link(ui, Icon::Rename, "rename").clicked() {
                         app.renaming = Some((ci, c.name.clone()));
                     }
                 });
@@ -98,7 +99,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             ui.horizontal(|ui| {
                                 ui.label(&h.name);
                                 muted(ui, format!("{} · score {}", h.detail, h.score));
-                                if link(ui, "use this name").clicked() {
+                                if icon_link(ui, Icon::Check, "use this name").clicked() {
                                     actions.push(Action::Name(ci, h.name.clone()));
                                 }
                             });

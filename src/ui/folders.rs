@@ -8,7 +8,8 @@ use egui::{RichText, ScrollArea, Ui};
 use super::navigator::Navigator;
 use super::text::{self, plural};
 use super::theme::{ink, panel_frame};
-use super::widgets::{StrikeIf, button, caps, link, muted, primary_button};
+use super::icons::Icon;
+use super::widgets::{StrikeIf, button, button_with, caps, icon_link, link, muted, primary_button, primary_with};
 use super::ROW_H;
 use crate::app::{App, Tab};
 use crate::card::{AlbumOrder, SpaceInfo, Volume};
@@ -31,7 +32,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if app.saved.source.is_some() && app.write().dest.is_some() {
             ui.horizontal(|ui| {
                 muted(ui, "All set. Next, choose what goes on the card.");
-                if primary_button(ui, "Go to card →").clicked() {
+                if primary_with(ui, Icon::Card, "Go to the card").clicked() {
                     app.tab = Tab::Card;
                 }
             });
@@ -81,10 +82,10 @@ fn source_step(app: &mut App, ui: &mut Ui) {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let label = if app.saved.source.is_some() { "Change folder…" } else { "Choose folder…" };
-            if button(ui, label).clicked() {
+            if button_with(ui, Icon::Folder, label).clicked() {
                 app.picker = Some(Picker::Source(Navigator::new(app.saved.source.as_deref())));
             }
-            if app.saved.source.is_some() && app.busy.is_none() && link(ui, "read again").on_hover_text("pick up files added or changed since").clicked() {
+            if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Rescan, "read again").on_hover_text("pick up files added or changed since").clicked() {
                 app.scan();
             }
         });
@@ -150,7 +151,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         }
         ui.add_space(8.0);
         let label = if dest.is_some() { "Change card…" } else { "Choose card…" };
-        if button(ui, label).clicked() {
+        if button_with(ui, Icon::Card, label).clicked() {
             app.volumes = crate::card::volumes();
             app.picker = Some(Picker::Card { browse: None, show_all: false });
         }
@@ -298,13 +299,13 @@ fn tidy(app: &mut App, ui: &mut Ui) {
         app.tidy_plan = None;
     }
     ui.horizontal(|ui| {
-        if button(ui, "Preview changes").clicked() {
+        if button_with(ui, Icon::Compare, "Preview changes").clicked() {
             app.preview_tidy();
         }
-        if app.tidy_plan.is_some() && app.busy.is_none() && button(ui, "Reorganise now").clicked() {
+        if app.tidy_plan.is_some() && app.busy.is_none() && button_with(ui, Icon::Folder, "Reorganise now").clicked() {
             app.run_tidy();
         }
-        if crate::card::latest_journal().is_some() && link(ui, "undo last reorganise").clicked() {
+        if crate::card::latest_journal().is_some() && icon_link(ui, Icon::Back, "undo last reorganise").clicked() {
             app.undo();
         }
     });

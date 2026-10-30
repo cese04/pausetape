@@ -9,7 +9,8 @@ use egui::{Align, FontId, Layout, RichText, ScrollArea, Ui};
 
 use super::text;
 use super::theme::ink;
-use super::widgets::{self, caps, link, muted};
+use super::icons::Icon;
+use super::widgets::{self, caps, icon_button, icon_link, muted};
 use crate::app::App;
 use crate::card::playlist::Playlist;
 use crate::library::Track;
@@ -37,7 +38,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 }
             }
             ui.add_space(6.0);
-            if link(ui, "new playlist").clicked() {
+            if icon_link(ui, Icon::Add, "new playlist").clicked() {
                 app.saved.playlists.push(Playlist { name: format!("Playlist {}", app.saved.playlists.len() + 1), tracks: Vec::new() });
                 select = Some(app.saved.playlists.len() - 1);
             }
@@ -66,10 +67,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if link(ui, "delete").clicked() {
+                    if icon_link(ui, Icon::Trash, "delete").clicked() {
                         delete = true;
                     }
-                    if link(ui, "play").clicked() {
+                    if icon_link(ui, Icon::Play, "play").clicked() {
                         play = Some(0);
                     }
                 });
@@ -96,13 +97,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             }
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if link(ui, "×").clicked() {
+                            if icon_button(ui, Icon::Close).on_hover_text("remove from the playlist").clicked() {
                                 op = Some((n, 0));
                             }
-                            if link(ui, "↓").clicked() {
+                            if icon_button(ui, Icon::Down).on_hover_text("move down").clicked() {
                                 op = Some((n, 1));
                             }
-                            if link(ui, "↑").clicked() {
+                            if icon_button(ui, Icon::Up).on_hover_text("move up").clicked() {
                                 op = Some((n, -1));
                             }
                         });

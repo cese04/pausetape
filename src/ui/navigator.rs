@@ -178,7 +178,7 @@ impl Navigator {
                 let y = rect.center().y;
                 let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 16.0, y), egui::vec2(14.0, 14.0));
                 if folder {
-                    widgets::paint_folder(ui.painter(), icon, ink.muted);
+                    super::icons::paint(ui.painter(), icon, super::icons::Icon::Folder, ink.muted);
                 } else {
                     ui.painter().text(icon.center(), egui::Align2::CENTER_CENTER, "↑", egui::FontId::proportional(15.0), ink.muted);
                 }

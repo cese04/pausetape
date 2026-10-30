@@ -1,5 +1,6 @@
-//! A Tufte-inspired look: warm paper, one serif face, no boxes, data over chrome.
-//! Colour is reserved for warnings and the playhead.
+//! A Tufte-inspired look: warm paper, one serif face, data over chrome. The tab bar is the one
+//! band of colour, so the app's frame stands apart from what's in it; elsewhere colour is
+//! reserved for warnings and the playhead.
 
 use std::sync::Arc;
 
@@ -12,6 +13,10 @@ pub struct Ink {
     pub faint: Color32,
     pub hover: Color32,
     pub accent: Color32,
+    /// The tab bar, a step off the page so it reads as the app's frame, not its content.
+    pub bar: Color32,
+    /// The selected tab, and other small filled shapes on the bar.
+    pub chip: Color32,
 }
 
 pub fn ink(ui: &Ui) -> Ink {
@@ -27,6 +32,8 @@ fn palette(dark: bool) -> Ink {
             faint: Color32::from_rgb(0x3a, 0x3a, 0x3a),
             hover: Color32::from_rgb(0x1f, 0x1f, 0x1f),
             accent: Color32::from_rgb(0xe0, 0x6c, 0x6c),
+            bar: Color32::from_rgb(0x1d, 0x1d, 0x1d),
+            chip: Color32::from_rgb(0x30, 0x30, 0x30),
         }
     } else {
         Ink {
@@ -36,6 +43,8 @@ fn palette(dark: bool) -> Ink {
             faint: Color32::from_rgb(0xdd, 0xdd, 0xd2),
             hover: Color32::from_rgb(0xf4, 0xf4, 0xea),
             accent: Color32::from_rgb(0xa0, 0x00, 0x00),
+            bar: Color32::from_rgb(0xf2, 0xf2, 0xe6),
+            chip: Color32::from_rgb(0xe2, 0xe2, 0xd4),
         }
     }
 }

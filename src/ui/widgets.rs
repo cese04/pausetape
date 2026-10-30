@@ -1,8 +1,10 @@
-//! Small reusable controls drawn in the app's style: quiet text links, framed and primary
-//! buttons, tabs, round transport buttons, labels that shorten to fit.
+//! Small reusable controls drawn in the app's style: quiet text links (with or without an
+//! icon), framed and primary buttons, tabs, section headings, help text, round transport
+//! buttons, labels that shorten to fit.
 
 use egui::{Color32, FontId, Response, RichText, Sense, Stroke, Ui, vec2};
 
+use super::icons::{self, Icon};
 use super::theme::ink;
 
 /// A quiet text link: muted, darkening and underlined on hover.
@@ -16,6 +18,96 @@ pub fn link(ui: &mut Ui, text: impl Into<String>) -> Response {
     }
     ui.painter().galley(rect.min, galley, color);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A command: an icon and a word, muted until hovered, on a soft background when hovered.
+/// Commands read as commands this way; plain `link`s stay for small in-text actions.
+pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
+    let ink = ink(ui);
+    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(13.5), Color32::PLACEHOLDER);
+    let (icon_w, gap, pad) = (13.0, 5.0, vec2(5.0, 2.0));
+    let size = vec2(icon_w + gap + galley.size().x, galley.size().y.max(icon_w)) + pad * 2.0;
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let color = if resp.hovered() { ink.text } else { ink.muted };
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 4.0, ink.hover);
+    }
+    let inner = rect.shrink2(pad);
+    icons::paint(ui.painter(), icons::slot(inner, icon_w), icon, color);
+    ui.painter().galley(egui::pos2(inner.left() + icon_w + gap, inner.center().y - galley.size().y / 2.0), galley, color);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Just an icon, for compact commands (move up, remove from list); give it a hover text.
+pub fn icon_button(ui: &mut Ui, icon: Icon) -> Response {
+    let ink = ink(ui);
+    let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 4.0, ink.hover);
+    }
+    icons::paint(ui.painter(), rect.shrink(5.0), icon, if resp.hovered() { ink.text } else { ink.muted });
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A tab in the top bar: icon and name in a pill, filled when it's the open one.
+pub fn nav_tab(ui: &mut Ui, icon: Icon, text: &str, active: bool) -> Response {
+    let ink = ink(ui);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(15.0), Color32::PLACEHOLDER);
+    let (icon_w, gap, pad) = (15.0, 7.0, vec2(12.0, 6.0));
+    let (rect, resp) = ui.allocate_exact_size(vec2(icon_w + gap + galley.size().x, galley.size().y.max(icon_w)) + pad * 2.0, Sense::click());
+    let fill = if active { ink.chip } else if resp.hovered() { ink.hover } else { Color32::TRANSPARENT };
+    ui.painter().rect_filled(rect, rect.height() / 2.0, fill);
+    let color = if active || resp.hovered() { ink.text } else { ink.muted };
+    let inner = rect.shrink2(pad);
+    icons::paint(ui.painter(), icons::slot(inner, icon_w), icon, color);
+    ui.painter().galley(egui::pos2(inner.left() + icon_w + gap, inner.center().y - galley.size().y / 2.0), galley, color);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A fact that leads somewhere: icon and text in an outlined pill.
+pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) -> Response {
+    let ink = ink(ui);
+    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(13.0), Color32::PLACEHOLDER);
+    let (icon_w, gap, pad) = (12.0, 6.0, vec2(9.0, 3.0));
+    let (rect, resp) = ui.allocate_exact_size(vec2(icon_w + gap + galley.size().x, galley.size().y.max(icon_w)) + pad * 2.0, Sense::click());
+    let fill = if resp.hovered() { ink.hover } else { Color32::TRANSPARENT };
+    ui.painter().rect(rect, rect.height() / 2.0, fill, Stroke::new(1.0, if resp.hovered() { color } else { ink.faint }), egui::StrokeKind::Inside);
+    let inner = rect.shrink2(pad);
+    icons::paint(ui.painter(), icons::slot(inner, icon_w), icon, color);
+    ui.painter().galley(egui::pos2(inner.left() + icon_w + gap, inner.center().y - galley.size().y / 2.0), galley, color);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A section heading: icon, small capitals, and a hairline to the edge.
+pub fn section(ui: &mut Ui, icon: Icon, title: &str) {
+    let ink = ink(ui);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+        icons::paint(ui.painter(), rect, icon, ink.muted);
+        let r = ui.label(RichText::new(title.to_uppercase()).size(12.0).extra_letter_spacing(1.3).color(ink.text));
+        ui.painter().hline(r.rect.right() + 10.0..=ui.max_rect().right(), r.rect.center().y, Stroke::new(0.5, ink.faint));
+    });
+}
+
+/// One setting: its name in a column on the left, the controls (and their help) on the right.
+pub fn setting(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
+    const LABEL_W: f32 = 170.0;
+    let ink = ink(ui);
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui_with_layout(vec2(LABEL_W, 20.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_width(LABEL_W);
+            ui.add(egui::Label::new(RichText::new(label).color(ink.text)).wrap());
+        });
+        ui.vertical(add);
+    });
+    ui.add_space(12.0);
+}
+
+/// Explanatory text under a setting: smaller than what it explains, so the setting reads first.
+pub fn help(ui: &mut Ui, text: impl Into<String>) -> Response {
+    let ink = ink(ui);
+    ui.add(egui::Label::new(RichText::new(text.into()).size(13.0).color(ink.muted)).wrap())
 }
 
 /// Navigation tab: the active one is set in full ink, others muted.
@@ -44,23 +136,43 @@ pub fn muted(ui: &mut Ui, text: impl Into<String>) -> Response {
 
 /// A framed button for primary actions; quieter `link`s remain for secondary ones.
 pub fn button(ui: &mut Ui, text: impl Into<String>) -> Response {
-    let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(14.5), Color32::PLACEHOLDER);
-    let (rect, resp) = ui.allocate_exact_size(galley.size() + vec2(24.0, 12.0), Sense::click());
-    let stroke = if resp.hovered() { ink.text } else { ink.muted };
-    ui.painter().rect(rect, 5.0, if resp.hovered() { ink.hover } else { Color32::TRANSPARENT }, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
-    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, ink.text);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+    framed(ui, None, text.into(), false)
 }
 
 /// The one button per screen that does the main thing: solid ink, paper-coloured text.
 pub fn primary_button(ui: &mut Ui, text: impl Into<String>) -> Response {
+    framed(ui, None, text.into(), true)
+}
+
+/// `button` with an icon before the words.
+pub fn button_with(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
+    framed(ui, Some(icon), text.into(), false)
+}
+
+/// `primary_button` with an icon before the words.
+pub fn primary_with(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
+    framed(ui, Some(icon), text.into(), true)
+}
+
+fn framed(ui: &mut Ui, icon: Option<Icon>, text: String, primary: bool) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(14.5), Color32::PLACEHOLDER);
-    let (rect, resp) = ui.allocate_exact_size(galley.size() + vec2(28.0, 14.0), Sense::click());
-    let fill = if resp.hovered() { ink.muted } else { ink.text };
-    ui.painter().rect_filled(rect, 5.0, fill);
-    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, ink.bg);
+    let galley = ui.painter().layout_no_wrap(text, FontId::proportional(14.5), Color32::PLACEHOLDER);
+    let (icon_w, gap) = if icon.is_some() { (14.0, 7.0) } else { (0.0, 0.0) };
+    let pad = if primary { vec2(14.0, 7.0) } else { vec2(12.0, 6.0) };
+    let (rect, resp) = ui.allocate_exact_size(vec2(icon_w + gap + galley.size().x, galley.size().y) + pad * 2.0, Sense::click());
+    let fg = if primary {
+        ui.painter().rect_filled(rect, 5.0, if resp.hovered() { ink.muted } else { ink.text });
+        ink.bg
+    } else {
+        let stroke = if resp.hovered() { ink.text } else { ink.muted };
+        ui.painter().rect(rect, 5.0, if resp.hovered() { ink.hover } else { Color32::TRANSPARENT }, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
+        ink.text
+    };
+    let inner = rect.shrink2(pad);
+    if let Some(icon) = icon {
+        icons::paint(ui.painter(), icons::slot(inner, icon_w), icon, fg);
+    }
+    ui.painter().galley(egui::pos2(inner.left() + icon_w + gap, inner.center().y - galley.size().y / 2.0), galley, fg);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
@@ -110,20 +222,6 @@ pub fn media_button(ui: &mut Ui, icon: Media, size: f32, slot: f32, primary: boo
         }
     }
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
-/// A small drawn folder (fonts rarely have a folder glyph). Allocates `size` square.
-pub fn folder_icon(ui: &mut Ui, size: f32, color: Color32) {
-    let (rect, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
-    paint_folder(ui.painter(), rect, color);
-}
-
-pub fn paint_folder(p: &egui::Painter, rect: egui::Rect, color: Color32) {
-    let w = rect.width();
-    let body = egui::Rect::from_min_max(rect.min + vec2(0.0, w * 0.28), rect.max - vec2(0.0, w * 0.1));
-    let tab = egui::Rect::from_min_size(rect.min + vec2(0.0, w * 0.14), vec2(w * 0.45, w * 0.2));
-    p.rect_stroke(tab, 1.5, Stroke::new(1.2, color), egui::StrokeKind::Inside);
-    p.rect_stroke(body, 1.5, Stroke::new(1.2, color), egui::StrokeKind::Inside);
 }
 
 /// Width `text` would take in the proportional font at `size`.
