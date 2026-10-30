@@ -145,8 +145,8 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     tracks as edited. Quit and reopen: the edits are still there (library database).
 14a. If the same album is in two folders: the library shows "edition 1 of 2" and "2 of 2" with
     their formats; the card tab ticks one, and ticking the other switches. If one copy has the
-    same songs in the same or lower quality, it says "this copy could go", and the header's
-    "album copies with a same-or-better copy" link lists them.
+    same songs in the same or lower quality, it says "this copy could go", and the library's
+    "album copies covered by another" chip lists them.
 14b. Play an album whose cover is a `folder.jpg`/`Front.jpg` (not embedded): the player says
     "cover from … · add it". After **add it** and a write, the card copies show the cover in
     Explorer / the file manager (and on the Echo Mini).
@@ -177,18 +177,23 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     is touched (put an extra file there beforehand to check).
 19a. In the library, **take off card** on an album that's on the card: its songs get a struck red
     ring and "taken off at the next sync"; **send to card** on another: rings and "added at the
-    next sync". The strip above the list and the card tab's pinned header count both. **Sync**
-    (or *sync now*): the marks become dots, and the card has exactly that change. With the card
+    next sync". The strip above the list and the card tab's pinned panel count both. **Sync**
+    (on either): the marks become dots, and the card has exactly that change. With the card
     unplugged, the marks and counts stay the same; *Sync* says "card not connected".
 19b. **New** write: nothing is chosen. **send all to the card** on an artist: all its albums
     (one edition each) are chosen; a new album of that artist added to the music folder is
     chosen after a rescan.
 19c. An album whose songs name different artists (a duet without an album-artist tag, a
-    compilation flag on some songs) shows once, under one artist. In the header, **N songs
-    stored twice** opens the duplicates view; on such an album the extra copies say *stored
+    compilation flag on some songs) shows once, under one artist. Beside the library's filter,
+    **N songs stored twice** opens the duplicates view; on such an album the extra copies say *stored
     twice*, and **move the extra copies to the Trash** puts them in the Trash (Finder shows
     them there) and rescans. A repeat already on the card gets a struck red ring, and the next
     Sync takes it off.
+19d. The tabs sit on a tinted bar, each with an icon; the open one is filled. Narrow the window
+    below ~1000 px: the other tabs show only their icon (hover names them). Start a scan: its
+    progress shows at the bar's right end, and the result appears on the line below with a
+    close button. Commands (play, look up, rename, Sync…) have icons and a background on hover;
+    the card tab's and settings tab's options are named on the left with smaller explanations.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 
 ### F. Playlists

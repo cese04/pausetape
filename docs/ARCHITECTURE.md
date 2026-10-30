@@ -91,9 +91,10 @@ src/
 │   ├── playback.rs    play queue, waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
-    ├── mod.rs         panels, header, tab dispatch
+    ├── mod.rs         panels, tab bar, message line, tab dispatch
     ├── theme.rs       palette, fonts, frames
-    ├── widgets.rs     links, buttons, tabs, transport buttons, fitted labels
+    ├── icons.rs       drawn line icons (tabs and commands), no font needed
+    ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
     ├── text.rs        durations, sizes, plurals, shortening, format notes and badges
     ├── actions.rs     clicks collected while drawing, applied afterwards
     ├── library.rs  artists.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab

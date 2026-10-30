@@ -344,3 +344,24 @@ Calibre's device view, for music: the library is where you choose what goes on t
   hint. It now sits in a panel with a *back to the whole library* button; Esc and the library
   tab leave it too, and it closes itself once no duplicates are left.
 - 49 tests (40 offline).
+
+### 25. Clearer screens: a tab bar, icons, settings in sections (2026-10-30)
+- **Tab bar:** the tabs sit on a tinted bar ruled off from the page, each with an icon, the open
+  one in a filled pill, so they no longer look like the grey links below them. In a narrow
+  window only the open tab keeps its name. What's running (writing, scanning) and its progress
+  sit at the bar's right end.
+- **Messages** ("6544 songs · …", "moved to the Trash") get their own line under the bar, with
+  a close button, instead of sharing the header with the library's counts.
+- **Icons on commands:** drawn line icons (`ui/icons.rs`, like the player's buttons, so no font
+  is needed) mark play, look up, send to / take off the card, rename, open folder, rescan,
+  Trash, Compare, Sync, move up and down… Commands get a soft background on hover.
+- **Library:** the counts and the duplicates links moved from the header into the library tab,
+  next to the music folder; the duplicates are outlined chips beside the filter. The card
+  strip is a framed row with the card's icon, its room, "N over" in red, the changes for the
+  next sync on a second line, and a **Sync** button.
+- **Card tab:** the room and Sync summary is a panel; the sections have headings with icons;
+  the options are a list of settings, each named on the left with its controls and a smaller
+  explanation on the right (album folders, other folders, formats RECHO can't play, hi-res
+  songs, housekeeping).
+- **Settings tab:** the same layout, in sections (appearance, library, playing and converting,
+  MusicBrainz), with explanations in smaller type than the settings.
