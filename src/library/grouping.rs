@@ -65,6 +65,9 @@ pub struct AlbumNode {
     pub variant: Option<String>,
     /// One of several copies of the same album.
     pub edition: Option<Edition>,
+    /// Songs stored twice in this album, as (extra copy, the copy that stays); see
+    /// `repeated_songs`. The card gets each song once.
+    pub repeats: Vec<(usize, usize)>,
 }
 
 /// A copy of an album when there are several: different releases or rips of the same songs.
@@ -144,6 +147,11 @@ impl Quality {
 }
 
 impl AlbumNode {
+    /// An extra copy of a song this album already has.
+    pub fn is_repeat(&self, track: usize) -> bool {
+        self.repeats.iter().any(|&(c, _)| c == track)
+    }
+
     /// Stable id for saved layouts, UI state and MusicBrainz replies. Uses the artist cluster's
     /// key rather than its display name, so renaming an artist keeps its albums' ids.
     pub fn id(&self, cluster_key: &str) -> String {
@@ -191,6 +199,11 @@ impl Index {
         }
         out
     }
+
+    /// Songs stored twice, over all albums: (extra copy, the copy that stays).
+    pub fn repeats(&self) -> Vec<(usize, usize)> {
+        self.artists.iter().flat_map(|a| &a.albums).flat_map(|al| al.repeats.iter().copied()).collect()
+    }
 }
 
 /// Raw artist used for a track's folder, before clustering. `None` means unknown.
@@ -199,6 +212,82 @@ fn folder_artist(t: &Track, various: bool) -> Option<String> {
         return Some(VARIOUS.to_string());
     }
     t.folder_artist_raw().map(primary_artist).filter(|s| !s.is_empty())
+}
+
+/// Keep each album in one artist's folder. Songs of one album (same name, same folder) can
+/// point at different artists: a guest on one song without an album-artist tag, a compilation
+/// flag on some songs only, a split release. They all go under the album artist when the songs
+/// that have one agree on it and are at least half the album; else under an artist that holds
+/// three quarters of the songs; else under Various Artists. `merges` are the user's: artists
+/// merged by hand count as one.
+fn keep_albums_together(tracks: &[Track], spellings: &mut [String], merges: &[(String, String)]) {
+    let mut root: HashMap<String, String> = HashMap::new();
+    fn find(root: &HashMap<String, String>, k: &str) -> String {
+        let mut k = k.to_string();
+        while let Some(p) = root.get(&k) {
+            k = p.clone();
+        }
+        k
+    }
+    for (a, b) in merges {
+        let (ra, rb) = (find(&root, a), find(&root, b));
+        if ra != rb {
+            root.insert(ra, rb);
+        }
+    }
+    let who = |spelling: &str| find(&root, &artist_key(spelling));
+    let mut albums: HashMap<(PathBuf, String), Vec<usize>> = HashMap::new();
+    for (i, t) in tracks.iter().enumerate() {
+        if let Some(album) = t.album.as_deref().map(title_key).filter(|k| !k.is_empty()) {
+            albums.entry((album_dir(&t.path), album)).or_default().push(i);
+        }
+    }
+    for idxs in albums.values() {
+        let mut folders: HashMap<String, (usize, &str)> = HashMap::new();
+        for &i in idxs {
+            folders.entry(who(&spellings[i])).or_insert((0, &spellings[i])).0 += 1;
+        }
+        if folders.len() < 2 {
+            continue;
+        }
+        let mut tagged: HashMap<String, (usize, String)> = HashMap::new();
+        for &i in idxs {
+            if let Some(a) = tracks[i].album_artist.as_deref().map(primary_artist).filter(|a| !a.is_empty()) {
+                tagged.entry(who(&a)).or_insert((0, a)).0 += 1;
+            }
+        }
+        let to = match (tagged.len(), tagged.values().next()) {
+            (1, Some((n, a))) if n * 2 >= idxs.len() => a.clone(),
+            _ => match folders.values().max_by_key(|(n, _)| *n) {
+                Some((n, a)) if n * 4 >= idxs.len() * 3 => a.to_string(),
+                _ => VARIOUS.to_string(),
+            },
+        };
+        for &i in idxs {
+            spellings[i] = to.clone();
+        }
+    }
+}
+
+/// Songs of an album that repeat another of its songs: the same disc and number (or title),
+/// size and length, as when a backup tool kept two copies ("Song (2015_05_12 05_18_04
+/// UTC).mp3"), as (extra copy, the copy that stays). Of each set the shortest file name stays.
+fn repeated_songs(tracks: &[Track], idxs: &[usize]) -> Vec<(usize, usize)> {
+    // Disc, number, title (when unnumbered), size, length in ms.
+    type Same = (u32, Option<u32>, String, u64, u128);
+    let mut same: BTreeMap<Same, Vec<usize>> = BTreeMap::new();
+    for &i in idxs.iter().filter(|&&i| tracks[i].cue.is_none()) {
+        let t = &tracks[i];
+        let title = if t.track.is_none() { title_key(&t.display_title()) } else { String::new() };
+        same.entry((t.disc.unwrap_or(1), t.track, title, t.size, t.duration.as_millis())).or_default().push(i);
+    }
+    let mut out = Vec::new();
+    for mut set in same.into_values().filter(|s| s.len() > 1) {
+        set.sort_by_key(|&i| (tracks[i].path.file_name().map_or(0, |n| n.len()), tracks[i].path.clone()));
+        out.extend(set[1..].iter().map(|&i| (i, set[0])));
+    }
+    out.sort();
+    out
 }
 
 /// Albums without an album-artist tag whose tracks span many artists in one folder.
@@ -426,14 +515,15 @@ fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, Edition)> {
 
 pub fn build(tracks: &[Track], prefs: &ArtistPrefs) -> Index {
     let various = detect_untagged_compilations(tracks);
+    let mut spellings: Vec<String> = tracks.iter().enumerate().map(|(i, t)| folder_artist(t, various[i]).unwrap_or_else(|| UNKNOWN.to_string())).collect();
+    keep_albums_together(tracks, &mut spellings, &prefs.merges);
 
     // 1. Exact-key buckets.
     let mut key_ids: HashMap<String, usize> = HashMap::new();
     let mut key_list: Vec<String> = Vec::new();
     let mut key_variants: Vec<BTreeMap<String, usize>> = Vec::new();
     let mut track_key: Vec<usize> = Vec::with_capacity(tracks.len());
-    for (i, t) in tracks.iter().enumerate() {
-        let spelling = folder_artist(t, various[i]).unwrap_or_else(|| UNKNOWN.to_string());
+    for spelling in spellings {
         let key = artist_key(&spelling);
         let id = *key_ids.entry(key.clone()).or_insert_with(|| {
             key_list.push(key);
@@ -532,6 +622,7 @@ pub fn build(tracks: &[Track], prefs: &ArtistPrefs) -> Index {
                     year: most_common(&years, |y| (u16::MAX - y) as usize),
                     multi_disc: idxs.iter().any(|&i| tracks[i].disc.unwrap_or(1) > 1),
                     various: clusters[c].key == artist_key(VARIOUS) || track_artists.len() > 1,
+                    repeats: repeated_songs(tracks, &idxs),
                     tracks: idxs,
                     variant: None,
                     edition: None,
@@ -582,12 +673,12 @@ mod tests {
     use super::*;
 
     fn t(artist: &str, album: &str) -> Track {
-        Track { artist: Some(artist.into()), album: Some(album.into()), ..Default::default() }
+        Track { path: format!("/m/{album}/{artist}.mp3").into(), artist: Some(artist.into()), album: Some(album.into()), ..Default::default() }
     }
 
     #[test]
     fn variants_merge_and_typos_are_suggested() {
-        let tracks = vec![t("The Beatles", "Abbey Road"), t("Beatles", "Abbey Road"), t("Radiohead", "OK"), t("Radiohaed", "OK")];
+        let tracks = vec![t("The Beatles", "Abbey Road"), t("Beatles", "Abbey Road"), t("Radiohead", "OK"), t("Radiohaed", "Kid A")];
         let idx = build(&tracks, &ArtistPrefs::default());
         assert_eq!(idx.clusters.len(), 3);
         assert_eq!(idx.suggestions.len(), 1);
@@ -684,6 +775,81 @@ mod tests {
         let q = |k| Quality { kbps: k, ..Default::default() };
         assert_eq!(q(320).compare(&q(300)), std::cmp::Ordering::Equal);
         assert_eq!(q(320).compare(&q(192)), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn an_album_stays_in_one_folder() {
+        let song = |dir: &str, n: u32, artist: &str, album_artist: Option<&str>| Track {
+            path: format!("/m/{dir}/{n}.mp3").into(),
+            artist: Some(artist.into()),
+            album_artist: album_artist.map(Into::into),
+            album: Some(dir.into()),
+            track: Some(n),
+            ..Default::default()
+        };
+        let mut tracks = Vec::new();
+        // Most songs name the duo as album artist; two have no album artist.
+        for n in 1..=8 {
+            tracks.push(song("Duality", n, "Lisa Gerrard/Pieter Bourke", Some("Lisa Gerrard & Pieter Bourke")));
+        }
+        tracks.extend([song("Duality", 9, "Lisa Gerrard", None), song("Duality", 10, "Lisa Gerrard", None)]);
+        // A compilation flag on some songs only, with one album artist throughout.
+        for n in 1..=4 {
+            tracks.push(Track { compilation: n > 1, ..song("Suspended Animation", n, "John Petrucci", Some("John Petrucci")) });
+        }
+        // A guest on one song, no album-artist tags.
+        for n in 1..=4 {
+            tracks.push(song("Hybrid Theory", n, if n == 4 { "Linkin Park & Guest" } else { "Linkin Park" }, None));
+        }
+        // A split release: two bands, no main one.
+        for n in 1..=4 {
+            tracks.push(song("Split Tape", n, if n <= 2 { "Lebanon Hanover" } else { "La Fete Triste" }, None));
+        }
+        // Same name, different folders and bands: not one album.
+        tracks.push(Track { path: "/m/a/1.mp3".into(), ..song("Greatest Hits", 1, "The Doors", None) });
+        tracks.push(Track { path: "/m/b/1.mp3".into(), ..song("Greatest Hits", 1, "Led Zeppelin", None) });
+
+        let idx = build(&tracks, &ArtistPrefs::default());
+        let holder = |album: &str| {
+            let v: Vec<&str> = idx.artists.iter().filter(|a| a.albums.iter().any(|al| al.title.as_deref() == Some(album))).map(|a| a.name.as_str()).collect();
+            v
+        };
+        assert_eq!(holder("Duality"), ["Lisa Gerrard & Pieter Bourke"]);
+        assert_eq!(holder("Suspended Animation"), ["John Petrucci"]);
+        assert_eq!(holder("Hybrid Theory"), ["Linkin Park"]);
+        assert_eq!(holder("Split Tape"), [VARIOUS]);
+        assert_eq!(holder("Greatest Hits").len(), 2);
+
+        // Artists the user merged count as one: nothing to keep together.
+        let tracks = vec![song("Axis", 1, "Jimi Hendrix", None), song("Axis", 2, "The Jimi Hendrix Experience", None)];
+        let prefs = ArtistPrefs { merges: vec![(artist_key("Jimi Hendrix"), artist_key("The Jimi Hendrix Experience"))], ..Default::default() };
+        assert_eq!(build(&tracks, &prefs).artists.len(), 1);
+        assert_eq!(build(&tracks, &ArtistPrefs::default()).artists[0].name, VARIOUS);
+    }
+
+    #[test]
+    fn songs_stored_twice() {
+        let song = |file: &str, n: u32, size: u64| Track {
+            path: format!("/m/Band/Hits/{file}").into(),
+            artist: Some("Band".into()),
+            album: Some("Hits".into()),
+            track: Some(n),
+            title: Some(format!("Song {n}")),
+            size,
+            duration: std::time::Duration::from_secs(200),
+            ..Default::default()
+        };
+        let tracks = vec![
+            song("01 Song 1 (2015_05_12 05_18_04 UTC).mp3", 1, 100),
+            song("01 Song 1.mp3", 1, 100),
+            song("01 Song 1 (2015_06_05 05_22_01 UTC).mp3", 1, 100),
+            song("02 Song 2.mp3", 2, 100),
+            // Same number, different file: not a repeat.
+            song("02 Song 2 (live).mp3", 2, 150),
+        ];
+        let al = &build(&tracks, &ArtistPrefs::default()).artists[0].albums[0];
+        assert_eq!(al.repeats, [(0, 1), (2, 1)], "the shortest name stays");
+        assert!(al.is_repeat(2) && !al.is_repeat(1) && !al.is_repeat(4));
     }
 
     #[test]

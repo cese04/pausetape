@@ -60,6 +60,9 @@ pub fn pending_text(app: &App) -> Option<String> {
     if s.removed > 0 {
         parts.push(format!("{} to take off", plural(s.removed, "album")));
     }
+    if s.repeats > 0 {
+        parts.push(format!("{} on the card twice to take off", plural(s.repeats, "song")));
+    }
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
@@ -131,7 +134,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     let connected = w.dest.as_deref().is_some_and(|d| d.exists());
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         caps(ui, &name);
         match room(app) {
             Some((_, room)) => {

@@ -140,6 +140,15 @@ impl App {
                         self.write_preview = Some((name, *p));
                     }
                 }
+                Msg::Trashed(moved, errors) => {
+                    self.busy = None;
+                    let note = match errors.first() {
+                        None => String::new(),
+                        Some(e) => format!(" · {} left alone, e.g. {e}", errors.len()),
+                    };
+                    self.notice(format!("{} moved to the Trash{note}", plural_files(moved)));
+                    self.scan();
+                }
                 Msg::TagsSaved(ok, errors) => {
                     self.busy = None;
                     for &(i, size, mtime) in &ok {

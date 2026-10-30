@@ -57,7 +57,9 @@ impl Mark {
 }
 
 /// A track row painted directly so columns line up like a table without any grid lines.
-fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>) -> (egui::Response, bool) {
+/// `repeat`: an extra copy of a song the album already has.
+#[allow(clippy::too_many_arguments)]
+fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -77,14 +79,16 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
     if show_artist && let Some(a) = &t.artist {
         title = format!("{title}  ·  {a}");
     }
-    let right_cols = if t.on_recho() { 130.0 } else { 250.0 };
+    let right_cols = if t.on_recho() && !repeat { 130.0 } else { 250.0 };
     let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - 44.0 - right_cols);
     p.galley(egui::pos2(rect.left() + 44.0, y - galley.size().y / 2.0), galley, ink.text);
 
     let mut x = rect.right() - 28.0;
     p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, text::duration(t.duration), font.clone(), ink.muted);
     x -= 56.0;
-    if !t.on_recho() {
+    if repeat {
+        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(12.0), ink.accent);
+    } else if !t.on_recho() {
         // A small outlined badge: the format, and what it means for the player.
         let label = text::format_badge(t);
         let g = ui.painter().layout_no_wrap(label, FontId::proportional(11.5), ink.accent);
@@ -105,6 +109,7 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
     }
     let resp = match text::format_note(t) {
         Some(note) => resp.on_hover_text(note),
+        None if repeat => resp.on_hover_text(format!("Another file in this album is the same song (same number, size and length). The card gets it once.\n{}", t.path.display())),
         None => resp,
     };
     (resp, added)
@@ -172,24 +177,34 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         crate::ui::card::strip(app, ui);
         ui.add_space(6.0);
     }
+    let mut actions = Vec::new();
     if app.duplicates_only {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Showing albums with a copy that another copy covers in the same or higher quality.").color(ink.text));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Showing albums with songs stored twice, or a copy that another copy covers in the same or higher quality.").color(ink.text));
             if link(ui, "show all").clicked() {
                 app.duplicates_only = false;
+            }
+            let repeats = app.index.repeats();
+            if !repeats.is_empty() {
+                let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
+                let hint = "Each extra copy is checked against the copy that stays first, and goes only if they're still the same file. You can put them back from the Trash.";
+                if app.busy.is_none() && link(ui, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                    actions.push(Action::TrashRepeats(repeats));
+                }
             }
         });
         ui.add_space(4.0);
     }
-    // Albums (by base id) where one copy covers another, for the duplicates view.
+    // Albums (by base id) where one copy covers another, or with songs stored twice, for the
+    // duplicates view.
     let duplicated: std::collections::HashSet<String> = app
         .index
         .superseded()
         .into_iter()
+        .chain(app.index.artists.iter().enumerate().flat_map(|(a, artist)| artist.albums.iter().enumerate().filter(|(_, al)| !al.repeats.is_empty()).map(move |(b, _)| (a, b))))
         .map(|(a, b)| app.index.artists[a].albums[b].base_id(&app.index.clusters[app.index.artists[a].cluster].key))
         .collect();
     let needle = app.filter.to_lowercase();
-    let mut actions = Vec::new();
     let current = app.current();
     let can_add = app.active_playlist.is_some();
     let present: std::collections::BTreeSet<char> = app.index.artists.iter().map(|a| initial(&a.name)).collect();
@@ -336,6 +351,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         if let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()) {
                             superseded_note(ui, &app.tracks, &al.tracks, s);
                         }
+                        if !al.repeats.is_empty() {
+                            repeats_note(ui, app, al, &mut actions);
+                        }
                         if let Some(l) = app.lookups.get_mut(&id) {
                             lookup_block(ui, &app.tracks, &id, l, &mut actions);
                         }
@@ -354,7 +372,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 (None, _) => String::new(),
                             };
                             let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
-                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark);
+                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti));
                             if r.double_clicked() || r.clicked() {
                                 actions.push(Action::Play(al.tracks.clone(), pos));
                             }
@@ -433,7 +451,7 @@ fn az_rail(ui: &mut Ui, present: &std::collections::BTreeSet<char>, height: f32)
 }
 
 /// A copy whose songs another edition has in the same or higher quality: say so, and what
-/// removing it would free. The app never deletes music itself.
+/// removing it would free. Whole copies are left for the user to delete.
 fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::library::grouping::Superseded) {
     let ink = ink(ui);
     let bytes: u64 = idxs.iter().map(|&i| tracks[i].size).sum();
@@ -442,10 +460,26 @@ fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::lib
         ui.add_space(52.0);
         ui.label(RichText::new(format!("Edition {} has all these songs {how}; this copy could go ({}).", s.rank + 1, text::bytes(bytes))).size(12.5).italics().color(ink.text))
             .on_hover_text(format!(
-                "Edition {}: {}.\nNeatLibrary never deletes music: to remove this copy, open its folder and delete it yourself. Until then, the card gets only one edition anyway.",
+                "Edition {}: {}.\nTo remove this copy, open its folder and delete it yourself. Until then, the card gets only one edition anyway.",
                 s.rank + 1,
                 s.label
             ));
+    });
+}
+
+/// Songs the album holds twice: how many, what they take, and a way to bin the extra copies.
+fn repeats_note(ui: &mut Ui, app: &App, al: &crate::library::grouping::AlbumNode, actions: &mut Vec<Action>) {
+    let ink = ink(ui);
+    let bytes: u64 = al.repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
+    let n = al.repeats.len();
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(52.0);
+        let songs = if n == 1 { "1 song is".to_string() } else { format!("{n} songs are") };
+        ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(12.5).italics().color(ink.accent));
+        let hint = "Moves the extra copies to the Trash, each only if it's still the same file as the copy that stays (the one with the shorter name). You can put them back from the Trash.";
+        if app.busy.is_none() && link(ui, "move the extra copies to the Trash").on_hover_text(hint).clicked() {
+            actions.push(Action::TrashRepeats(al.repeats.clone()));
+        }
     });
 }
 

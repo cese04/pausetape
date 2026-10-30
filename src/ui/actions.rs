@@ -18,6 +18,8 @@ pub(super) enum Action {
     CardAlbum(usize, usize, bool),
     /// The whole artist on the card or off it.
     CardArtist(usize, bool),
+    /// Move extra copies of songs stored twice to the Trash: (extra copy, the copy that stays).
+    TrashRepeats(Vec<(usize, usize)>),
 }
 
 pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
@@ -40,6 +42,7 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::LookupArtist(c) => app.lookup_artist(c),
             Action::CardAlbum(a, b, on) => app.card_album(a, b, on),
             Action::CardArtist(a, on) => app.card_artist(a, on),
+            Action::TrashRepeats(pairs) => app.trash_repeats(pairs),
             Action::Name(c, n) => {
                 app.set_cluster_name(c, n);
                 app.renaming = None;

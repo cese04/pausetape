@@ -1,5 +1,5 @@
 //! Things that differ per operating system and aren't about music: where the app keeps its
-//! data, and opening a folder in the system file manager.
+//! data, opening a folder in the system file manager, and the Trash.
 
 use std::path::{Path, PathBuf};
 
@@ -20,4 +20,15 @@ pub fn reveal(path: &Path) {
         "xdg-open"
     };
     let _ = std::process::Command::new(cmd).arg(path).spawn();
+}
+
+/// Move a file to the Trash (the Recycle Bin on Windows), where it can be restored from.
+pub fn trash(path: &Path) -> Result<(), String> {
+    #[allow(unused_mut)]
+    let mut ctx = trash::TrashContext::default();
+    // macOS: ask the file manager service directly; the Finder way would make the app ask for
+    // permission to control Finder, and play its sound for every file.
+    #[cfg(target_os = "macos")]
+    trash::macos::TrashContextExtMacos::set_delete_method(&mut ctx, trash::macos::DeleteMethod::NsFileManager);
+    ctx.delete(path).map_err(|e| e.to_string())
 }

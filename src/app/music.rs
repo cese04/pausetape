@@ -76,7 +76,7 @@ impl App {
             all.chosen = Some(card::Chosen { artists: self.index.artists.iter().map(|a| self.index.clusters[a.cluster].key.clone()).collect(), albums: Default::default() });
             all.excluded_albums.clear();
             let everything = card::build_plan(&self.tracks, &self.index, &w.options, &all);
-            for p in everything.iter().chain(&plan).filter(|p| p.skip.is_none()) {
+            for p in everything.iter().chain(&plan).filter(|p| p.skip.is_none() || p.skip == Some(card::REPEAT)) {
                 by_rel.insert(p.rel.to_string_lossy().to_lowercase(), p.track);
             }
         }
@@ -94,7 +94,9 @@ impl App {
             let ck = &self.index.clusters[a.cluster].key;
             for al in &a.albums {
                 let add: Vec<usize> = al.tracks.iter().copied().filter(|t| planned.contains_key(t) && !on_card.contains_key(t)).collect();
-                let remove: Vec<usize> = al.tracks.iter().copied().filter(|t| on_card.contains_key(t) && !planned.contains_key(t)).collect();
+                let (repeats, remove): (Vec<usize>, Vec<usize>) = al.tracks.iter().copied().filter(|t| on_card.contains_key(t) && !planned.contains_key(t)).partition(|&t| al.is_repeat(t));
+                s.repeats += repeats.len();
+                s.remove_bytes += repeats.iter().map(|t| on_card[t]).sum::<u64>();
                 s.add_bytes += add.iter().map(|t| card::card_size(&self.tracks[*t], planned[t].target)).sum::<u64>();
                 s.remove_bytes += remove.iter().map(|t| on_card[t]).sum::<u64>();
                 if !add.is_empty() {
@@ -139,6 +141,39 @@ impl App {
                 }
             }
             let _ = tx.send(Msg::TagsSaved(ok, errors));
+        });
+    }
+
+    /// Move extra copies of songs stored twice to the Trash: (extra copy, the copy that stays),
+    /// as `AlbumNode::repeats` lists them. Each goes only if it still is the same file as the
+    /// copy that stays (same size, same first and last 64 KB). Then the library is read again.
+    pub fn trash_repeats(&mut self, pairs: Vec<(usize, usize)>) {
+        if pairs.is_empty() || self.busy.is_some() {
+            return;
+        }
+        let files: Vec<(PathBuf, PathBuf)> = pairs.iter().map(|&(c, k)| (self.tracks[c].path.clone(), self.tracks[k].path.clone())).collect();
+        self.busy = Some(Busy { label: "moving to the Trash".into(), done: 0, total: files.len() });
+        let ctx = self.ctx.clone();
+        self.spawn(move |tx| {
+            let mut errors = Vec::new();
+            let mut moved = 0;
+            for (n, (copy, keep)) in files.iter().enumerate() {
+                let same = || {
+                    let (a, b) = (std::fs::metadata(copy).ok()?.len(), std::fs::metadata(keep).ok()?.len());
+                    Some(a == b && card::adopt::sample(copy, a).ok()? == card::adopt::sample(keep, b).ok()?)
+                };
+                match same() {
+                    Some(true) => match crate::platform::trash(copy) {
+                        Ok(()) => moved += 1,
+                        Err(e) => errors.push(format!("{}: {e}", copy.display())),
+                    },
+                    Some(false) => errors.push(format!("{}: no longer the same as {}, so it stays", copy.display(), keep.display())),
+                    None => errors.push(format!("{}: couldn't be read", copy.display())),
+                }
+                let _ = tx.send(Msg::WriteProgress(n + 1, files.len()));
+                ctx.request_repaint();
+            }
+            let _ = tx.send(Msg::Trashed(moved, errors));
         });
     }
 

@@ -201,7 +201,7 @@ fn card_song_identity(dest: &Path, rel: &Path) -> Option<(String, String)> {
 }
 
 /// The first and last `SAMPLE` bytes of a file.
-fn sample(path: &Path, size: u64) -> std::io::Result<Vec<u8>> {
+pub(crate) fn sample(path: &Path, size: u64) -> std::io::Result<Vec<u8>> {
     let mut f = File::open(path)?;
     let head = SAMPLE.min(size);
     let mut out = vec![0; head as usize];

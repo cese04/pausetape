@@ -95,6 +95,16 @@ fn header(app: &mut App, ui: &mut Ui) {
                 app.duplicates_only = true;
             }
         }
+        let repeats = app.index.repeats();
+        if !repeats.is_empty() {
+            let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
+            muted(ui, "·");
+            let hint = "Songs kept twice in the same album, like the copies a backup tool leaves. Show them in the library.";
+            if widgets::link(ui, format!("{} stored twice ({})", text::plural(repeats.len(), "song"), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                app.tab = Tab::Library;
+                app.duplicates_only = true;
+            }
+        }
         if let Some(b) = &app.busy {
             ui.add_space(12.0);
             let txt = if b.total > 0 { format!("{} {}/{}", b.label, b.done, b.total) } else { format!("{} {}…", b.label, if b.done > 0 { b.done.to_string() } else { String::new() }) };

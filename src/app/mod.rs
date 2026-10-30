@@ -99,6 +99,8 @@ enum Msg {
     ImportedFromCard(Box<card::adopt::Imported>),
     /// Card paths no longer the write's, files put back, errors.
     UndidTakeOver(String, Result<(Vec<PathBuf>, usize, Vec<String>), String>),
+    /// Songs stored twice: extra copies moved to the Trash, and what went wrong.
+    Trashed(usize, Vec<String>),
     /// (track index, new size, new mtime) for files whose tags were written.
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
     /// Loudness of a track, by track id.
@@ -125,6 +127,8 @@ pub struct CardState {
     pub added: usize,
     pub replaced: usize,
     pub removed: usize,
+    /// Songs on the card twice (see `AlbumNode::repeats`): Sync takes the extra copies off.
+    pub repeats: usize,
     /// Bytes Sync copies, and frees.
     pub add_bytes: u64,
     pub remove_bytes: u64,

@@ -327,6 +327,9 @@ impl Custom {
     }
 }
 
+/// Why a song stored twice in an album is left out (see `AlbumNode::repeats`).
+pub const REPEAT: &str = "the same song again";
+
 #[derive(Clone)]
 pub struct PlanItem {
     pub track: usize,
@@ -397,9 +400,12 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
                 continue;
             }
             let album_dir = album_folder(album, custom.album_name(ck, album), position, opts);
-            for &i in &album.tracks {
+            // Songs stored twice go last, so the copy that stays gets the plain name.
+            let once = album.tracks.iter().copied().filter(|&i| !album.is_repeat(i));
+            for i in once.chain(album.repeats.iter().map(|&(c, _)| c)) {
                 let t = &tracks[i];
                 let (target, skip) = match target(t, opts.rules()) {
+                    _ if album.is_repeat(i) => (Target::Copy, Some(REPEAT)),
                     Ok(to) => (to, None),
                     Err(why) => (Target::Copy, Some(why)),
                 };
@@ -550,5 +556,16 @@ mod tests {
         assert_eq!(sources(&c).len(), 2);
         c.set_artist("band", &band.albums, false);
         assert!(sources(&c).is_empty());
+    }
+
+    #[test]
+    fn a_song_stored_twice_goes_once() {
+        let copy = |file: &str| Track { size: 100, ..at(&format!("/m/Band/Hits/{file}"), "Hits", "Song", 2000) };
+        let tracks = vec![copy("01 Song (2015_05_12 UTC).flac"), copy("01 Song.flac")];
+        let index = build(&tracks, &ArtistPrefs::default());
+        let plan = build_plan(&tracks, &index, &Options::default(), &Custom::default());
+        let rels: Vec<(String, Option<&str>)> = plan.iter().map(|p| (p.rel.file_name().unwrap().to_string_lossy().into_owned(), p.skip)).collect();
+        assert_eq!(rels, [("01 - Song.flac".to_string(), None), ("01 - Song (2).flac".to_string(), Some(REPEAT))]);
+        assert_eq!(plan[0].track, 1, "the copy with the plain name stays");
     }
 }
