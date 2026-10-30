@@ -64,6 +64,8 @@ fn header(app: &mut App, ui: &mut Ui) {
         ] {
             if widgets::tab(ui, name, app.tab == t).clicked() {
                 app.tab = t;
+                // The library tab always opens on the whole library.
+                app.duplicates_only = false;
             }
             ui.add_space(6.0);
         }

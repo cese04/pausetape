@@ -340,4 +340,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   after copying, so a choice that fits only once they're gone could fill the card halfway and
   fail its last songs. Songs no longer wanted now go before anything is copied; playlist files
   still wait for the end. A copy that fails (a full card) no longer leaves its `.partial` behind.
+- **Back from the duplicates view:** its only way out was a grey "show all" that read like a
+  hint. It now sits in a panel with a *back to the whole library* button; Esc and the library
+  tab leave it too, and it closes itself once no duplicates are left.
 - 49 tests (40 offline).

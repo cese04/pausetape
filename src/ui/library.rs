@@ -178,23 +178,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(6.0);
     }
     let mut actions = Vec::new();
-    if app.duplicates_only {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Showing albums with songs stored twice, or a copy that another copy covers in the same or higher quality.").color(ink.text));
-            if link(ui, "show all").clicked() {
-                app.duplicates_only = false;
-            }
-            let repeats = app.index.repeats();
-            if !repeats.is_empty() {
-                let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
-                let hint = "Each extra copy is checked against the copy that stays first, and goes only if they're still the same file. You can put them back from the Trash.";
-                if app.busy.is_none() && link(ui, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
-                    actions.push(Action::TrashRepeats(repeats));
-                }
-            }
-        });
-        ui.add_space(4.0);
-    }
     // Albums (by base id) where one copy covers another, or with songs stored twice, for the
     // duplicates view.
     let duplicated: std::collections::HashSet<String> = app
@@ -204,6 +187,36 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .chain(app.index.artists.iter().enumerate().flat_map(|(a, artist)| artist.albums.iter().enumerate().filter(|(_, al)| !al.repeats.is_empty()).map(move |(b, _)| (a, b))))
         .map(|(a, b)| app.index.artists[a].albums[b].base_id(&app.index.clusters[app.index.artists[a].cluster].key))
         .collect();
+    // Once the copies are dealt with (and the rescan is done), there's nothing left to show.
+    if app.duplicates_only && duplicated.is_empty() && app.busy.is_none() {
+        app.duplicates_only = false;
+        app.notice("no duplicates left · showing the whole library");
+    }
+    if app.duplicates_only {
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            app.duplicates_only = false;
+        }
+        theme::panel_frame(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                if widgets::button(ui, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                    app.duplicates_only = false;
+                }
+                ui.add_space(8.0);
+                ui.label(RichText::new("Showing only albums with songs stored twice, or a copy that another copy covers in the same or higher quality.").color(ink.text));
+            });
+            let repeats = app.index.repeats();
+            if !repeats.is_empty() {
+                ui.add_space(6.0);
+                let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
+                let hint = "Each extra copy is checked against the copy that stays first, and goes only if they're still the same file. You can put them back from the Trash.";
+                if app.busy.is_none() && link(ui, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                    actions.push(Action::TrashRepeats(repeats));
+                }
+            }
+        });
+        ui.add_space(8.0);
+    }
     let needle = app.filter.to_lowercase();
     let current = app.current();
     let can_add = app.active_playlist.is_some();
