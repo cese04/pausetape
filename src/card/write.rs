@@ -14,6 +14,7 @@ use super::playlist::{self, Playlist};
 use super::plan::{Target, card_size};
 use super::{Custom, Mode, Options, PlanItem, Progress, Written};
 use crate::library::Track;
+use crate::library::names::sanitize_component;
 use crate::library::grouping::Index;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -139,7 +140,8 @@ pub struct Outcome {
     pub errors: Vec<String>,
 }
 
-/// Copy the plan and playlists to the card, then remove what the previous write left behind.
+/// Remove what the previous write left that the plan no longer wants, copy the plan and
+/// playlists to the card, then remove what's left over (playlist files, songs that failed).
 pub fn write(
     w: &WriteProfile,
     tracks: &[Track],
@@ -149,6 +151,16 @@ pub fn write(
     dest: &Path,
     mut progress: impl FnMut(Progress),
 ) -> Outcome {
+    // Removing first makes room: a choice that fits only once old albums are gone would
+    // otherwise fill the card halfway. Playlist files wait for the end, when their names are known.
+    let early = if w.prune {
+        let wanted: HashSet<String> = plan.iter().filter(|p| p.skip.is_none()).map(|p| p.rel.to_string_lossy().to_lowercase()).collect();
+        let playlists_dir = sanitize_component(&w.playlists_folder, 80).to_lowercase();
+        let songs: Vec<Written> = w.manifest.iter().filter(|m| !Path::new(&m.rel.to_string_lossy().to_lowercase()).starts_with(&playlists_dir)).cloned().collect();
+        super::prune(dest, &songs, &wanted)
+    } else {
+        0
+    };
     // Clean the macOS files once at the end, after playlists too.
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
     let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, &mut progress);
@@ -170,7 +182,7 @@ pub fn write(
         unchanged: r.unchanged + pl.unchanged,
         skipped: r.skipped,
         tagged: r.tagged,
-        removed: removed + pl.removed,
+        removed: early + removed + pl.removed,
         cleaned,
         errors,
     }

@@ -205,6 +205,17 @@ impl App {
         });
     }
 
+    /// The card's space and what this write's choice can use: (space, room). The room is what's
+    /// free plus what its own earlier files occupy, plus the copies a take-over of the card (once
+    /// checked) would move into place.
+    pub fn card_room(&self) -> Option<(card::SpaceInfo, u64)> {
+        let w = self.write();
+        let info = w.dest.as_deref().and_then(card::space)?;
+        let adoptable = self.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
+        let room = self.room_while_writing.unwrap_or(info.free + w.manifest_bytes() + adoptable);
+        Some((info, room))
+    }
+
     pub fn run_write(&mut self) {
         let w = self.write().clone();
         let (Some(dest), Some(source)) = (w.dest.clone(), self.saved.source.clone()) else { return };
@@ -212,6 +223,7 @@ impl App {
             return;
         }
         let plan = w.plan(&self.tracks, &self.index);
+        self.room_while_writing = self.card_room().map(|(_, room)| room);
         self.busy = Some(Busy { label: format!("writing “{}”", w.name), done: 0, total: plan.len() });
         self.problems = None;
         let tracks = self.tracks.clone();

@@ -173,6 +173,9 @@ pub struct App {
     pub card_state: CardState,
     /// The card surveyed for taking over, by write name.
     pub card_survey: Option<(String, card::adopt::Survey)>,
+    /// The room a running write started with: its new files fill the card before the manifest
+    /// counts them, so the live figure would shrink as it goes.
+    pub room_while_writing: Option<u64>,
     /// Gather what a take-over doesn't use into one folder on the card.
     pub gather_on_take_over: bool,
     /// Delete clutter (iTunes data, system files, rip logs) when taking over a card.
@@ -242,6 +245,7 @@ impl App {
             in_place: 0,
             write_preview: None,
             card_survey: None,
+            room_while_writing: None,
             card_state: CardState::default(),
             gather_on_take_over: true,
             delete_clutter_on_take_over: false,

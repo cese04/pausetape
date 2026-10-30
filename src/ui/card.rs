@@ -66,15 +66,8 @@ pub fn pending_text(app: &App) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
-/// The card's space and what this write's choice needs: (space, room the write can use).
-/// The room is what's free plus what its own earlier files occupy, plus the copies a take-over
-/// of the card (once checked) would move into place.
 fn room(app: &App) -> Option<(crate::card::SpaceInfo, u64)> {
-    let w = app.write();
-    let info = w.dest.as_deref().and_then(crate::card::space)?;
-    let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
-    let room = info.free + w.manifest_bytes() + adoptable;
-    Some((info, room))
+    app.card_room()
 }
 
 /// A hairline as long as the room, and over it a bar as long as what's needed; red past the end.

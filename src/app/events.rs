@@ -68,6 +68,7 @@ impl App {
                 }
                 Msg::Written(name, out) => {
                     self.busy = None;
+                    self.room_while_writing = None;
                     let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
                     self.notice(format!(
                         "“{name}”: {} copied · {} unchanged · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",

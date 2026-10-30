@@ -240,11 +240,17 @@ fn place(t: &Track, target: Target, dst: &Path, mode: Mode, opts: &Options, prev
 /// FAT/exFAT card materialise as "._name" AppleDouble files that clutter the player's browser.
 pub fn plain_copy(src: &Path, dst: &Path) -> Result<()> {
     let tmp = dst.with_extension("partial");
-    {
+    let copy = || -> Result<()> {
         let mut reader = BufReader::with_capacity(1 << 20, File::open(src)?);
         let mut writer = BufWriter::with_capacity(1 << 20, File::create(&tmp)?);
         io::copy(&mut reader, &mut writer)?;
         writer.into_inner().map_err(|e| e.into_error())?.sync_all()?;
+        Ok(())
+    };
+    // A copy cut short (a full card, say) mustn't leave its half behind taking room.
+    if let Err(e) = copy() {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
     }
     fs::rename(&tmp, dst)?;
     Ok(())
