@@ -365,3 +365,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   songs, housekeeping).
 - **Settings tab:** the same layout, in sections (appearance, library, playing and converting,
   MusicBrainz), with explanations in smaller type than the settings.
+
+### 26. Faster writes: conversions in parallel (2026-10-30)
+- A write made one song at a time, so converting (hi-res to CD quality, M4A to MP3, songs cut
+  from album files) kept one core busy and the card idle while ffmpeg ran. Now a pool of
+  workers (one per spare core, up to 8) makes those songs in a work folder on the computer,
+  while one writer puts files on the card: each finished song as soon as it's ready, plain
+  copies in between. At most a few finished songs wait in the work folder, so it can't fill the
+  disk. 6 hi-res FLAC at CD quality and 6 M4A to MP3: 18.0 s before, 3.8 s now (12 cores).

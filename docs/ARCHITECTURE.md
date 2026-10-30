@@ -46,7 +46,8 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
 4. **Write** (`card/write.rs`, using `card/copy.rs` and `card/playlist.rs`): prune songs the
    *previous* write created that the plan no longer wants (only if their size still matches
    the manifest; first, so the card has room), copy what differs (songs inside an album file
-   are cut out, and formats RECHO can't play converted, with ffmpeg), export playlists, prune
+   are cut out, and formats RECHO can't play converted, with ffmpeg: by a pool of workers in a
+   work folder, while one writer copies to the card whatever is ready), export playlists, prune
    what's left over (old playlist files, songs that failed), clean macOS `._` files, and store
    the new manifest in the write profile.
 5. **Play** (`audio/`, `library/cover.rs`): `audio::open` tries Symphonia, else converts with
