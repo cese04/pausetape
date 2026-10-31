@@ -10,6 +10,8 @@ editions and same-name albums). The "What happens
 today" sections below describe the behaviour *before* these steps; part C ends with what was
 built and measured.
 
+**Added 2026-10-30:** part E, other players (device profiles, as calibre has).
+
 Related: [PROGRESS](PROGRESS.md) (status and roadmap) · [ARCHITECTURE](ARCHITECTURE.md) (where
 the code lives).
 
@@ -18,6 +20,7 @@ the code lives).
 | A | MusicBrainz suggestions come from the wrong album, often by another artist | `src/musicbrainz.rs`, `src/app/music.rs` (`lookup_album`), `src/ui/library.rs` |
 | B | Folder and file names are misread ("1979" becomes an artist) | `src/library/scan.rs` (`infer_from_path`) |
 | C | Albums stored as one FLAC plus a `.cue` sheet appear as one long song | new `src/library/cue.rs`; `scan.rs`, `track.rs`, `db.rs`, `audio/`, `card/` |
+| E | Only one player is known: everything assumes the Echo Mini running RECHO *(added 2026-10-30)* | new `src/card/device.rs`; `card/plan.rs`, `library/track.rs`, `ui/` |
 
 ---
 
@@ -447,3 +450,74 @@ track**:
   prunes them.
 - Keep the live checks as ignored tests (`musicbrainz`, a new `cue_library` over
   `NEATLIBRARY_FORMATS`).
+
+---
+
+## E. Other players: device profiles, as calibre has
+
+*Added 2026-10-30.* calibre keeps the library apart from the reader: each device has a driver
+that says what it reads, and "send to device" converts to suit it. NeatLibrary hard-codes one
+player. "RECHO" is in the format check (`Track::on_recho`, `RECHO_FORMATS`), in how editions are
+ranked, in the folder naming, in how playlists are written, and in dozens of on-screen strings.
+
+The Echo Mini's own (stock) firmware is the natural second player, because it differs from
+RECHO in nearly every way that matters here.
+
+### What's known of the two firmwares
+
+| | RECHO | Stock firmware |
+|---|---|---|
+| Browsing | folders, sorted by name | a library built from tags (artist, album), plus folders |
+| Formats | FLAC, MP3, WAV (up to 24-bit/192 kHz; MP3 up to 320 kbps) | FLAC, MP3, WAV, APE, AAC in M4A, Ogg Vorbis, WMA; DSD (up to DSD256) |
+| ALAC, Opus, AIFF, WavPack | no | not listed (ALAC inside M4A is unclear) |
+| Playlists | none for the user (`.m3u` only internally) | none, per most reviews (one says "playlist navigation") |
+| Covers | **none** | shown on the play screen |
+| Limits | none stated | 8,192 songs; cards up to 256 GB; no NTFS; no gapless |
+| SD card | read-only | read |
+
+Sources: [RECHO's site](https://recho.atzkey.workers.dev/) for RECHO. For stock: reviews at
+[Headfonics](https://headfonics.com/?p=75981),
+[audioreviews.org](https://www.audioreviews.org/fiio-snowsky-echo-mini-review/),
+[Mobile Audiophile](https://mobileaudiophile.com/daps/fiio-snowsky-echo-review/) and the
+[Turbovs spec sheet](https://www.turbovs.com/review/fiio-snowsky-echo-mini-50291). The stock
+column is unchecked on a player, and reviews disagree on playlists and on APE's top rate.
+
+**One correction to the app as it stands:** many strings say "the Echo Mini shows embedded
+covers". That's true of the stock firmware, but RECHO's site says it shows no cover art. Covers
+still matter: for this app's player, the stock firmware, and most other players.
+
+### What a profile changes
+
+- **What plays, so what's converted.** On stock, AAC, Ogg, APE and WMA go to the card as they
+  are; on RECHO they're converted.
+- **Naming.** The year prefixes ("1997 - OK Computer") exist because RECHO sorts folders by
+  name. A tag-browsing player ignores folder names, so album artist, track and disc numbers and
+  the compilation flag decide how the music looks there; "write corrected tags" matters more.
+- **Playlists.** RECHO's playlists are folders of numbered copies. A player that builds its
+  library from tags would list each copy as a second song under its artist, so on stock the
+  playlist copies come with a warning.
+- **Limits.** Stock lists at most 8,192 songs, so what fits is counted in songs as well as bytes.
+- **Covers.** Whether a missing cover shows on the player.
+
+Edition ranking stays the same for every player. The edition a write picks first is the most
+complete one in FLAC, MP3 or WAV (`Track::plays_anywhere`), the formats nearly every player
+reads.
+
+### Steps
+
+| # | Step | Size | Status |
+|---|---|---|---|
+| E1 | **Profiles.** A `Device` on each card setup (`Options::device`), carried into `Rules`, so `target()` asks "does this player play it?". Built in: *Echo Mini · RECHO* (the default, so saved setups keep working) and *Echo Mini · stock firmware*. Chosen in the card tab's **player** row, next to the destination. Format warnings, badges, the scan notice and the playlist note name the chosen player; the card warns above its song limit. | M | |
+| E2 | **A test card.** Write a folder of short samples (ALAC, AAC, Opus, APE, AIFF, WavPack, 24/192 FLAC, a cover, a playlist) to the card; play through it on the player and tick what worked. The result is saved as a custom profile beside the built-in ones. The building block is the ignored `convert_write` test in `card/write.rs`, which isn't yet a feature. | M | |
+| E3 | **Recognising a card.** Write a small hidden file (`.neatlibrary`, like calibre's `metadata.calibre`) naming the card setup it belongs to, so a card plugged in brings up its own setup and player. RECHO only reads the card, so the file is harmless there. | S | |
+| E4 | **A side panel of facets** (format, quality, year, card status, genre) with counts, each a click to filter. The search terms behind it exist already (`library/search.rs`); genre needs reading from tags. | M | |
+| E5 | **An editable naming pattern**, like calibre's save-to-disk template: `{albumartist}/{year} - {album}/{disc}-{track} - {title}`, with a default per profile. | M | |
+
+**Tests for E1:** each player's format list (FLAC everywhere, AAC on stock only, ALAC on
+neither); `target()` copies AAC for stock and converts it for RECHO; saved settings without a
+player load as RECHO.
+
+**Open questions, for E2 to settle:** ALAC in M4A on stock; whether stock reads `.m3u8`; tag
+versions (ID3v2.3 or 2.4, and whether it reads Vorbis comments in Ogg); bit-depth and
+sample-rate ceilings; whether stock's library counts songs on the internal storage towards the
+8,192.
