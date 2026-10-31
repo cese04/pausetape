@@ -8,7 +8,8 @@ to a full test pass, says what to expect (including the gaps already known), and
 results.
 
 Related: [PROGRESS](PROGRESS.md) (overall status) · [DISTRIBUTION](DISTRIBUTION.md) (§1 lists the
-portability fixes) · [ARCHITECTURE](ARCHITECTURE.md) (where things live in the code).
+portability fixes) · [REVIEW](REVIEW.md) (bugs found by a code review, 2026-10-31) ·
+[ARCHITECTURE](ARCHITECTURE.md) (where things live in the code).
 
 ---
 
@@ -98,8 +99,13 @@ cargo run --release -- --plan ~/Music           # Linux
 | 7 | **Linux** | **Every** mounted drive under `/media/$USER` or `/run/media/$USER` is listed as a possible card, and the "not FAT32/exFAT" warning never appears (filesystem type isn't read on Linux yet). | Pick the right one by name and size. |
 | 8 | **Linux** | Fonts: the serif look depends on DejaVu Serif at the Debian/Ubuntu path. On Fedora/Arch the app falls back to a sans font, and Chinese/Japanese/Korean names may show as boxes. | Cosmetic only. |
 | 9 | Both | ffmpeg isn't bundled (only the Mac app includes it). | Install it as in §1. |
+| 10 | All | **Starting with the music folder's drive unplugged empties the library database**, unsaved corrections included, and a **Sync** with an empty library removes the setup's songs from the card ([REVIEW](REVIEW.md) R1, R2). | Connect the music drive before starting the app. Never Sync when the library shows 0 songs. |
+| 11 | **Windows** | Plugging in a card doesn't switch to its setup (no drives are listed, #1). A black console window flashes for each song converted onto the card ([REVIEW](REVIEW.md) R12, R13). | Choose the setup by hand. |
+| 12 | **Windows**, **Linux** | **Move to the Trash** may delete outright on USB drives and SD cards (no Recycle Bin), or fail on Linux drives without a trash folder ([REVIEW](REVIEW.md) R10). | Test it on a copy first: see if the files appear in the Recycle Bin/Trash. |
+| 13 | **Linux** | Music in folders linked into the music folder (symbolic links) isn't found ([REVIEW](REVIEW.md) R20). | Point the app at the real folder. |
 
-All of these have planned fixes in [DISTRIBUTION §1](DISTRIBUTION.md#1-code-changes-needed-first).
+\#1–9 have planned fixes in [DISTRIBUTION §1](DISTRIBUTION.md#1-code-changes-needed-first); \#10–13
+and the rest of what a full code review found are in [REVIEW](REVIEW.md).
 
 ---
 
