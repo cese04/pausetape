@@ -294,6 +294,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
             app.notice("the card folder can't be inside your music folder (or the other way round)");
         } else {
             app.write_mut().dest = Some(dir);
+            app.refresh_label();
             close = true;
         }
     }

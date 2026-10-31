@@ -18,7 +18,7 @@ reading the code; each says what would happen and where.
 | [R4](#r4) | Medium | Renaming a card setup while it syncs or takes over the card loses what it did (**fixed**) | All |
 | [R5](#r5) | Medium | Choosing another music folder while something runs leaves the library empty, and can crash (**fixed**) | All |
 | [R6](#r6) | Medium | Undoing a take-over fails once the card is mounted somewhere else (**fixed**) | All |
-| [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card | All |
+| [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card (**fixed**) | All |
 | [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs (**fixed**) | All |
 | [R9](#r9) | Medium | Songs with unsaved corrections are copied again at every Sync | All |
 | [R10](#r10) | Medium | "Moved to the Trash" may really delete, on some drives | Windows, Linux |
@@ -145,8 +145,8 @@ The "this card belongs to another setup" check uses the label as last read, whic
 every 3 seconds. Choosing another setup's card in the card dialog and pressing **Sync** at once
 isn't refused, and the write relabels the card as this setup's.
 
-*Fix:* read the label afresh (it's a tiny file) in `run_write` and `take_over_card` before
-going ahead.
+**Fixed 2026-10-31.** The label is read again right before a Sync, a take-over or a check of the
+card's music, and as soon as a card is chosen in the card dialog.
 
 ### R8
 **Damaged audio files join the library as ordinary songs.**

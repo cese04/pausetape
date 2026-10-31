@@ -154,6 +154,8 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        // The label as it is now: the card may have been swapped since the last look.
+        self.refresh_label();
         if let Some(why) = self.refused_by_label().or_else(|| self.library_unavailable()) {
             self.notice(why);
             return;
@@ -181,6 +183,8 @@ impl App {
             self.card_survey = Some((id, survey));
             return;
         }
+        // The label as it is now: the card may have been swapped since the last look.
+        self.refresh_label();
         if let Some(why) = self.refused_by_label().or_else(|| self.library_unavailable()) {
             self.notice(why);
             return;
@@ -278,6 +282,8 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        // The label as it is now: the card may have been swapped since the last look.
+        self.refresh_label();
         if let Some(why) = self.refused_by_label().or_else(|| self.library_unavailable()) {
             self.notice(why);
             return;

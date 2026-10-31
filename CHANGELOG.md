@@ -544,3 +544,5 @@ Calibre's device view, for music: the library is where you choose what goes on t
   library empty).
 - Undoing a take-over works with the card mounted somewhere else: new undo records keep paths
   relative to the card.
+- The card's label is read again right before a Sync or take-over, and as soon as a card is
+  chosen, so a setup can't sync to another setup's card in the moments before the next look.
