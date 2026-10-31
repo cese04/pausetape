@@ -2,9 +2,10 @@
 //! `crate::ui`; this module owns the data, starts background work and folds its results back in.
 //!
 //! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `edit` (tags
-//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `writes` (card writes, reorganising, playlists), `playback`, and `events`
+//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `writes` (card writes, reorganising, playlists), `playback`, and `events`
 //! (the per-frame message pump).
 
+mod add;
 mod browse;
 mod covers;
 mod edit;
@@ -23,6 +24,7 @@ use std::time::{Duration, Instant};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use serde::{Deserialize, Serialize};
 
+pub use add::Adding;
 pub use browse::{AlbumRow, SortBy};
 pub use covers::FoundCover;
 pub use edit::{Shared, TagEdit};
@@ -62,6 +64,8 @@ pub struct Saved {
     pub format_note_collapsed: bool,
     /// The library shows a table of albums rather than the list by artist.
     pub album_table: bool,
+    /// Searches kept for reuse ("quality:lossless jazz").
+    pub searches: Vec<String>,
 }
 
 impl Default for Saved {
@@ -79,6 +83,7 @@ impl Default for Saved {
             theme: ThemePref::System,
             format_note_collapsed: false,
             album_table: false,
+            searches: Vec::new(),
         }
     }
 }
@@ -111,6 +116,10 @@ enum Msg {
     TookOver(String, Box<card::adopt::Outcome>),
     /// Music copied from the card into the music folder.
     ImportedFromCard(Box<card::adopt::Imported>),
+    /// A folder of music to add, checked against the library.
+    FolderSurveyed(PathBuf, Box<card::adopt::Survey>),
+    /// Music copied from that folder into the music folder.
+    Added(Box<card::adopt::Imported>),
     /// Card paths no longer the write's, files put back, errors.
     UndidTakeOver(String, Result<(Vec<PathBuf>, usize, Vec<String>), String>),
     /// Songs stored twice or album copies moved to the Trash: how many, of what, and what went wrong.
@@ -229,6 +238,8 @@ pub struct App {
     pub album_anchor: Option<String>,
     /// The dialog for taking over music already on the card is open.
     pub take_over_open: bool,
+    /// A folder of new music checked against the library, waiting to be added.
+    pub adding: Option<Adding>,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
     tx: Sender<Msg>,
@@ -316,6 +327,7 @@ impl App {
             selected_albums: BTreeSet::new(),
             album_anchor: None,
             take_over_open: false,
+            adding: None,
             busy: None,
             notices: Vec::new(),
             tx,

@@ -156,6 +156,19 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     whose values differ say "several values"; type an artist, save: both songs move under it.
     Right-click a song: the menu offers editing it, its album, or the selection. Esc clears the
     selection; a year like "nineties" keeps **Save** off.
+14d. Library › **N albums without a cover** › **find covers for these** (try a few first, with
+    **find cover** on one album): the line under the tabs counts albums; afterwards the message
+    says how many came from folders and from the Cover Art Archive, and those not found are
+    listed. Play one: the player shows the new cover and offers **don't**. Sync: the card copies
+    have it embedded (the Echo Mini shows it).
+14e. Search `format:flac year:1990..1999`, then `-format:flac`, `cover:no`, `card:on`; **filters**
+    ticks and unticks the same terms; **save** keeps a search as a button beside the box.
+14f. **albums**: a table of albums. Sort by size (largest first), by year, by format. Click,
+    ⌘-click and shift-click to select; the bar's **send to card** marks them for the next Sync.
+14g. Duplicates view › **move it to the Trash** on a covered copy: its folder is in the Trash
+    (only its songs, if the folder holds other music), and the library rescans.
+14h. **add music** › choose a folder with an album the library doesn't have and one it has: the
+    dialog counts them apart; **Add them** copies the new one under `Added` and rescans.
 
 ### E. The card
 15. Folders › **Choose card…**: Linux lists the stick by name; Windows uses the workaround
@@ -170,14 +183,18 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 18b. With ffmpeg, write an album in ALAC or AAC (`.m4a`): on the stick it's FLAC or MP3 with
     the same length, title and cover; writing again converts nothing. Settings › ffmpeg says
     whether this ffmpeg can make MP3s (the Windows `winget` and Linux distribution builds can).
-18c. On a stick that already has music copied by hand: **Compare with the card** says how many
-    files the write didn't put there; **Check them against the library** sorts them; **Take
+18c. On a stick that already has music copied by hand, never written to: **Compare with the
+    card** opens *Music already on the card* by itself (once; later, **go through them**);
+    **Check them against the library** sorts them; **Take
     over the card** moves the copies into the layout (and, if ticked, the rest into
     `_Before NeatLibrary`; with **delete clutter** ticked, iTunes data, `desktop.ini`/`Thumbs.db`
     and rip logs are deleted); **undo taking over the card** puts everything back (except deleted
     clutter). **copy them into your music folder** puts the card's songs that aren't in the
     library under `From the card` in the music folder.
-18d. Tick **write hi-res FLAC at CD quality**: 24-bit songs are 16-bit FLAC on the stick. After
+18d. Choose **hi-res songs at CD quality** (Saving space): 24-bit songs are 16-bit FLAC on the
+    stick. Choose **all lossless songs as MP3 320**: FLAC songs are MP3s on the stick, and the
+    space chosen drops to about a quarter. With more chosen than fits, the card tab lists the
+    savings and the artists taking most room; **leave out** unticks one. After
     a write, the library shows "on card" on the albums written.
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).

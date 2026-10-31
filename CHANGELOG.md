@@ -396,3 +396,54 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Saved edits are corrections like MusicBrainz's: marked *edited*, kept in the library database
   across restarts, in card copies at the next Sync, and in the music files with *write
   corrected tags*. The library regroups at once (a new album name or artist moves the songs).
+
+### 29. Making the choice fit (2026-10-30)
+- **Saving space** (card tab › Folders and options) has three choices: lossless songs as they
+  are, hi-res at CD quality, or **all lossless songs as MP3 320** (about a quarter of the space of
+  CD-quality FLAC). Lossy songs are never re-encoded; without ffmpeg (or its MP3 encoder) songs
+  go as they otherwise would. Choosing again re-makes the card's copies at the next Sync.
+- When the choice doesn't fit, the card tab says by how much and lists the ways out with what
+  each saves: CD quality, MP3 320 (each with **do that**), and the artists taking most room with
+  **leave out** (at most five, enough to fit where possible).
+
+### 30. Covers (2026-10-30)
+- The scan notes whether each song has a cover embedded (the Echo Mini shows only those). The
+  library database moves to version 4: files are read once more; corrections are kept.
+- **N albums without a cover** beside the search box shows only them; **find covers for these**
+  (or **find cover** on one album) takes an image in the album's folder if there is one, else
+  looks the album up on MusicBrainz as *look up* does (song titles must match) and fetches the
+  release's front cover from the Cover Art Archive (500 px). Found covers are corrections: the
+  player shows them, card copies get them embedded at the next Sync, and the music files with
+  *write corrected tags*; **don't** under the player drops one. Albums with nothing found are
+  listed with the reason. Downloaded covers are kept in the app's data folder (`covers/`).
+- MusicBrainz requests from lookups and cover searches share one request-a-second allowance.
+
+### 31. Searching, and a table of albums (2026-10-30)
+- The search box understands terms as well as words: `format:flac`, `format:alac`,
+  `quality:lossless|lossy|hires`, `card:on|off|sync|better`, `cover:no|yes`, `year:1979`,
+  `year:1979..1985`, `year:..1990`, `edited:yes`; `-` in front turns a term around
+  (`-format:mp3`). Hovering over the box lists them; **filters** ticks the common ones (this is
+  the card filter: on the card, not on it, changing at the next Sync, a better copy available).
+  Words must each appear in the artist, the album or a song title.
+- **save** keeps a search beside the box; click it to search again, right-click to forget it.
+- **albums** (beside **artists**) shows a table: artist, album, year, format, songs, size, card,
+  cover. Click a heading to sort, again to reverse. Click to select an album, ⌘-click to add
+  one, shift-click a run, double-click to play; **select them all** after a search. The bar
+  above offers **send to card**, **take off card**, **edit tags**, **find covers** and **play** for
+  the selection; right-click a row for the same and **open folder**.
+
+### 32. The card's own music, step by step (2026-10-30)
+- Music on a card that the write didn't put there is now one line in the card tab (**go through
+  them**) and a dialog: what it is in three steps, **Check them against the library**, then the
+  same choices as before and **Take over the card**. It opens by itself once, the first time a
+  card that hasn't been written to has such files.
+
+### 33. Duplicates and new music (2026-10-30)
+- An album copy that another copy covers has **move it to the Trash**, and the duplicates view
+  **move all N covered copies to the Trash**: the copy's folder when everything musical in it is
+  the copy's, else only its songs (and CUE sheets); only while the covering copy is still there.
+- **add music** (library, and Folders › *add music from a folder…*) checks a folder (Downloads by
+  default) against the library and shows what's new, what the library already has (exact
+  copies, left out) and other versions of songs it has (optional); **Add them** copies the new
+  ones, with covers and booklets, into `Added` in the music folder, then rescans. The folder
+  itself isn't changed.

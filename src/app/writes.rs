@@ -183,7 +183,7 @@ impl App {
         self.busy = Some(busy);
         self.problems = None;
         self.spawn(move |tx| {
-            let out = card::adopt::import(&survey, &dest, &music, &stop, |done, total| {
+            let out = card::adopt::import(&survey, &dest, &music, card::adopt::IMPORT_FOLDER, &stop, |done, total| {
                 if done % 10 == 0 {
                     let _ = tx.send(Msg::WriteProgress(done, total));
                     ctx.request_repaint();

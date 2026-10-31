@@ -144,6 +144,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text("pick up files added or changed since").clicked() {
             app.scan();
         }
+        if app.busy.is_none() && widgets::icon_link(ui, Icon::Add, "add music").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
+            app.picker = Some(crate::ui::folders::Picker::AddFrom(crate::ui::navigator::Navigator::new(crate::ui::folders::dirs_downloads().as_deref())));
+        }
     });
     ui.add_space(4.0);
     // Searching, and what's worth a look.
@@ -153,6 +156,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add(egui::TextEdit::singleline(&mut app.filter).hint_text("search, or try format:flac").desired_width(260.0))
             .on_hover_text(crate::library::search::HELP);
         filters_menu(app, ui);
+        let typed = app.filter.trim().to_string();
+        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "save").on_hover_text("keep this search for later, beside the box").clicked() {
+            app.saved.searches.push(typed);
+        }
+        saved_searches(app, ui);
         ui.add_space(6.0);
         if widgets::tab(ui, "artists", !app.saved.album_table).on_hover_text("albums by artist, with their songs").clicked() {
             app.saved.album_table = false;
@@ -773,4 +781,25 @@ fn covers_panel(app: &mut App, ui: &mut Ui, query: &crate::library::search::Quer
         }
     });
     ui.add_space(8.0);
+}
+
+/// Searches kept for later: click one to search again; right-click to forget it.
+fn saved_searches(app: &mut App, ui: &mut Ui) {
+    let mut forget = None;
+    for (i, s) in app.saved.searches.iter().enumerate() {
+        let active = app.filter.trim() == s;
+        let r = widgets::tab(ui, &text::shorten(s, 28), active).on_hover_text(format!("{s}\nClick to search again (again to clear); right-click to forget."));
+        if r.clicked() {
+            app.filter = if active { String::new() } else { s.clone() };
+        }
+        r.context_menu(|ui| {
+            if widgets::icon_link(ui, Icon::Close, "forget this search").clicked() {
+                forget = Some(i);
+                ui.close();
+            }
+        });
+    }
+    if let Some(i) = forget {
+        app.saved.searches.remove(i);
+    }
 }

@@ -31,6 +31,13 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     let rows = app.album_rows(query);
     if !app.selected_albums.is_empty() {
         selection_bar(app, ui, &rows, actions);
+    } else if !query.is_empty() && !rows.is_empty() {
+        ui.horizontal(|ui| {
+            muted(ui, format!("{} match", plural(rows.len(), "album")));
+            if widgets::icon_link(ui, Icon::Check, "select them all").on_hover_text("to send them to the card, edit their tags or find their covers together").clicked() {
+                actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
+            }
+        });
     }
     if !query.unknown.is_empty() {
         ui.label(RichText::new(format!("not understood: {} (hover over the search box for what works)", query.unknown.join(" "))).size(13.0).color(ink.accent));

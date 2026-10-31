@@ -135,6 +135,22 @@ impl App {
                     ));
                     self.scan();
                 }
+                Msg::FolderSurveyed(from, s) => {
+                    self.busy = None;
+                    self.adding = Some(Adding { from, survey: *s, versions: false });
+                }
+                Msg::Added(mut out) => {
+                    self.busy = None;
+                    let errors = self.report_problems("adding music", std::mem::take(&mut out.errors));
+                    self.notice(format!(
+                        "{}added {} files ({}) to “{}” in your music folder{errors}",
+                        if out.stopped { "stopped: " } else { "" },
+                        out.copied,
+                        crate::ui::text::bytes(out.bytes),
+                        card::adopt::ADDED_FOLDER
+                    ));
+                    self.scan();
+                }
                 Msg::UndidTakeOver(name, r) => {
                     self.busy = None;
                     match r {

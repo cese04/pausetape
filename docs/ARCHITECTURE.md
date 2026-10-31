@@ -64,7 +64,7 @@ uses, so call sites read `crate::card::build_plan`, `crate::library::Track`, `cr
 src/
 ├── main.rs            start-up, --version, --plan; APP_NAME / APP_ID
 ├── platform.rs        app data folder; open a folder in Finder/Explorer/file manager
-├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes
+├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive)
 ├── library/           reading and understanding the music folder
 │   ├── track.rs       Track; which formats play on RECHO / here / not at all
 │   ├── scan.rs        incremental scan (database reuse), tag reading, folder-name inference
@@ -74,12 +74,13 @@ src/
 │   ├── db.rs          SQLite library database: cached tags, unsaved corrections
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
 │   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
-│   └── grouping.rs    clusters, merge suggestions, artist → album → track index
+│   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
+│   └── search.rs      the search box: words and field:value terms (format:, card:, cover:…)
 ├── card/              putting music on the SD card (and tidying the music folder)
 │   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
-│   ├── adopt.rs       a card's existing music: survey, take over (move into place, undo), copy into the library
+│   ├── adopt.rs       a card's (or folder's) music: survey, take over (move into place, undo), copy into the library
 │   ├── write.rs       saved writes (WriteProfile), compare-with-card, write
 │   ├── volumes.rs     mounted drives, free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
@@ -90,6 +91,9 @@ src/
 │   ├── mod.rs         App, Saved (persisted), Tab, messages, eframe::App
 │   ├── music.rs       scanning, tag corrections, artist decisions, MusicBrainz
 │   ├── edit.rs        tags edited by hand, the library's selection of songs
+│   ├── covers.rs      finding covers for albums without one
+│   ├── browse.rs      search facts per album; the album table's rows, order and selection
+│   ├── add.rs         adding music from another folder
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── playback.rs    play queue, waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
@@ -104,6 +108,7 @@ src/
     ├── player.rs      player bar
     ├── navigator.rs   in-app folder browser for the pickers
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
+    ├── albums.rs      the library as a sortable table of albums
     └── screenshots.rs debug-only screenshot demo (NEATLIBRARY_SHOT)
 ```
 
@@ -138,6 +143,7 @@ src/
 | Undo journals for *Reorganise* | `journals/` in the app data folder | |
 | Undo records for taking over a card | `journals/card/` in the app data folder | One per take-over, named by write |
 | ffmpeg conversions | `<temp>/neatlibrary-converted/` | Last 6 kept; cleared at start-up |
+| Covers fetched from the Cover Art Archive | `covers/` in the app data folder | One per album, named after its first song; embedded when written |
 
 App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
 `%APPDATA%\NeatLibrary\data`, Linux `~/.local/share/neatlibrary`. `APP_ID` names it, so keep
@@ -145,8 +151,9 @@ App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
 
 ## Safety rules the code keeps
 
-- The **music folder is read-only** unless the user runs *Reorganise* (with preview and undo)
-  or *write corrected tags to source files*.
+- The **music folder is read-only** unless the user runs *Reorganise* (with preview and undo),
+  *write corrected tags to source files*, *add music* (copies into `Added`), or moves extra
+  copies to the Trash (only while the copy that stays is there; recoverable from the Trash).
 - A **card write never deletes a file it didn't create**, and not even those if the size
   changed since. *Take over the card* only moves files on the card (with an undo record), on
   the user's request.
@@ -166,13 +173,14 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 44 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 48 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
-a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits. They use temporary folders and fake audio files,
+a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
+search terms, MP3 for lossless, moving a covered copy to the Trash. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
-(live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
+(live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
 `cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
 (`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `queue_advances_without_ui`

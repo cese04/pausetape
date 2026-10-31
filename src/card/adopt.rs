@@ -392,11 +392,14 @@ pub struct Imported {
     pub stopped: bool,
 }
 
-/// Copy music on the card that isn't in the library (`survey.unknown`) into
-/// `<music>/From the card/`, keeping the card's folder names, with the covers, scans, CUE sheets
-/// and booklets from the same folders. The card isn't changed. `progress` gets (done, total).
-/// Once `stop` is set, it stops after the file it's copying.
-pub fn import(survey: &Survey, dest: &Path, music: &Path, stop: &std::sync::atomic::AtomicBool, mut progress: impl FnMut(usize, usize)) -> Imported {
+/// Where music added from another folder (Downloads…) goes in the music folder.
+pub const ADDED_FOLDER: &str = "Added";
+
+/// Copy music in `dest` (a card, or a folder of new music) that isn't in the library
+/// (`survey.unknown`) into `<music>/<into>/`, keeping its folder names, with the covers, scans,
+/// CUE sheets and booklets from the same folders. `dest` isn't changed. `progress` gets
+/// (done, total). Once `stop` is set, it stops after the file it's copying.
+pub fn import(survey: &Survey, dest: &Path, music: &Path, into: &str, stop: &std::sync::atomic::AtomicBool, mut progress: impl FnMut(usize, usize)) -> Imported {
     const COMPANIONS: &[&str] = &["jpg", "jpeg", "png", "cue", "pdf", "txt", "lrc"];
     let dirs: HashSet<&Path> = survey.unknown.iter().filter_map(|(rel, _)| rel.parent()).collect();
     let companions = survey.other.iter().filter(|(rel, _)| {
@@ -404,7 +407,7 @@ pub fn import(survey: &Survey, dest: &Path, music: &Path, stop: &std::sync::atom
         rel.parent().is_some_and(|d| dirs.contains(d)) && COMPANIONS.contains(&ext.as_str())
     });
     let files: Vec<&(PathBuf, u64)> = survey.unknown.iter().chain(companions).collect();
-    let root = music.join(IMPORT_FOLDER);
+    let root = music.join(into);
     let mut out = Imported::default();
     for (n, (rel, size)) in files.iter().enumerate() {
         if stop.load(std::sync::atomic::Ordering::Relaxed) {
@@ -554,13 +557,13 @@ mod tests {
         let (tracks, _) = crate::library::scan(&music, None, false, |_| {});
         let s = survey(&tracks, &[], &[], &card, |_, _| {});
         assert_eq!(s.unknown.len(), 1);
-        let out = import(&s, &card, &music, &Default::default(), |_, _| {});
+        let out = import(&s, &card, &music, IMPORT_FOLDER, &Default::default(), |_, _| {});
         assert!(out.errors.is_empty(), "{:?}", out.errors);
         assert_eq!(out.copied, 2, "the song and its cover; not the system file, not the library's own song");
         let into = music.join(IMPORT_FOLDER).join("Dead Can Dance - Aion (1990)");
         assert!(into.join("01 - The Arrival.flac").exists() && into.join("folder.jpg").exists() && !into.join("desktop.ini").exists());
         assert!(card.join("Dead Can Dance - Aion (1990)/01 - The Arrival.flac").exists(), "the card is unchanged");
-        assert_eq!(import(&s, &card, &music, &Default::default(), |_, _| {}).present, 2, "a second import copies nothing");
+        assert_eq!(import(&s, &card, &music, IMPORT_FOLDER, &Default::default(), |_, _| {}).present, 2, "a second import copies nothing");
 
         // Once in the library, the song is an exact copy a write can take over.
         let (tracks, _) = crate::library::scan(&music, None, false, |_| {});

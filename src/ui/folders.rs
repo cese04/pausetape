@@ -17,6 +17,8 @@ use crate::card::{AlbumOrder, SpaceInfo, Volume};
 /// The open folder dialog, if any.
 pub enum Picker {
     Source(Navigator),
+    /// A folder of new music to add to the library.
+    AddFrom(Navigator),
     Card { browse: Option<Navigator>, show_all: bool },
 }
 
@@ -87,6 +89,9 @@ fn source_step(app: &mut App, ui: &mut Ui) {
             }
             if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Rescan, "read again").on_hover_text("pick up files added or changed since").clicked() {
                 app.scan();
+            }
+            if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Add, "add music from a folder…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
+                app.picker = Some(Picker::AddFrom(Navigator::new(dirs_downloads().as_deref())));
             }
         });
     });
@@ -165,6 +170,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
     let mut close = false;
     let mut chosen_source: Option<PathBuf> = None;
     let mut chosen_dest: Option<PathBuf> = None;
+    let mut chosen_add: Option<PathBuf> = None;
     let mut refresh = false;
     let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
     let modal = egui::Modal::new(egui::Id::unique("picker")).frame(frame).show(ui.ctx(), |ui| {
@@ -180,6 +186,21 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 ui.horizontal(|ui| {
                     if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_source = Some(nav.dir().to_path_buf());
+                    }
+                    if button(ui, "Cancel").clicked() {
+                        close = true;
+                    }
+                });
+            }
+            Picker::AddFrom(nav) => {
+                ui.label(RichText::new("Add music from a folder").size(20.0));
+                muted(ui, "Open the folder with the new music (Downloads, a friend's drive…). It's checked against your library first; nothing is copied until you say so, and the folder isn't changed.");
+                ui.add_space(10.0);
+                nav.show(ui);
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if primary_button(ui, format!("Check “{}”", nav.name())).clicked() {
+                        chosen_add = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
                         close = true;
@@ -264,6 +285,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         app.set_source(dir);
         close = true;
     }
+    if let Some(dir) = chosen_add {
+        app.check_folder(dir);
+        close = true;
+    }
     if let Some(dir) = chosen_dest {
         if app.saved.source.as_ref().is_some_and(|s| dir.starts_with(s) || s.starts_with(&dir)) {
             app.notice("the card folder can't be inside your music folder (or the other way round)");
@@ -333,4 +358,67 @@ pub fn plan_list(ui: &mut Ui, plan: &[crate::card::PlanItem], max_height: f32) {
             });
         }
     });
+}
+
+/// The usual place new music arrives.
+pub fn dirs_downloads() -> Option<PathBuf> {
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(|h| PathBuf::from(h).join("Downloads")).filter(|d| d.is_dir())
+}
+
+/// After checking a folder of new music: what's new, what the library has already, and Add.
+pub fn add_dialog(app: &mut App, ui: &mut Ui) {
+    let Some(a) = &app.adding else { return };
+    let ink = ink(ui);
+    let name = folder_name(&a.from);
+    let count = |l: &[(PathBuf, u64)]| (l.len(), crate::card::adopt::Survey::bytes(l));
+    let ((new, new_bytes), (versions, versions_bytes)) = (count(&a.survey.unknown), count(&a.survey.versions));
+    let have = a.survey.used.len() + a.survey.spare.len();
+    let mut versions_on = a.versions;
+    let (mut add, mut close) = (false, false);
+    let bytes = app.adding_bytes();
+    let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
+    let fits = room.is_none_or(|free| free > bytes + 1_000_000_000);
+    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let modal = egui::Modal::new(egui::Id::unique("add music")).frame(frame).show(ui.ctx(), |ui| {
+        ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
+        ui.horizontal(|ui| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+            crate::ui::icons::paint(ui.painter(), rect, Icon::Add, ink.text);
+            ui.label(RichText::new(format!("Add music from “{name}”")).size(18.0).color(ink.text));
+        });
+        ui.add_space(10.0);
+        if new + versions == 0 {
+            ui.label(RichText::new(if have > 0 { "Your library already has every song in it." } else { "There's no music in it." }).color(ink.text));
+        } else {
+            ui.label(RichText::new(format!("{} your library doesn't have ({}).", plural(new, "song"), text::bytes(new_bytes))).color(ink.text));
+            muted(ui, format!("They're copied into “{}” in your music folder, keeping their folder names, with their covers and booklets.", crate::card::adopt::ADDED_FOLDER));
+        }
+        if have > 0 {
+            muted(ui, format!("{} already in your library, as exact copies: left out.", plural(have, "song")));
+        }
+        if versions > 0 {
+            ui.checkbox(&mut versions_on, format!("also copy {} that are other versions of songs you have ({})", plural(versions, "song"), text::bytes(versions_bytes)))
+                .on_hover_text("Same artist and title, a different file: an MP3 where you have FLAC, another rip… They'd show up as another edition of the album.");
+        }
+        if !fits {
+            ui.label(RichText::new("Not enough room on your music folder's drive for them.").color(ink.accent));
+        }
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            if new + versions > 0 && fits && app.busy.is_none() && primary_with(ui, Icon::Add, format!("Add them ({})", text::bytes(bytes))).clicked() {
+                add = true;
+            }
+            if button(ui, "Cancel").clicked() {
+                close = true;
+            }
+        });
+    });
+    if let Some(a) = &mut app.adding {
+        a.versions = versions_on;
+    }
+    if add {
+        app.add_checked_folder();
+    } else if close || modal.should_close() {
+        app.adding = None;
+    }
 }

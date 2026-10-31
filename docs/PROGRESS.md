@@ -1,6 +1,6 @@
 # NeatLibrary: progress and roadmap
 
-*Last updated: 2026-10-28: safer MusicBrainz lookups, folder-name reading, CUE sheets, editions and cover embedding done ([NEXT](NEXT.md)).*
+*Last updated: 2026-10-30: the roadmap's steps 1–5 and 7 are done, 6 and 8 in a first form (see §2 and the [CHANGELOG](../CHANGELOG.md), sections 23–33). Section 1 below still describes 2026-10-28 in places; the CHANGELOG is the full record.*
 
 NeatLibrary organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
@@ -114,14 +114,14 @@ or two, **M** = about a day, **L** = several days.
 |---|---|---|
 | Convert on send | FLAC / MP3 320, CUE albums cut into songs | Done |
 | Download metadata | MusicBrainz suggestions, checked against your songs | Done |
-| Duplicate finder | Editions; copies covered by a same-or-better copy; songs stored twice in an album, which can go to the Trash | Done (no actions for editions yet) |
-| Device view | Card writes with a manifest; taking over a card's existing music; send to / take off the card from the library with one Sync; on-card and pending marks; copying music only on the card into the library | Step 1 (done but the guided take-over) |
-| Edit metadata, bulk edit | — | Step 2 |
-| Download covers | Covers beside the files can be embedded | Step 3 |
-| Sortable, searchable library | Artist list and text filter | Step 4 |
-| Jobs panel | One busy line | Step 5 |
-| Add books | Reads the music folder as it is; copies music only on the card into it | Step 6 (from the card: done) |
-| Virtual libraries | Writes choose by artist and album | Step 8 |
+| Duplicate finder | Editions; copies covered by a same-or-better copy and songs stored twice, both of which can go to the Trash | Done |
+| Device view | Card writes with a manifest; taking over a card's existing music (a guided dialog); send to / take off the card from the library with one Sync; on-card and pending marks; `card:` searches; space savers (CD quality, MP3 320) and what to leave out | Step 1: done |
+| Edit metadata, bulk edit | Tag editor for a song, an album or any selection | Step 2: done |
+| Download covers | Images beside the files, else the Cover Art Archive, for albums without a cover | Step 3: done (no choosing between several found covers yet) |
+| Sortable, searchable library | Album table (sort, select, bulk actions) beside the artist list; `field:value` search | Step 4: done |
+| Jobs panel | The running job with time left and Stop | Step 5: done (no history of finished jobs) |
+| Add books | Copies new music from the card or any folder into the music folder (`From the card`, `Added`) | Step 6: first form (copies as they are; no sorting into the organised layout) |
+| Virtual libraries | Saved searches; select all matches and send them to the card | Step 8: first form (not yet a live card selection) |
 
 | Step | What | Why here | Effort |
 |---|---|---|---|
