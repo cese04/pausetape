@@ -538,3 +538,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   dropped if their lookup was.
 - Renaming a card setup while it syncs or takes over the card no longer loses the result: setups
   are found by their id, and so are their take-over undo records.
+
+### 41. More fixes from the review (2026-10-31)
+- The music folder can't be changed while something runs (it could crash the app, or leave the
+  library empty).

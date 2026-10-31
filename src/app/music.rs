@@ -34,6 +34,12 @@ impl App {
     }
 
     pub fn set_source(&mut self, dir: PathBuf) {
+        // Work running now refers to songs by their place in the library; emptying it under that
+        // work would put its results on the wrong songs, or crash.
+        if let Some(b) = &self.busy {
+            self.notice(format!("the music folder can be changed once “{}” is done", b.label));
+            return;
+        }
         self.saved.source = Some(dir);
         self.tracks.clear();
         self.queue.clear();

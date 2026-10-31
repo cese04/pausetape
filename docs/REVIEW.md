@@ -16,7 +16,7 @@ reading the code; each says what would happen and where.
 | [R2](#r2) | **High** | A Sync with an empty library removes the setup's songs from the card (**fixed**) | All |
 | [R3](#r3) | Medium | MusicBrainz suggestions that arrive after a rescan change the wrong songs (**fixed**) | All |
 | [R4](#r4) | Medium | Renaming a card setup while it syncs or takes over the card loses what it did (**fixed**) | All |
-| [R5](#r5) | Medium | Choosing another music folder while something runs leaves the library empty, and can crash | All |
+| [R5](#r5) | Medium | Choosing another music folder while something runs leaves the library empty, and can crash (**fixed**) | All |
 | [R6](#r6) | Medium | Undoing a take-over fails once the card is mounted somewhere else | All |
 | [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card | All |
 | [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs (**fixed**) | All |
@@ -120,8 +120,9 @@ filed under the id; older ones, under the name, are still found.
 so the library stays empty until a manual rescan. Work that finishes afterwards (saving tags,
 finding covers) then updates songs by position in a list that's now empty, which crashes the app.
 
-*Fix:* don't allow changing the music folder while something runs (or wait for it), and drop
-results that refer to an older library (as in R3).
+**Fixed 2026-10-31.** The music folder can't be changed while something runs ("the music folder
+can be changed once … is done"); nothing else replaces the library while work is running, since
+scans wait for it too.
 
 ### R6
 **Undoing a take-over fails once the card is mounted somewhere else.**
