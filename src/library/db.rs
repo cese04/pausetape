@@ -14,8 +14,8 @@ use rusqlite::{Connection, params};
 use crate::library::Track;
 
 /// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
-/// and bit depth; 4: embedded cover), so files get re-read.
-const SCHEMA_VERSION: i64 = 4;
+/// and bit depth; 4: embedded cover; 5: damaged files), so files get re-read.
+const SCHEMA_VERSION: i64 = 5;
 /// Corrections saved since this version stay valid: the fields they change haven't changed.
 const EDITS_SINCE: i64 = 3;
 

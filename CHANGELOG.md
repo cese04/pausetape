@@ -529,3 +529,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Sync, taking over the card, copying music in, and tidying wait while the music folder can't be
   reached or the library is empty; the card tab says why in place of **Sync**.
 - A Sync that would take most of the setup's songs off the card (at least 20) asks first.
+
+### 40. Damaged files, late suggestions, renamed setups (2026-10-31)
+- Files that start blank where their audio should be (as a failing card or disk leaves them) are
+  marked damaged: the library says how many, `damaged:yes` finds their albums, writes leave them
+  out saying why, and playback skips them quietly. The next start reads every file once more.
+- MusicBrainz suggestions that arrive after a rescan go to the right songs (found by id), or are
+  dropped if their lookup was.
+- Renaming a card setup while it syncs or takes over the card no longer loses the result: setups
+  are found by their id, and so are their take-over undo records.

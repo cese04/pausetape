@@ -14,12 +14,12 @@ reading the code; each says what would happen and where.
 |---|---|---|---|
 | [R1](#r1) | **High** | Starting the app with the music drive unplugged empties the library database, unsaved corrections included (**fixed**) | All |
 | [R2](#r2) | **High** | A Sync with an empty library removes the setup's songs from the card (**fixed**) | All |
-| [R3](#r3) | Medium | MusicBrainz suggestions that arrive after a rescan change the wrong songs | All |
-| [R4](#r4) | Medium | Renaming a card setup while it syncs or takes over the card loses what it did | All |
+| [R3](#r3) | Medium | MusicBrainz suggestions that arrive after a rescan change the wrong songs (**fixed**) | All |
+| [R4](#r4) | Medium | Renaming a card setup while it syncs or takes over the card loses what it did (**fixed**) | All |
 | [R5](#r5) | Medium | Choosing another music folder while something runs leaves the library empty, and can crash | All |
 | [R6](#r6) | Medium | Undoing a take-over fails once the card is mounted somewhere else | All |
 | [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card | All |
-| [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs | All |
+| [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs (**fixed**) | All |
 | [R9](#r9) | Medium | Songs with unsaved corrections are copied again at every Sync | All |
 | [R10](#r10) | Medium | "Moved to the Trash" may really delete, on some drives | Windows, Linux |
 | [R11](#r11) | Medium | Playback stops for good when the audio device changes | All |
@@ -90,9 +90,11 @@ waiting at that moment still arrive, and accepting one edits whichever songs now
 positions, or crashes if the list got shorter. The edits are saved as corrections and reach the
 card and, with **write corrected tags**, the files.
 
-*Fix:* name songs by `Track::id` in jobs and suggestions, or stamp each scan with a number and
-drop replies from an older one. The same applies to anything else holding positions across a
-rescan (see R5).
+**Fixed 2026-10-31.** A lookup names its songs by their place in the request, and remembers their
+ids; the reply is turned into suggestions for the library's songs as they are now, found by id
+(songs gone since lose theirs). A reply for a lookup a rescan dropped is ignored. Tested in
+`suggestions_follow_their_songs_through_a_rescan`. Other work holding positions across a rescan
+is R5.
 
 ### R4
 **Renaming a card setup while it syncs or takes over the card loses what it did.**
@@ -106,8 +108,9 @@ work runs. Renamed in the meantime:
 - a take-over's moves aren't recorded, and its undo record is filed under the old name, so
   **undo taking over the card** disappears.
 
-*Fix:* identify setups by `WriteProfile::id` (added for card labels) in messages and undo
-records, and/or lock the name while the setup is busy.
+**Fixed 2026-10-31.** Results of card work (Sync, Compare, checking the card, take-over and its
+undo) find their setup by `WriteProfile::id`, which never changes. New take-over records are
+filed under the id; older ones, under the name, are still found.
 
 ### R5
 **Choosing another music folder while something runs leaves the library empty, and can crash.**
@@ -152,8 +155,13 @@ Sync ("ffmpeg couldn't convert the song: Invalid data found"). This is what happ
 the 25 Emerson, Lake & Palmer `.ape` album files under `From the card/ELP`: they are 92–100% zero
 bytes, already damaged on the old card they were imported from.
 
-*Fix:* mark files that can't be read as damaged: a badge in the library, a search term
-(`damaged:yes`), and left out of writes with that reason instead of an error at every Sync.
+**Fixed 2026-10-31.** A file whose header can't be read and that starts blank (4 KB of zeros, or
+nothing at all) is marked damaged when scanned. The library shows "N damaged files" (a click
+lists their albums, as the new search term `damaged:yes` does); writes leave them out with that
+reason instead of an ffmpeg error at every Sync; playback steps over them without ffmpeg. Files
+that are merely odd (unreadable, not blank) aren't called damaged. The library database's version
+went up, so every file is read once more at the next start. On this library: 24 of the 25 ELP
+files, and only those.
 
 ### R9
 **Songs with unsaved corrections are copied again at every Sync.**

@@ -58,6 +58,9 @@ pub struct Track {
     pub cover: Option<PathBuf>,
     /// The file's tags hold a picture (players show embedded covers, not images beside the file).
     pub embedded_cover: bool,
+    /// The file is damaged: its header can't be read and it starts blank (zeros), as files do
+    /// that a failing card or disk lost. It can't be played or converted.
+    pub damaged: bool,
 }
 
 impl Track {
@@ -100,7 +103,7 @@ impl Track {
 
     /// NeatLibrary's player can play this file, natively or by converting it with ffmpeg.
     pub fn plays_here(&self) -> bool {
-        self.native() || (self.ffmpeg_can_decode() && crate::audio::ffmpeg().is_some())
+        !self.damaged && (self.native() || (self.ffmpeg_can_decode() && crate::audio::ffmpeg().is_some()))
     }
 
     /// False for the few codecs not even ffmpeg decodes (Dolby AC-4, as of FFmpeg 9).

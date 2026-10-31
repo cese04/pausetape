@@ -1,6 +1,6 @@
 //! The library's search box: words match artists, albums and song titles; `field:value` terms
 //! narrow albums by what they are ("format:m4a", "quality:lossy", "card:on", "cover:no",
-//! "year:1979..1985", "edited:yes"); a leading "-" turns a term around ("-format:mp3").
+//! "year:1979..1985", "edited:yes", "damaged:yes"); a leading "-" turns a term around ("-format:mp3").
 
 use super::Track;
 
@@ -16,6 +16,8 @@ pub enum Filter {
     Year(Option<u16>, Option<u16>),
     /// Has songs with corrections not yet in the files.
     Edited(bool),
+    /// Has damaged files (`Track::damaged`).
+    Damaged(bool),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -75,7 +77,7 @@ pub const HELP: &str = "Words find artists, albums and song titles. Narrow by wh
     card:on   card:off   card:sync (changes at the next Sync)   card:better (a better copy exists)\n\
     cover:no   cover:yes\n\
     year:1979   year:1979..1985   year:..1990\n\
-    edited:yes\n\
+    edited:yes   damaged:yes\n\
     A \"-\" in front turns a term around: -format:mp3";
 
 impl Query {
@@ -113,6 +115,7 @@ impl Query {
                 },
                 "cover" => yes_no(&value).map(Filter::Cover),
                 "edited" => yes_no(&value).map(Filter::Edited),
+                "damaged" => yes_no(&value).map(Filter::Damaged),
                 "year" | "y" => year_range(&value).map(|(a, b)| Filter::Year(a, b)),
                 _ => None,
             };
@@ -169,6 +172,7 @@ impl Filter {
             Filter::Cover(has) => a.cover == *has,
             Filter::Year(from, to) => a.year.is_some_and(|y| from.is_none_or(|f| y >= f) && to.is_none_or(|t| y <= t)),
             Filter::Edited(e) => a.tracks.iter().any(|t| t.dirty) == *e,
+            Filter::Damaged(d) => a.tracks.iter().any(|t| t.damaged) == *d,
         }
     }
 }

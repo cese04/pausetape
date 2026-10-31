@@ -273,6 +273,7 @@ fn split(image: &Track, sheet: &Sheet, file: &SheetFile, sheet_path: &Path) -> V
                 cue: Some(CueSpan { number: st.number, start: st.start, end, sheet: sheet_path.to_path_buf() }),
                 cover: None,
                 embedded_cover: image.embedded_cover,
+                damaged: image.damaged,
                 dirty: false,
             }
         })

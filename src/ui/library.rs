@@ -199,6 +199,16 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 app.duplicates_only = true;
             }
         }
+        // Files a failing card or disk left blank: nothing here or on the card can use them.
+        let damaged: std::collections::HashSet<&std::path::Path> = app.tracks.iter().filter(|t| t.damaged).map(|t| t.path.as_path()).collect();
+        if !damaged.is_empty()
+            && widgets::chip(ui, Icon::Remove, format!("{} damaged", plural(damaged.len(), "file")), ink.accent)
+                .on_hover_text("These files start blank where their audio should be, as files a failing card or disk lost do. They can't be played or written to the card; replace them from a backup or the original. Click to show their albums.")
+                .clicked()
+        {
+            app.filter = "damaged:yes".into();
+            app.duplicates_only = false;
+        }
         let coverless = app.albums_without_cover().len();
         if coverless > 0
             && widgets::chip(ui, Icon::Image, format!("{} without a cover", plural(coverless, "album")), ink.text)

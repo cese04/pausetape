@@ -110,7 +110,13 @@ pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
     })
 }
 
+/// Why a damaged file is left out (`Track::damaged`).
+pub const DAMAGED: &str = "the file is damaged: it starts blank, so there's no audio to copy or convert";
+
 fn base_target(t: &Track, device: Player, unplayable: Unplayable) -> Result<Target, &'static str> {
+    if t.damaged {
+        return Err(DAMAGED);
+    }
     let encode = |to: Target| {
         if crate::audio::ffmpeg().is_none() {
             Err(if t.cue.is_some() { "needs ffmpeg to cut the album file into songs" } else { "needs ffmpeg to convert" })

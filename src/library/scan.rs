@@ -177,7 +177,10 @@ fn read_track(path: &Path, ext: &str) -> Track {
     if MP4_EXTS.contains(&ext) {
         t.codec = mp4_audio_codec(path);
     }
-    let Ok(file) = lofty::read_from_path(path) else { return t };
+    let Ok(file) = lofty::read_from_path(path) else {
+        t.damaged = starts_blank(path);
+        return t;
+    };
     let props = file.properties();
     t.duration = props.duration();
     (t.kbps, t.sample_rate, t.bit_depth) = (props.audio_bitrate(), props.sample_rate(), props.bit_depth());
@@ -193,6 +196,13 @@ fn read_track(path: &Path, ext: &str) -> Track {
     }
     t.embedded_cover = file.tags().iter().any(|tag| tag.picture_count() > 0);
     t
+}
+
+/// The file is empty, or its first 4 KB are zeros: where a header should be, nothing was kept.
+fn starts_blank(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = Vec::with_capacity(4096);
+    std::fs::File::open(path).and_then(|f| f.take(4096).read_to_end(&mut head)).is_ok_and(|_| head.iter().all(|&b| b == 0))
 }
 
 /// Fill gaps from the file name and folders: "03 - Title.mp3", "1979 - Album.flac",
@@ -308,6 +318,24 @@ mod tests {
         let mut t = Track { path: root.join("Joy Division - коллекция/1980. Closer {x}/a.flac"), artist: Some("JOY DIVISION".into()), ..Default::default() };
         infer_from_path(&mut t, root);
         assert_eq!((t.artist.as_deref(), t.album.as_deref()), (Some("JOY DIVISION"), Some("Closer")));
+    }
+
+    #[test]
+    fn blank_files_are_damaged() {
+        let dir = std::env::temp_dir().join(format!("neatlibrary-test-damaged-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // As a failing card leaves them: the size is right, the bytes are zeros.
+        std::fs::write(dir.join("blank.ape"), vec![0u8; 100_000]).unwrap();
+        std::fs::write(dir.join("empty.flac"), b"").unwrap();
+        // Unreadable, but not blank: not called damaged.
+        std::fs::write(dir.join("odd.flac"), b"not really audio").unwrap();
+        let read = |n: &str| read_track(&dir.join(n), n.rsplit('.').next().unwrap());
+        assert!(read("blank.ape").damaged && read("empty.flac").damaged && !read("odd.flac").damaged);
+        let t = read("blank.ape");
+        assert!(!t.plays_here());
+        assert!(crate::card::target(&t, Default::default()).is_err_and(|why| why.contains("damaged")), "left off the card, saying why");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
