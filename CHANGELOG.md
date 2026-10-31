@@ -542,3 +542,5 @@ Calibre's device view, for music: the library is where you choose what goes on t
 ### 41. More fixes from the review (2026-10-31)
 - The music folder can't be changed while something runs (it could crash the app, or leave the
   library empty).
+- Undoing a take-over works with the card mounted somewhere else: new undo records keep paths
+  relative to the card.

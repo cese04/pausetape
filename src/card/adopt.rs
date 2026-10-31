@@ -275,7 +275,7 @@ pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: boo
         let res = b.parent().map_or(Ok(()), fs::create_dir_all).and_then(|()| unlocked(&a, || fs::rename(&a, &b)));
         match res {
             Ok(()) => {
-                moves.push((a.clone(), b));
+                moves.push((from.to_path_buf(), to.to_path_buf()));
                 if let Some(p) = a.parent() {
                     emptied.insert(p.to_path_buf());
                 }
@@ -436,7 +436,11 @@ pub fn import(survey: &Survey, dest: &Path, music: &Path, into: &str, stop: &std
 struct Record {
     /// The setup's id; in records made before setups had ids, its name.
     write: String,
+    /// (from, to), relative to the card when `relative`, so the record still works with the card
+    /// mounted somewhere else; full paths in older records.
     moves: Vec<(PathBuf, PathBuf)>,
+    #[serde(default)]
+    relative: bool,
 }
 
 fn record_dir() -> PathBuf {
@@ -447,7 +451,7 @@ fn save(write: &str, moves: &[(PathBuf, PathBuf)]) -> Result<()> {
     let dir = record_dir();
     fs::create_dir_all(&dir)?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos();
-    let rec = Record { write: write.to_string(), moves: moves.to_vec() };
+    let rec = Record { write: write.to_string(), moves: moves.to_vec(), relative: true };
     fs::write(dir.join(format!("{stamp}.json")), serde_json::to_vec_pretty(&rec)?)?;
     Ok(())
 }
@@ -467,7 +471,9 @@ pub fn undo_latest(id: &str, name: &str, dest: &Path) -> Result<(Vec<PathBuf>, u
     let rec: Record = serde_json::from_slice(&fs::read(&path)?)?;
     let (mut released, mut restored, mut errors) = (Vec::new(), 0, Vec::new());
     let mut emptied = HashSet::new();
+    let on_card = |p: &PathBuf| if rec.relative { dest.join(p) } else { p.clone() };
     for (old, new) in rec.moves.iter().rev() {
+        let (old, new) = (&on_card(old), &on_card(new));
         let res = (|| -> Result<()> {
             if let Some(p) = old.parent() {
                 fs::create_dir_all(p)?;
@@ -638,7 +644,11 @@ mod tests {
         // Found by the setup's id; records from before ids hold its name, so that works too.
         assert!(latest("test write", "renamed since").is_some() && latest("another id", "test write").is_some());
         assert!(latest("another id", "another name").is_none());
-        let (released, restored, errors) = undo_latest("test write", "", &card).unwrap();
+        // The card comes back mounted somewhere else ("Untitled 1"): undo still finds its files.
+        let moved = root.join("card 1");
+        fs::rename(&card, &moved).unwrap();
+        let (released, restored, errors) = undo_latest("test write", "", &moved).unwrap();
+        fs::rename(&moved, &card).unwrap();
         assert!(errors.is_empty(), "{errors:?}");
         assert_eq!((released.len(), restored), (6, 6));
         assert!(card.join("muse absolution [mp3]/02 Apocalypse.mp3").exists());

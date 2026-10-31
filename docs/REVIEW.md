@@ -17,7 +17,7 @@ reading the code; each says what would happen and where.
 | [R3](#r3) | Medium | MusicBrainz suggestions that arrive after a rescan change the wrong songs (**fixed**) | All |
 | [R4](#r4) | Medium | Renaming a card setup while it syncs or takes over the card loses what it did (**fixed**) | All |
 | [R5](#r5) | Medium | Choosing another music folder while something runs leaves the library empty, and can crash (**fixed**) | All |
-| [R6](#r6) | Medium | Undoing a take-over fails once the card is mounted somewhere else | All |
+| [R6](#r6) | Medium | Undoing a take-over fails once the card is mounted somewhere else (**fixed**) | All |
 | [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card | All |
 | [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs (**fixed**) | All |
 | [R9](#r9) | Medium | Songs with unsaved corrections are copied again at every Sync | All |
@@ -133,7 +133,9 @@ The undo record keeps full paths (`/Volumes/Untitled/…`). If the card comes ba
 there") and the setup's record isn't corrected. Card labels (E3) now follow a card to its new
 mount point, which makes this more likely.
 
-*Fix:* record paths relative to the card, and file the record under the setup's id.
+**Fixed 2026-10-31.** New records keep paths relative to the card (and are filed under the
+setup's id, R4); older records with full paths are read as before. Tested by undoing with the
+card moved to another folder.
 
 ### R7
 **For up to 3 seconds, Sync can write over another setup's card.**
