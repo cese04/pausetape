@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 13] = [
+const TABS: [(Tab, &str); 14] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
@@ -23,6 +23,7 @@ const TABS: [(Tab, &str); 13] = [
     (Tab::Artists, "artists"),
     (Tab::Card, "card"),
     (Tab::Card, "takeover"),
+    (Tab::Card, "playertest"),
     (Tab::Playlists, "playlists"),
     (Tab::Settings, "settings"),
 ];
@@ -152,6 +153,14 @@ impl Shooter {
             let filter = std::env::var("NEATLIBRARY_SHOT_FILTER").unwrap_or_default();
             app.saved.album_table = TABS[n].1 == "albums";
             app.take_over_open = TABS[n].1 == "takeover";
+            app.player_test_open = TABS[n].1 == "playertest";
+            if TABS[n].1 == "playertest" {
+                // Some answers, in memory, to show what they change.
+                use crate::card::Sample;
+                for (s, a) in [(Sample::Flac, true), (Sample::Aac, false), (Sample::Alac, true), (Sample::Flac384, false), (Sample::Cover, true)] {
+                    app.set_tested(s, Some(a));
+                }
+            }
             app.filter = if TABS[n].1 == "covers" { "cover:no".into() } else { filter };
             if TABS[n].1 == "albums" {
                 app.selected_albums = app.album_rows(&app.query()).iter().skip(2).take(2).map(|r| r.id.clone()).collect();

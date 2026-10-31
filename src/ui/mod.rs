@@ -10,6 +10,7 @@ pub mod icons;
 mod library;
 pub mod navigator;
 mod player;
+mod player_test;
 mod playlists;
 #[cfg(debug_assertions)]
 pub mod screenshots;
@@ -65,6 +66,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     folders::pickers(app, ui);
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
+    player_test::dialog(app, ui);
     folders::add_dialog(app, ui);
 }
 

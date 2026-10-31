@@ -17,7 +17,7 @@ use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let device = app.device();
+    let device = app.player();
     muted(
         ui,
         "The Echo Mini has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is exported as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware.",
@@ -145,6 +145,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
 
 /// A player that lists songs from their tags also lists a playlist's copies.
-pub fn playlist_copies_warning(device: crate::card::Device) -> String {
+pub fn playlist_copies_warning(device: crate::card::Player) -> String {
     format!("{} lists songs by their tags, so each copy also shows up as a second song under its artist.", device.name())
 }

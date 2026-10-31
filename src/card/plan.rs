@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::Device;
+use super::{Device, Player, Results};
 use crate::library::Track;
 use crate::library::grouping::{AlbumNode, Index};
 use crate::library::names::sanitize_component;
@@ -67,7 +67,7 @@ impl Target {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Rules {
     /// The player: what it plays goes as it is.
-    pub device: Device,
+    pub player: Player,
     pub unplayable: Unplayable,
     /// Write hi-res lossless songs at CD quality to save space.
     pub cd_quality: bool,
@@ -97,16 +97,18 @@ pub fn cd_rate(rate: u32) -> u32 {
 /// conversion. CD quality and MP3 for lossless are preferences: without ffmpeg (or LAME), songs
 /// go as they otherwise would.
 pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
-    let to = base_target(t, rules.device, rules.unplayable)?;
+    let to = base_target(t, rules.player, rules.unplayable)?;
     let can_encode = crate::audio::ffmpeg().is_some() && t.ffmpeg_can_decode();
     Ok(match to {
         Target::Copy | Target::Flac if rules.lossless_mp3 && t.lossless() && can_encode && crate::audio::ffmpeg_encodes("libmp3lame") => Target::Mp3,
         Target::Copy | Target::Flac if rules.cd_quality && t.lossless() && hires(t) && can_encode => Target::FlacCd,
+        // Above the highest rate the test card played.
+        Target::Copy | Target::Flac if t.lossless() && can_encode && rules.player.max_rate().is_some_and(|m| t.sample_rate.is_some_and(|r| r > m)) => Target::FlacCd,
         to => to,
     })
 }
 
-fn base_target(t: &Track, device: Device, unplayable: Unplayable) -> Result<Target, &'static str> {
+fn base_target(t: &Track, device: Player, unplayable: Unplayable) -> Result<Target, &'static str> {
     let encode = |to: Target| {
         if crate::audio::ffmpeg().is_none() {
             Err(if t.cue.is_some() { "needs ffmpeg to cut the album file into songs" } else { "needs ffmpeg to convert" })
@@ -155,6 +157,8 @@ pub fn card_size(t: &Track, target: Target) -> u64 {
 pub struct Options {
     /// The player the card is for.
     pub device: Device,
+    /// What the test card showed, per player (a firmware change is a different player).
+    pub tested: BTreeMap<Device, Results>,
     pub album_order: AlbumOrder,
     pub unplayable: Unplayable,
     /// Write hi-res lossless songs at CD quality (16-bit, 44.1/48 kHz) to save space.
@@ -167,8 +171,12 @@ pub struct Options {
 }
 
 impl Options {
+    pub fn player(&self) -> Player {
+        Player { device: self.device, tested: self.tested.get(&self.device).map(super::Tested::from_results).unwrap_or_default() }
+    }
+
     pub fn rules(&self) -> Rules {
-        Rules { device: self.device, unplayable: self.unplayable, cd_quality: self.cd_quality, lossless_mp3: self.lossless_mp3 }
+        Rules { player: self.player(), unplayable: self.unplayable, cd_quality: self.cd_quality, lossless_mp3: self.lossless_mp3 }
     }
 }
 
@@ -176,6 +184,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             device: Device::default(),
+            tested: BTreeMap::new(),
             album_order: AlbumOrder::Year,
             unplayable: Unplayable::default(),
             cd_quality: false,

@@ -46,9 +46,9 @@ impl App {
         &self.saved.writes[self.saved.active_write]
     }
 
-    /// The player the active card setup is for.
-    pub fn device(&self) -> crate::card::Device {
-        self.write().options.device
+    /// The player the active card setup is for, as tested.
+    pub fn player(&self) -> crate::card::Player {
+        self.write().options.player()
     }
 
     pub fn write_mut(&mut self) -> &mut WriteProfile {

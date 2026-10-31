@@ -224,6 +224,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 20a. Card tab › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
     converted (AAC, APE, WMA and Ogg go as they are), and the library's format note and badges
     say "the Echo Mini" instead of "RECHO". Switch back to RECHO and the counts return.
+20b. **test it on the player** › **Write the test folder to the card**: the card gets
+    `NeatLibrary format test/` (17 samples, or 16 without an APE song in the library) and
+    `NeatLibrary format test.m3u8`. The card tab doesn't count them as music the write didn't put
+    there. Try them on the player and tick yes or no; the text at the bottom says what changes.
+    Untick a format the player couldn't play and **Compare** converts it. **take it off the card**
+    removes only the test's files.
 
 ### F. Playlists
 21. Create a playlist, add tracks with the **+** at the end of a track row, reorder, include

@@ -77,7 +77,9 @@ src/
 │   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
 │   └── search.rs      the search box: words and field:value terms (format:, card:, cover:…)
 ├── card/              putting music on the SD card (and tidying the music folder)
-│   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows
+│   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows,
+│   │                  corrected by test results (Player)
+│   ├── testcard.rs    the test card: a folder of samples per format, a cover, accented titles, a playlist
 │   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
@@ -95,6 +97,7 @@ src/
 │   ├── covers.rs      finding covers for albums without one
 │   ├── browse.rs      search facts per album; the album table's rows, order and selection
 │   ├── add.rs         adding music from another folder
+│   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── playback.rs    play queue, waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
@@ -110,6 +113,7 @@ src/
     ├── navigator.rs   in-app folder browser for the pickers
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     ├── albums.rs      the library as a sortable table of albums
+    ├── player_test.rs the dialog for testing the card's player
     └── screenshots.rs debug-only screenshot demo (NEATLIBRARY_SHOT)
 ```
 
@@ -174,9 +178,9 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 49 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 51 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
-editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, and on each player), layout plans, copy/move/undo,
+editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash. They use temporary folders and fake audio files,
@@ -184,7 +188,7 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
 `cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
-(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `queue_advances_without_ui`
+(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `writes_test_card` (`NEATLIBRARY_TESTCARD=<folder>`), `queue_advances_without_ui`
 (`NEATLIBRARY_PLAY=<song>`), `survey_a_real_card` (`NEATLIBRARY_SURVEY=<card>:<music folder>`).
 
 ## Conventions

@@ -464,3 +464,18 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Cover hints no longer say the Echo Mini shows covers under RECHO: RECHO's site says it shows
   none. Covers matter for this app's player, the stock firmware and most other players.
 - The stock firmware's facts come from reviews and haven't been checked on a player yet.
+
+### 35. Testing the player (2026-10-31)
+- The card tab's player row has **test it on the player**. It writes `NeatLibrary format test/`
+  to the card: 6-second tones in every format (FLAC 16/44.1, 24/96, 24/192, 24/384; MP3, WAV,
+  AAC, ALAC, AIFF, Opus, Ogg Vorbis, WavPack, WMA), APE copied from the library's smallest APE
+  song (ffmpeg can't make APE), a FLAC with an orange and blue cover, MP3s titled
+  "Café ü 日本" in ID3v2.3 and ID3v2.4, and `NeatLibrary format test.m3u8` beside it.
+- Try them on the player and tick **yes**, **no** or **not tried** for each. The answers are kept
+  with the card setup, separately for each player, and win over what's known from reviews: a
+  format that didn't play is converted, songs above the highest rate that played are written at
+  CD quality, and the cover answer decides whether covers count.
+- The playlist and ID3 answers are recorded but don't change anything yet ([NEXT](docs/NEXT.md)
+  E2b).
+- The test folder isn't counted as music the write didn't put on the card, and **take it off
+  the card** removes only the files the test wrote.

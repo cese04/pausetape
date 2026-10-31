@@ -14,7 +14,7 @@ use super::theme::{self, ink};
 use super::widgets::{self, caps, link, muted, truncated};
 use super::ROW_H;
 use crate::app::{App, Lookup};
-use crate::card::Device;
+use crate::card::Player;
 use crate::library::Track;
 
 /// Longest folder path shown before it's shortened with "…" in the middle.
@@ -61,7 +61,7 @@ impl Mark {
 /// A track row painted directly so columns line up like a table without any grid lines.
 /// `repeat`: an extra copy of a song the album already has. `selected`: chosen for editing tags.
 #[allow(clippy::too_many_arguments)]
-fn track_row(ui: &mut Ui, t: &Track, device: Device, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -126,7 +126,7 @@ fn album_minutes(tracks: &[Track], idxs: &[usize]) -> String {
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let device = app.device();
+    let device = app.player();
     // The music folder and what's in it.
     ui.horizontal_wrapped(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
@@ -606,7 +606,7 @@ fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::lib
 }
 
 /// What a missing cover means on the card's player, then `then`.
-fn covers_hint(device: Device, then: &str) -> String {
+fn covers_hint(device: Player, then: &str) -> String {
     let shows = if device.shows_covers() {
         format!("{} shows covers embedded in the songs.", device.name())
     } else {

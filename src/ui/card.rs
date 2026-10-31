@@ -260,7 +260,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         }
     });
     // The player decides what's converted, what's warned about, and how much fits.
-    let mut device = app.device();
+    let mut device = app.write().options.device;
     ui.horizontal_wrapped(|ui| {
         caps(ui, "player");
         egui::ComboBox::from_id_salt("player").selected_text(device.name()).show_ui(ui, |ui| {
@@ -269,8 +269,13 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
             }
         });
         muted(ui, device.about());
+        let answered = app.write().options.tested.get(&app.write().options.device).map_or(0, |r| r.len());
+        let test = if answered > 0 { format!("tested ({answered} answers)") } else { "test it on the player".into() };
+        if widgets::icon_link(ui, Icon::Check, test).on_hover_text("write a folder of samples to the card, try them, and tick what works").clicked() {
+            app.player_test_open = true;
+        }
     });
-    if device != app.device() {
+    if device != app.write().options.device {
         app.write_mut().options.device = device;
         app.refresh_on_card();
     }
@@ -636,7 +641,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
 }
 
 fn layout_options(app: &mut App, ui: &mut Ui) {
-    let device = app.device();
+    let device = app.player();
     let unplayable = crate::library::unplayable_summary(&app.tracks, |t| device.plays(t));
     let mut changed = false;
     let ink = ink(ui);

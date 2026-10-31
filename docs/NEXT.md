@@ -10,7 +10,7 @@ editions and same-name albums). The "What happens
 today" sections below describe the behaviour *before* these steps; part C ends with what was
 built and measured.
 
-**Added 2026-10-30:** part E, other players (device profiles, as calibre has). E1 is done.
+**Added 2026-10-30:** part E, other players (device profiles, as calibre has). E1 and E2 are done.
 
 Related: [PROGRESS](PROGRESS.md) (status and roadmap) · [ARCHITECTURE](ARCHITECTURE.md) (where
 the code lives).
@@ -508,7 +508,8 @@ reads.
 | # | Step | Size | Status |
 |---|---|---|---|
 | E1 | **Profiles.** A `Device` on each card setup (`Options::device`), carried into `Rules`, so `target()` asks "does this player play it?". Built in: *Echo Mini · RECHO* (the default, so saved setups keep working) and *Echo Mini · stock firmware*. Chosen in the card tab's **player** row, next to the destination. Format warnings, badges, the scan notice and the playlist note name the chosen player; the card warns above its song limit. | M | **Done** (2026-10-30) |
-| E2 | **A test card.** Write a folder of short samples (ALAC, AAC, Opus, APE, AIFF, WavPack, 24/192 FLAC, a cover, a playlist) to the card; play through it on the player and tick what worked. The result is saved as a custom profile beside the built-in ones. The building block is the ignored `convert_write` test in `card/write.rs`, which isn't yet a feature. | M | |
+| E2 | **A test card.** Write a folder of short samples (every format, FLAC at 96, 192 and 384 kHz, a cover, accented titles in ID3v2.3 and 2.4, a playlist) to the card; play through it on the player and tick what worked. The answers are kept with the card setup, per player, and win over the built-in profile: formats, the highest sample rate (songs above it go at CD quality) and covers. | M | **Done** (2026-10-31) |
+| E2b | **Act on the other answers.** A playlist that shows → write playlists as `.m3u8` instead of numbered copies (no duplicate songs on a tag-browsing player). ID3v2.4 titles garbled but v2.3 fine → write ID3v2.3 into card copies. Both are recorded now, but don't change anything yet. | S | |
 | E3 | **Recognising a card.** Write a small hidden file (`.neatlibrary`, like calibre's `metadata.calibre`) naming the card setup it belongs to, so a card plugged in brings up its own setup and player. RECHO only reads the card, so the file is harmless there. | S | |
 | E4 | **A side panel of facets** (format, quality, year, card status, genre) with counts, each a click to filter. The search terms behind it exist already (`library/search.rs`); genre needs reading from tags. | M | |
 | E5 | **An editable naming pattern**, like calibre's save-to-disk template: `{albumartist}/{year} - {album}/{disc}-{track} - {title}`, with a default per profile. | M | |

@@ -81,7 +81,7 @@ impl App {
                     continue;
                 }
                 let (format, quality) = describe(&self.tracks, &al.tracks);
-                let device = self.device();
+                let device = self.player();
                 rows.push(AlbumRow {
                     artist: ai,
                     album: bi,

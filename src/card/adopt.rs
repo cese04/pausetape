@@ -97,7 +97,8 @@ fn system_file(name: &str, ext: &str) -> bool {
 }
 
 /// Files on the card this write didn't create (by its manifest), relative to the card, with
-/// sizes. Hidden files, system folders and an earlier gather folder are not looked at.
+/// sizes. Hidden files, system folders, an earlier gather folder and the test card's files are
+/// not looked at.
 pub fn foreign_files(dest: &Path, manifest: &[Written]) -> Vec<(PathBuf, u64)> {
     let ours: HashSet<String> = manifest.iter().map(|w| w.rel.to_string_lossy().to_lowercase()).collect();
     let gather = gather_folder();
@@ -106,7 +107,8 @@ pub fn foreign_files(dest: &Path, manifest: &[Written]) -> Vec<(PathBuf, u64)> {
         .into_iter()
         .filter_entry(|e| {
             let n = e.file_name().to_string_lossy();
-            !n.starts_with('.') && !(e.depth() == 1 && (n == "System Volume Information" || n == "$RECYCLE.BIN" || n == gather.as_str()))
+            let test_card = n == super::testcard::TEST_FOLDER || n == super::testcard::TEST_PLAYLIST;
+            !n.starts_with('.') && !(e.depth() == 1 && (n == "System Volume Information" || n == "$RECYCLE.BIN" || n == gather.as_str() || test_card))
         })
         .flatten()
         .filter(|e| e.file_type().is_file())

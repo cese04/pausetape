@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use crate::card::Device;
+use crate::card::Player;
 
 pub fn duration(d: Duration) -> String {
     let s = d.as_secs();
@@ -33,7 +33,7 @@ pub fn bytes(n: u64) -> String {
 }
 
 /// Why a file is flagged for the card's player, for tooltips.
-pub fn format_note(t: &crate::library::Track, device: Device) -> Option<String> {
+pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> {
     if device.plays(t) {
         return None;
     }
@@ -49,7 +49,7 @@ pub fn format_note(t: &crate::library::Track, device: Device) -> Option<String> 
 }
 
 /// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play".
-pub fn format_badge(t: &crate::library::Track, device: Device) -> String {
+pub fn format_badge(t: &crate::library::Track, device: Player) -> String {
     let state = match (t.plays_here(), t.ffmpeg_can_decode()) {
         (true, _) => format!("not on {}", device.short()),
         (false, true) => "needs ffmpeg".into(),

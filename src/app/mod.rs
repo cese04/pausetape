@@ -12,6 +12,7 @@ mod edit;
 mod events;
 mod music;
 mod playback;
+mod testcard;
 mod writes;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -132,6 +133,10 @@ enum Msg {
     Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
     /// Covers found for albums without one, and whether the search was stopped.
     CoversFound(Vec<FoundCover>, bool),
+    /// The test card's samples written to the card: what each became.
+    TestCardWritten(Vec<(card::Sample, Result<(), String>)>),
+    /// The test card's files taken off the card, or why not.
+    TestCardRemoved(Result<(), String>),
 }
 
 pub struct Busy {
@@ -240,6 +245,10 @@ pub struct App {
     pub take_over_open: bool,
     /// A folder of new music checked against the library, waiting to be added.
     pub adding: Option<Adding>,
+    /// The dialog for testing the card's player.
+    pub player_test_open: bool,
+    /// What the test card's samples became the last time it was written.
+    pub test_card: Option<Vec<(card::Sample, Result<(), String>)>>,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
     tx: Sender<Msg>,
@@ -328,6 +337,8 @@ impl App {
             album_anchor: None,
             take_over_open: false,
             adding: None,
+            player_test_open: false,
+            test_card: None,
             busy: None,
             notices: Vec::new(),
             tx,

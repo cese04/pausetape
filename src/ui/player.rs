@@ -75,8 +75,8 @@ fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
         muted(ui, meta.join(" · "));
         if st.converting {
             ui.label(RichText::new("converting with ffmpeg…").size(12.5).color(ink.muted));
-        } else if let Some(note) = text::format_note(t, app.device()) {
-            ui.label(RichText::new(text::format_badge(t, app.device())).size(12.5).color(ink.accent)).on_hover_text(note);
+        } else if let Some(note) = text::format_note(t, app.player()) {
+            ui.label(RichText::new(text::format_badge(t, app.player())).size(12.5).color(ink.accent)).on_hover_text(note);
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             muted(ui, format!("{} / {}", text::duration(st.pos), text::duration(len)));

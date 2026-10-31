@@ -16,7 +16,7 @@ impl App {
                     if Some(&root) != self.saved.source.as_ref() {
                         continue;
                     }
-                    let device = self.device();
+                    let device = self.player();
                     let unplayable = tracks.iter().filter(|t| !device.plays(t)).count();
                     let mut parts = vec![format!("{} songs", tracks.len())];
                     if stats.cached > 0 {
@@ -181,6 +181,23 @@ impl App {
                             self.take_over_open = true;
                         }
                         self.write_preview = Some((name, *p));
+                    }
+                }
+                Msg::TestCardWritten(made) => {
+                    self.busy = None;
+                    let ok = made.iter().filter(|(_, r)| r.is_ok()).count();
+                    self.notice(format!("test folder written to the card: {ok} of {} samples · eject the card and try them on the player", made.len()));
+                    self.test_card = Some(made);
+                    self.write_preview = None;
+                }
+                Msg::TestCardRemoved(r) => {
+                    self.busy = None;
+                    match r {
+                        Ok(()) => {
+                            self.test_card = None;
+                            self.notice("test folder taken off the card");
+                        }
+                        Err(e) => self.notice(format!("couldn't take the test folder off the card: {e}")),
                     }
                 }
                 Msg::Trashed(moved, what, errors) => {
