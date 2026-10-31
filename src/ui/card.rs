@@ -478,7 +478,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         ui.label(RichText::new(format!("{} chosen{copies}, but {} lists at most {}: the rest won't show up on the player.", plural(sizes.songs, "song"), device.name(), text::count(max))).color(ink.accent).size(13.0));
     }
     let Some((_, room)) = space else { return };
-    let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
+    let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.id).map(|(_, s)| s.used_bytes()).unwrap_or(0);
     if adoptable > 0 {
         muted(ui, format!("counting the {} a take-over moves into place as already there", text::bytes(adoptable)));
     }
@@ -641,14 +641,14 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
 
 fn take_over_steps(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let Some((name, p)) = &app.write_preview else { return };
+    let Some((id, p)) = &app.write_preview else { return };
     let (foreign, foreign_bytes) = (p.foreign, p.foreign_bytes);
     // Counts and sizes, copied out so the buttons below can change the app.
-    let surveyed = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| {
+    let surveyed = app.card_survey.as_ref().filter(|(n, _)| n == id).map(|(_, s)| {
         let c = |l: &[(PathBuf, u64)]| (l.len(), Survey::bytes(l));
         ((s.used.len(), s.used_bytes()), c(&s.spare), c(&s.versions), c(&s.unknown), c(&s.other))
     });
-    let clutter = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| s.clutter()).unwrap_or_default();
+    let clutter = app.card_survey.as_ref().filter(|(n, _)| n == id).map(|(_, s)| s.clutter()).unwrap_or_default();
     match surveyed {
         None if foreign > 0 => {
             ui.label(RichText::new(format!("The card has {} that this write didn't put there ({}): music copied by hand, perhaps.", plural(foreign, "file"), text::bytes(foreign_bytes))).color(ink.text));

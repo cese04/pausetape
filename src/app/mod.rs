@@ -112,6 +112,7 @@ enum Msg {
     Scanned(PathBuf, Vec<Track>, ScanStats),
     Organize(Progress),
     WriteProgress(usize, usize),
+    /// A finished write, and the others below, by setup id (`WriteProfile::id`): names change.
     Written(String, Box<Outcome>),
     Previewed(String, Box<Preview>),
     /// What's on the card besides the write's own files, for taking it over.
@@ -275,11 +276,11 @@ pub struct App {
     pub tidy_plan: Option<Vec<PlanItem>>,
     /// How many tracks already sit where tidying would put them.
     pub in_place: usize,
-    /// Preview of the active write, tagged with the write's name.
+    /// Preview of the active write, tagged with the setup's id.
     pub write_preview: Option<(String, Preview)>,
     /// The active write against its card: what's there, what's chosen, what Sync changes.
     pub card_state: CardState,
-    /// The card surveyed for taking over, by write name.
+    /// The card surveyed for taking over, by setup id.
     pub card_survey: Option<(String, card::adopt::Survey)>,
     /// The room a running write started with: its new files fill the card before the manifest
     /// counts them, so the live figure would shrink as it goes.

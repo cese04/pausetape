@@ -143,7 +143,7 @@ impl App {
             // with its own index (rebuilding one is much cheaper than the card I/O).
             let index = grouping::build(&tracks, &prefs);
             let p = card::preview(&w, &tracks, &index, &playlists, &dest);
-            let _ = tx.send(Msg::Previewed(w.name, Box::new(p)));
+            let _ = tx.send(Msg::Previewed(w.id, Box::new(p)));
         });
     }
 
@@ -169,16 +169,16 @@ impl App {
                     ctx.request_repaint();
                 }
             });
-            let _ = tx.send(Msg::Surveyed(w.name, Box::new(s)));
+            let _ = tx.send(Msg::Surveyed(w.id, Box::new(s)));
         });
     }
 
     /// Move the card's copies of library songs into this write's layout (see `card::adopt`).
     pub fn take_over_card(&mut self) {
-        let Some((name, survey)) = self.card_survey.take() else { return };
-        let Some(dest) = self.write().dest.clone().filter(|_| self.write().name == name) else { return };
+        let Some((id, survey)) = self.card_survey.take() else { return };
+        let Some(dest) = self.write().dest.clone().filter(|_| self.write().id == id) else { return };
         if self.busy.is_some() {
-            self.card_survey = Some((name, survey));
+            self.card_survey = Some((id, survey));
             return;
         }
         if let Some(why) = self.refused_by_label().or_else(|| self.library_unavailable()) {
@@ -191,7 +191,7 @@ impl App {
         self.busy = Some(Busy::new("taking over the card", 0));
         self.problems = None;
         self.spawn(move |tx| {
-            let mut out = card::adopt::take_over(&survey, &dest, gather, clean, clean_mac, &name, |done, total| {
+            let mut out = card::adopt::take_over(&survey, &dest, gather, clean, clean_mac, &id, |done, total| {
                 if done % 10 == 0 || done == total {
                     let _ = tx.send(Msg::WriteProgress(done, total));
                     ctx.request_repaint();
@@ -201,25 +201,25 @@ impl App {
             if let Err(e) = label.save(&dest) {
                 out.errors.push(format!("{e:#}"));
             }
-            let _ = tx.send(Msg::TookOver(name, Box::new(out)));
+            let _ = tx.send(Msg::TookOver(id, Box::new(out)));
         });
     }
 
     /// Copy the card's music that isn't in the library into the music folder (see
     /// `card::adopt::import`), then rescan so it joins the library.
     pub fn import_from_card(&mut self) {
-        let Some((name, survey)) = self.card_survey.take() else { return };
+        let Some((id, survey)) = self.card_survey.take() else { return };
         let (Some(dest), Some(music)) = (self.write().dest.clone(), self.saved.source.clone()) else {
-            self.card_survey = Some((name, survey));
+            self.card_survey = Some((id, survey));
             return;
         };
         if self.busy.is_some() {
-            self.card_survey = Some((name, survey));
+            self.card_survey = Some((id, survey));
             return;
         }
         if let Some(why) = self.library_unavailable() {
             self.notice(why);
-            self.card_survey = Some((name, survey));
+            self.card_survey = Some((id, survey));
             return;
         }
         let ctx = self.ctx.clone();
@@ -246,8 +246,8 @@ impl App {
         self.busy = Some(Busy::new("putting the card back", 0));
         self.problems = None;
         self.spawn(move |tx| {
-            let r = card::adopt::undo_latest(&w.name, &dest).map_err(|e| format!("{e:#}"));
-            let _ = tx.send(Msg::UndidTakeOver(w.name, r));
+            let r = card::adopt::undo_latest(&w.id, &w.name, &dest).map_err(|e| format!("{e:#}"));
+            let _ = tx.send(Msg::UndidTakeOver(w.id, r));
         });
     }
 
@@ -257,7 +257,7 @@ impl App {
     pub fn card_room(&self) -> Option<(card::SpaceInfo, u64)> {
         let w = self.write();
         let info = w.dest.as_deref().and_then(card::space)?;
-        let adoptable = self.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
+        let adoptable = self.card_survey.as_ref().filter(|(n, _)| *n == w.id).map(|(_, s)| s.used_bytes()).unwrap_or(0);
         let room = self.room_while_writing.unwrap_or(info.free + w.manifest_bytes() + adoptable);
         Some((info, room))
     }
@@ -308,7 +308,7 @@ impl App {
                     ctx.request_repaint();
                 }
             });
-            let _ = tx.send(Msg::Written(w.name, Box::new(out)));
+            let _ = tx.send(Msg::Written(w.id, Box::new(out)));
         });
     }
 

@@ -230,7 +230,7 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     }
     let foreign = super::adopt::foreign_files(dest, &w.manifest);
     (p.foreign, p.foreign_bytes) = (foreign.len(), foreign.iter().map(|(_, n)| n).sum());
-    p.can_undo_take_over = super::adopt::latest(&w.name).is_some();
+    p.can_undo_take_over = super::adopt::latest(&w.id, &w.name).is_some();
     p
 }
 

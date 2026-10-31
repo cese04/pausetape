@@ -237,7 +237,7 @@ pub struct Outcome {
 /// copies into place. Folders left empty are removed, and with `clean_mac` so are the "._" files
 /// macOS leaves beside everything it touches on a FAT/exFAT card. Every move is journaled so
 /// `undo_latest` can put it back; deleted clutter can't be. `progress` gets (done, total).
-pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: bool, clean_mac: bool, write_name: &str, mut progress: impl FnMut(usize, usize)) -> Outcome {
+pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: bool, clean_mac: bool, write: &str, mut progress: impl FnMut(usize, usize)) -> Outcome {
     let mut out = Outcome::default();
     let mut moves: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut emptied: HashSet<PathBuf> = HashSet::new();
@@ -316,7 +316,7 @@ pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: boo
         super::copy::remove_empty_dirs(dest);
     }
     if !moves.is_empty()
-        && let Err(e) = save(write_name, &moves)
+        && let Err(e) = save(write, &moves)
     {
         out.errors.push(format!("saving the undo record: {e:#}"));
     }
@@ -434,6 +434,7 @@ pub fn import(survey: &Survey, dest: &Path, music: &Path, into: &str, stop: &std
 /// The record of one take-over, so it can be undone: card moves, oldest first.
 #[derive(Serialize, Deserialize)]
 struct Record {
+    /// The setup's id; in records made before setups had ids, its name.
     write: String,
     moves: Vec<(PathBuf, PathBuf)>,
 }
@@ -442,26 +443,27 @@ fn record_dir() -> PathBuf {
     super::journal::journal_dir().join("card")
 }
 
-fn save(write_name: &str, moves: &[(PathBuf, PathBuf)]) -> Result<()> {
+fn save(write: &str, moves: &[(PathBuf, PathBuf)]) -> Result<()> {
     let dir = record_dir();
     fs::create_dir_all(&dir)?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos();
-    let rec = Record { write: write_name.to_string(), moves: moves.to_vec() };
+    let rec = Record { write: write.to_string(), moves: moves.to_vec() };
     fs::write(dir.join(format!("{stamp}.json")), serde_json::to_vec_pretty(&rec)?)?;
     Ok(())
 }
 
-/// The latest take-over of this write that hasn't been undone.
-pub fn latest(write_name: &str) -> Option<PathBuf> {
+/// The latest take-over by this setup that hasn't been undone, by its id (or, for older
+/// records, its name).
+pub fn latest(id: &str, name: &str) -> Option<PathBuf> {
     let mut files: Vec<PathBuf> = fs::read_dir(record_dir()).ok()?.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
     files.sort();
-    files.into_iter().rev().find(|p| fs::read(p).ok().and_then(|b| serde_json::from_slice::<Record>(&b).ok()).is_some_and(|r| r.write == write_name))
+    files.into_iter().rev().find(|p| fs::read(p).ok().and_then(|b| serde_json::from_slice::<Record>(&b).ok()).is_some_and(|r| r.write == id || r.write == name))
 }
 
 /// Put back the latest take-over of this write. Returns the card paths (relative to `dest`) that
 /// are no longer the write's (remove them from its manifest), how many files went back, and errors.
-pub fn undo_latest(write_name: &str, dest: &Path) -> Result<(Vec<PathBuf>, usize, Vec<String>)> {
-    let path = latest(write_name).context("nothing to undo")?;
+pub fn undo_latest(id: &str, name: &str, dest: &Path) -> Result<(Vec<PathBuf>, usize, Vec<String>)> {
+    let path = latest(id, name).context("nothing to undo")?;
     let rec: Record = serde_json::from_slice(&fs::read(&path)?)?;
     let (mut released, mut restored, mut errors) = (Vec::new(), 0, Vec::new());
     let mut emptied = HashSet::new();
@@ -633,7 +635,10 @@ mod tests {
         assert!(card.join("_Before NeatLibrary/Someone Else/song.mp3").exists());
         assert!(!card.join("muse absolution [mp3]").exists(), "emptied folders go");
 
-        let (released, restored, errors) = undo_latest("test write", &card).unwrap();
+        // Found by the setup's id; records from before ids hold its name, so that works too.
+        assert!(latest("test write", "renamed since").is_some() && latest("another id", "test write").is_some());
+        assert!(latest("another id", "another name").is_none());
+        let (released, restored, errors) = undo_latest("test write", "", &card).unwrap();
         assert!(errors.is_empty(), "{errors:?}");
         assert_eq!((released.len(), restored), (6, 6));
         assert!(card.join("muse absolution [mp3]/02 Apocalypse.mp3").exists());

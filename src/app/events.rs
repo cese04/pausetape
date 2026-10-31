@@ -83,9 +83,10 @@ impl App {
                         b.progress(done, total);
                     }
                 }
-                Msg::Written(name, out) => {
+                Msg::Written(id, out) => {
                     self.busy = None;
                     self.room_while_writing = None;
+                    let name = self.saved.writes.iter().find(|w| w.id == id).map(|w| w.name.clone()).unwrap_or_default();
                     let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
                     if out.stopped {
                         self.notice(format!(
@@ -104,7 +105,7 @@ impl App {
                             out.cleaned,
                         ));
                     }
-                    if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
+                    if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
                         w.manifest = out.manifest;
                         if !out.stopped {
                             w.last_written = Some(card::now());
@@ -115,16 +116,16 @@ impl App {
                     self.refresh_on_card();
                     self.refresh_label();
                 }
-                Msg::Surveyed(name, s) => {
+                Msg::Surveyed(id, s) => {
                     self.busy = None;
-                    if self.write().name == name {
-                        self.card_survey = Some((name, *s));
+                    if self.write().id == id {
+                        self.card_survey = Some((id, *s));
                     }
                 }
-                Msg::TookOver(name, mut out) => {
+                Msg::TookOver(id, mut out) => {
                     self.busy = None;
                     self.take_over_open = false;
-                    if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
+                    if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
                         // The moved files are now this write's, as if it had copied them.
                         let mut have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
                         for wr in out.written {
@@ -169,11 +170,11 @@ impl App {
                     ));
                     self.scan();
                 }
-                Msg::UndidTakeOver(name, r) => {
+                Msg::UndidTakeOver(id, r) => {
                     self.busy = None;
                     match r {
                         Ok((released, restored, errors)) => {
-                            if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
+                            if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
                                 let gone: HashSet<String> = released.iter().map(|r| r.to_string_lossy().to_lowercase()).collect();
                                 w.manifest.retain(|m| !gone.contains(&m.rel.to_string_lossy().to_lowercase()));
                             }
@@ -185,11 +186,11 @@ impl App {
                     }
                     self.preview_write();
                 }
-                Msg::Previewed(name, p) => {
+                Msg::Previewed(id, p) => {
                     if self.busy.as_ref().is_some_and(|b| b.label.starts_with("comparing")) {
                         self.busy = None;
                     }
-                    if self.write().name == name {
+                    if self.write().id == id {
                         // A card with music the app didn't put there, before any write: explain
                         // the take-over once, on its own.
                         let w = &mut self.saved.writes[self.saved.active_write];
@@ -198,7 +199,7 @@ impl App {
                             w.take_over_offered = true;
                             self.take_over_open = true;
                         }
-                        self.write_preview = Some((name, *p));
+                        self.write_preview = Some((id, *p));
                     }
                 }
                 Msg::TestCardWritten(made) => {
