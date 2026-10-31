@@ -49,7 +49,8 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    are cut out, and formats RECHO can't play converted, with ffmpeg: by a pool of workers in a
    work folder, while one writer copies to the card whatever is ready), export playlists, prune
    what's left over (old playlist files, songs that failed), clean macOS `._` files, and store
-   the new manifest in the write profile.
+   the new manifest in the write profile. Asked to stop (a shared `AtomicBool`), it finishes the
+   song it's on; the manifest is then what it copied plus the earlier files still on the card.
 5. **Play** (`audio/`, `library/cover.rs`): `audio::open` tries Symphonia, else converts with
    ffmpeg to a cached stereo WAV; `audio::Section` keeps to one song of an album file. The
    waveform (loudness every 100 ms) and the cover load in background threads.
@@ -88,11 +89,12 @@ src/
 ├── app/               state and the glue between background work and the UI
 │   ├── mod.rs         App, Saved (persisted), Tab, messages, eframe::App
 │   ├── music.rs       scanning, tag corrections, artist decisions, MusicBrainz
+│   ├── edit.rs        tags edited by hand, the library's selection of songs
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── playback.rs    play queue, waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
-    ├── mod.rs         panels, tab bar, message line, tab dispatch
+    ├── mod.rs         panels, tab bar, running job (time left, Stop), message line, tab dispatch
     ├── theme.rs       palette, fonts, frames
     ├── icons.rs       drawn line icons (tabs and commands), no font needed
     ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
@@ -101,6 +103,7 @@ src/
     ├── library.rs  artists.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab
     ├── player.rs      player bar
     ├── navigator.rs   in-app folder browser for the pickers
+    ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     └── screenshots.rs debug-only screenshot demo (NEATLIBRARY_SHOT)
 ```
 
@@ -163,11 +166,11 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 35 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 44 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
-playlist export, cover lookup, text shortening. They use temporary folders and fake audio files,
+a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),

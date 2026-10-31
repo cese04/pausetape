@@ -12,12 +12,13 @@ impl App {
         if self.busy.is_some() {
             return;
         }
-        self.busy = Some(Busy { label: "tidying source".into(), done: 0, total: plan.len() });
+        let (busy, stop) = Busy::stoppable("tidying source", plan.len());
+        self.busy = Some(busy);
         let tracks = self.tracks.clone();
         let opts = self.saved.tidy.clone();
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
-            let report = card::execute(&tracks, &plan, &source, &source, Mode::MoveInPlace, &opts, &[], |p| {
+            let report = card::execute(&tracks, &plan, &source, &source, Mode::MoveInPlace, &opts, &[], &stop, |p| {
                 // Throttle UI updates to keep the channel small on large libraries.
                 if let Progress::Step { done, .. } = &p
                     && done % 10 != 0
@@ -110,7 +111,7 @@ impl App {
         let tracks = self.tracks.clone();
         let prefs = self.saved.prefs.clone();
         let playlists = self.saved.playlists.clone();
-        self.busy.get_or_insert(Busy { label: "comparing with the card".into(), done: 0, total: 0 });
+        self.busy.get_or_insert(Busy::new("comparing with the card", 0));
         self.spawn(move |tx| {
             // Statting every file on a slow card can take a while, so this runs off the UI thread
             // with its own index (rebuilding one is much cheaper than the card I/O).
@@ -130,7 +131,7 @@ impl App {
         let plan = w.plan(&self.tracks, &self.index);
         let tracks = self.tracks.clone();
         let ctx = self.ctx.clone();
-        self.busy = Some(Busy { label: "checking the card's music".into(), done: 0, total: 0 });
+        self.busy = Some(Busy::new("checking the card's music", 0));
         self.spawn(move |tx| {
             let s = card::adopt::survey(&tracks, &plan, &w.manifest, &dest, |done, total| {
                 if done % 25 == 0 {
@@ -152,7 +153,7 @@ impl App {
         }
         let (gather, clean, clean_mac) = (self.gather_on_take_over, self.delete_clutter_on_take_over, self.write().options.clean_mac_files);
         let ctx = self.ctx.clone();
-        self.busy = Some(Busy { label: "taking over the card".into(), done: 0, total: 0 });
+        self.busy = Some(Busy::new("taking over the card", 0));
         self.problems = None;
         self.spawn(move |tx| {
             let out = card::adopt::take_over(&survey, &dest, gather, clean, clean_mac, &name, |done, total| {
@@ -178,10 +179,11 @@ impl App {
             return;
         }
         let ctx = self.ctx.clone();
-        self.busy = Some(Busy { label: "copying music from the card".into(), done: 0, total: 0 });
+        let (busy, stop) = Busy::stoppable("copying music from the card", 0);
+        self.busy = Some(busy);
         self.problems = None;
         self.spawn(move |tx| {
-            let out = card::adopt::import(&survey, &dest, &music, |done, total| {
+            let out = card::adopt::import(&survey, &dest, &music, &stop, |done, total| {
                 if done % 10 == 0 {
                     let _ = tx.send(Msg::WriteProgress(done, total));
                     ctx.request_repaint();
@@ -197,7 +199,7 @@ impl App {
         if self.busy.is_some() {
             return;
         }
-        self.busy = Some(Busy { label: "putting the card back".into(), done: 0, total: 0 });
+        self.busy = Some(Busy::new("putting the card back", 0));
         self.problems = None;
         self.spawn(move |tx| {
             let r = card::adopt::undo_latest(&w.name, &dest).map_err(|e| format!("{e:#}"));
@@ -224,13 +226,14 @@ impl App {
         }
         let plan = w.plan(&self.tracks, &self.index);
         self.room_while_writing = self.card_room().map(|(_, room)| room);
-        self.busy = Some(Busy { label: format!("writing “{}”", w.name), done: 0, total: plan.len() });
+        let (busy, stop) = Busy::stoppable(format!("writing “{}”", w.name), plan.len());
+        self.busy = Some(busy);
         self.problems = None;
         let tracks = self.tracks.clone();
         let playlists = self.saved.playlists.clone();
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
-            let out = card::write(&w, &tracks, &plan, &playlists, &source, &dest, |p| {
+            let out = card::write(&w, &tracks, &plan, &playlists, &source, &dest, &stop, |p| {
                 if let Progress::Step { done, total } = p
                     && done % 10 == 0
                 {

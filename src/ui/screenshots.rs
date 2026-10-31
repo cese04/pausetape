@@ -11,11 +11,13 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 8] = [
+const TABS: [(Tab, &str); 10] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
     (Tab::Library, "library"),
+    (Tab::Library, "tageditor"),
+    (Tab::Library, "job"),
     (Tab::Artists, "artists"),
     (Tab::Card, "card"),
     (Tab::Playlists, "playlists"),
@@ -37,7 +39,9 @@ impl Shooter {
 
     pub fn tick(&mut self, app: &mut App, ctx: &egui::Context) {
         ctx.request_repaint();
-        if app.tracks.is_empty() || app.busy.is_some() || self.until.is_some_and(|t| Instant::now() < t) {
+        // The "job" shot shows a pretend write, so it doesn't wait for that one.
+        let pretend = app.busy.as_ref().is_some_and(|b| b.stop.is_some()) && self.step / 2 < TABS.len() && TABS[self.step.saturating_sub(1) / 2].1 == "job";
+        if app.tracks.is_empty() || (app.busy.is_some() && !pretend) || self.until.is_some_and(|t| Instant::now() < t) {
             return;
         }
         if self.survey && app.write_preview.as_ref().is_some_and(|(_, p)| p.foreign > 0) {
@@ -110,6 +114,10 @@ impl Shooter {
                     app.card_album(ai, bi, on);
                 }
             }
+            // NEATLIBRARY_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
+            if std::env::var_os("NEATLIBRARY_SHOT_SELECT").is_some() {
+                app.selected = app.queue.iter().take(3).copied().collect();
+            }
             app.preview_write();
         }
         let (n, half) = (self.step / 2, self.step % 2);
@@ -124,6 +132,17 @@ impl Shooter {
                 "cardpicker" => Some(crate::ui::folders::Picker::Card { browse: None, show_all: true }),
                 _ => None,
             };
+            match TABS[n].1 {
+                "tageditor" => app.edit_tags(app.queue.clone()),
+                "job" => {
+                    app.tag_edit = None;
+                    app.busy = Some(crate::app::Busy::pretend("writing “Echo Mini”", 1204, 2466, 300));
+                }
+                _ => {
+                    app.tag_edit = None;
+                    app.busy = None;
+                }
+            }
             // First tab waits for MusicBrainz and the waveform.
             self.until = Some(Instant::now() + Duration::from_millis(if n == 0 { 15000 } else { 600 }));
         } else {

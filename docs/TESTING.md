@@ -150,6 +150,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 14b. Play an album whose cover is a `folder.jpg`/`Front.jpg` (not embedded): the player says
     "cover from … · add it". After **add it** and a write, the card copies show the cover in
     Explorer / the file manager (and on the Echo Mini).
+14c. Library › an album › **edit tags**: change the year and one song's title, **Save**: the
+    album's year changes, those songs say *edited*, and the toolbar offers *write N corrected
+    tags*. ⌘-click (Ctrl-click) two songs of different albums, then **edit their tags**: boxes
+    whose values differ say "several values"; type an artist, save: both songs move under it.
+    Right-click a song: the menu offers editing it, its album, or the selection. Esc clears the
+    selection; a year like "nineties" keeps **Save** off.
 
 ### E. The card
 15. Folders › **Choose card…**: Linux lists the stick by name; Windows uses the workaround
@@ -191,9 +197,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     Sync takes it off.
 19d. The tabs sit on a tinted bar, each with an icon; the open one is filled. Narrow the window
     below ~1000 px: the other tabs show only their icon (hover names them). Start a scan: its
-    progress shows at the bar's right end, and the result appears on the line below with a
+    progress shows on a line under the bar, and the result appears on the line below with a
     close button. Commands (play, look up, rename, Sync…) have icons and a background on hover;
     the card tab's and settings tab's options are named on the left with smaller explanations.
+19e. Start a long write: the line under the tab bar counts files and, after a few seconds, the
+    time left. **Stop**: it says "stopping…", then the message says what was copied. **Sync**
+    again: it carries on (what's done is unchanged) and finishes with the playlists.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 
 ### F. Playlists

@@ -1,20 +1,27 @@
 //! Application state and the glue between background work and the UI. Rendering lives in
 //! `crate::ui`; this module owns the data, starts background work and folds its results back in.
 //!
-//! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `writes` (card
-//! writes, reorganising, playlists), `playback`, and `events` (the per-frame message pump).
+//! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `edit` (tags
+//! edited by hand), `writes` (card writes, reorganising, playlists), `playback`, and `events`
+//! (the per-frame message pump).
 
+mod edit;
 mod events;
 mod music;
 mod playback;
 mod writes;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use serde::{Deserialize, Serialize};
+
+pub use edit::{Shared, TagEdit};
 
 use crate::audio::{self, Audio};
 use crate::card::playlist::{self, Playlist};
@@ -113,6 +120,51 @@ pub struct Busy {
     pub label: String,
     pub done: usize,
     pub total: usize,
+    /// When counting began and the count then: a write skips what's unchanged in one step, so
+    /// the pace is measured from its first report, not from the start.
+    since: Option<(Instant, usize)>,
+    /// Set to ask the work to stop after the file it's on; `None` for work that can't stop halfway.
+    pub stop: Option<Arc<AtomicBool>>,
+}
+
+impl Busy {
+    pub fn new(label: impl Into<String>, total: usize) -> Busy {
+        Busy { label: label.into(), done: 0, total, since: None, stop: None }
+    }
+
+    /// The same, with a flag the work checks between files.
+    pub fn stoppable(label: impl Into<String>, total: usize) -> (Busy, Arc<AtomicBool>) {
+        let stop = Arc::new(AtomicBool::new(false));
+        (Busy { stop: Some(stop.clone()), ..Busy::new(label, total) }, stop)
+    }
+
+    pub fn progress(&mut self, done: usize, total: usize) {
+        (self.done, self.total) = (done, total);
+        self.since.get_or_insert((Instant::now(), done));
+    }
+
+    pub fn stopping(&self) -> bool {
+        self.stop.as_ref().is_some_and(|s| s.load(Ordering::Relaxed))
+    }
+
+    /// For the screenshot demo: `done` of `total` after `secs` seconds.
+    #[cfg(debug_assertions)]
+    pub fn pretend(label: &str, done: usize, total: usize, secs: u64) -> Busy {
+        let (mut b, _) = Busy::stoppable(label, total);
+        b.since = Some((Instant::now() - Duration::from_secs(secs), 0));
+        b.done = done;
+        b
+    }
+
+    /// At the pace so far, once there's enough of it to go on (a few files and seconds).
+    pub fn time_left(&self) -> Option<Duration> {
+        let (at, from) = self.since?;
+        let (done, secs) = (self.done.checked_sub(from)?, at.elapsed().as_secs_f64());
+        if done < 3 || secs < 5.0 || self.total <= self.done {
+            return None;
+        }
+        Some(Duration::from_secs_f64(secs / done as f64 * (self.total - self.done) as f64))
+    }
 }
 
 /// The active write against its card, for the library's marks and the Sync strip. Works
@@ -153,6 +205,12 @@ pub struct App {
     pub duplicates_only: bool,
     /// Expanded artists in the library, by artist key.
     pub expanded: HashSet<String>,
+    /// Songs chosen in the library (⌘-click), for editing their tags together.
+    pub selected: BTreeSet<usize>,
+    /// The song last clicked into the selection, where a shift-click run starts.
+    pub select_anchor: Option<usize>,
+    /// The open tag editor.
+    pub tag_edit: Option<TagEdit>,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
     tx: Sender<Msg>,
@@ -232,6 +290,9 @@ impl App {
             filter: String::new(),
             duplicates_only: false,
             expanded: HashSet::new(),
+            selected: BTreeSet::new(),
+            select_anchor: None,
+            tag_edit: None,
             busy: None,
             notices: Vec::new(),
             tx,
@@ -306,6 +367,24 @@ impl App {
             work(tx);
             ctx.request_repaint();
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn time_left_waits_for_a_pace_then_extrapolates() {
+        let mut b = Busy::new("writing", 1000);
+        b.progress(400, 1000);
+        assert_eq!(b.time_left(), None, "the first report (what's unchanged) sets where counting starts");
+        b.since = Some((Instant::now() - Duration::from_secs(60), 400));
+        b.progress(500, 1000);
+        let left = b.time_left().unwrap().as_secs();
+        assert!((299..=301).contains(&left), "100 songs a minute, 500 to go: {left} s");
+        b.progress(1000, 1000);
+        assert_eq!(b.time_left(), None);
     }
 }
 

@@ -8,7 +8,7 @@ impl App {
             match msg {
                 Msg::ScanProgress(n) => {
                     if let Some(b) = &mut self.busy {
-                        b.done = n;
+                        b.progress(n, 0);
                     }
                 }
                 Msg::Scanned(root, tracks, stats) => {
@@ -38,15 +38,22 @@ impl App {
                     self.tracks = tracks;
                     self.lookups.clear();
                     self.queue.clear();
+                    // Track numbers change with a new scan.
+                    self.selected.clear();
+                    self.select_anchor = None;
+                    self.tag_edit = None;
                     self.rebuild();
                 }
                 Msg::Organize(Progress::Step { done, total }) => {
-                    self.busy = Some(Busy { label: "tidying source".into(), done, total });
+                    if let Some(b) = &mut self.busy {
+                        b.progress(done, total);
+                    }
                 }
                 Msg::Organize(Progress::Finished(r)) => {
                     self.busy = None;
                     self.notice(format!(
-                        "{} copied · {} moved · {} unchanged · {} skipped · {} retagged · {} mac files removed{}",
+                        "{}{} copied · {} moved · {} unchanged · {} skipped · {} retagged · {} mac files removed{}",
+                        if r.stopped { "stopped: " } else { "" },
                         r.copied,
                         r.moved,
                         r.unchanged,
@@ -63,20 +70,29 @@ impl App {
                 }
                 Msg::WriteProgress(done, total) => {
                     if let Some(b) = &mut self.busy {
-                        (b.done, b.total) = (done, total);
+                        b.progress(done, total);
                     }
                 }
                 Msg::Written(name, out) => {
                     self.busy = None;
                     self.room_while_writing = None;
                     let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
-                    self.notice(format!(
-                        "“{name}”: {} copied · {} unchanged · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
-                        out.copied, out.unchanged, out.removed, out.skipped, out.tagged, out.cleaned,
-                    ));
+                    if out.stopped {
+                        self.notice(format!(
+                            "“{name}” stopped: {} copied · {} unchanged · {} removed{errors}. What's on the card is recorded; Sync carries on from there.",
+                            out.copied, out.unchanged, out.removed,
+                        ));
+                    } else {
+                        self.notice(format!(
+                            "“{name}”: {} copied · {} unchanged · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
+                            out.copied, out.unchanged, out.removed, out.skipped, out.tagged, out.cleaned,
+                        ));
+                    }
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
                         w.manifest = out.manifest;
-                        w.last_written = Some(card::now());
+                        if !out.stopped {
+                            w.last_written = Some(card::now());
+                        }
                     }
                     self.write_preview = None;
                     self.volumes = card::volumes();
@@ -110,7 +126,8 @@ impl App {
                     self.busy = None;
                     let errors = self.report_problems("copying music from the card", std::mem::take(&mut out.errors));
                     self.notice(format!(
-                        "copied {} files ({}) from the card into “{}” in your music folder{errors}. Check the card again once the library is rescanned: those songs can then be taken over too.",
+                        "{}copied {} files ({}) from the card into “{}” in your music folder{errors}. Check the card again once the library is rescanned: those songs can then be taken over too.",
+                        if out.stopped { "stopped: " } else { "" },
                         out.copied,
                         crate::ui::text::bytes(out.bytes),
                         card::adopt::IMPORT_FOLDER

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,8 @@ pub struct Report {
     pub moves: Vec<(PathBuf, PathBuf)>,
     /// Files now present at the destination because of this plan (copy mode).
     pub written: Vec<Written>,
+    /// Asked to stop, it stopped before the end of the plan.
+    pub stopped: bool,
 }
 
 /// One file a write put on the card, relative to the card root. Recorded so later writes can
@@ -148,7 +151,8 @@ fn encode(t: &Track, target: Target, dst: &Path) -> Result<()> {
 }
 
 /// Run the plan. `tracks` must be the same list the plan was built from. `previous` is the
-/// manifest of the last write to `dest` (empty when reorganising).
+/// manifest of the last write to `dest` (empty when reorganising). Once `stop` is set, it
+/// finishes the file it's on and stops.
 #[allow(clippy::too_many_arguments)]
 pub fn execute(
     tracks: &[Track],
@@ -158,18 +162,23 @@ pub fn execute(
     mode: Mode,
     opts: &Options,
     previous: &[Written],
+    stop: &AtomicBool,
     mut progress: impl FnMut(Progress),
 ) -> Report {
     let mut r = Report::default();
     let previous = by_rel(previous);
     if mode == Mode::CopyTo {
-        copy_to(tracks, plan, dest, opts, &previous, &mut progress, &mut r);
+        copy_to(tracks, plan, dest, opts, &previous, stop, &mut progress, &mut r);
         if opts.clean_mac_files {
             r.cleaned = clean_mac_files(dest);
         }
         return r;
     }
     for (n, item) in plan.iter().enumerate() {
+        if stop.load(Ordering::Relaxed) {
+            r.stopped = true;
+            break;
+        }
         let t = &tracks[item.track];
         progress(Progress::Step { done: n, total: plan.len() });
         // A song inside an album file can be cut out for the card, but never moved.
@@ -198,7 +207,8 @@ pub fn execute(
 /// files on the card: a finished song as soon as there is one, plain copies in between. A card
 /// writes one file at a time at best, so the writer never waits on ffmpeg while there's
 /// something it could copy.
-fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, previous: &HashMap<String, &Written>, progress: &mut impl FnMut(Progress), r: &mut Report) {
+#[allow(clippy::too_many_arguments)]
+fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, previous: &HashMap<String, &Written>, stop: &AtomicBool, progress: &mut impl FnMut(Progress), r: &mut Report) {
     use std::sync::{Mutex, mpsc};
     let total = plan.len();
     let mut done = 0;
@@ -240,6 +250,9 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
             let (tx, queue, work) = (tx.clone(), &queue, &work);
             s.spawn(move || {
                 loop {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let Some(n) = queue.lock().unwrap_or_else(|e| e.into_inner()).next() else { break };
                     let item = &plan[n];
                     let ext = item.rel.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
@@ -258,6 +271,10 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
         let mut plain = plain.into_iter();
         let mut waiting = made.len();
         loop {
+            if stop.load(Ordering::Relaxed) {
+                r.stopped = true;
+                break;
+            }
             // A finished song first (its work file goes once it's on the card), else a plain copy,
             // else wait for ffmpeg.
             let (n, res) = match rx.try_recv() {
@@ -306,6 +323,8 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
             done += 1;
             progress(Progress::Step { done, total });
         }
+        // Workers waiting to hand over a song give up once nobody listens.
+        drop(rx);
     });
     let _ = fs::remove_dir_all(&work);
     // In plan order, as callers (and the manifest) expect.
@@ -457,11 +476,11 @@ mod tests {
         let index = build(&tracks, &ArtistPrefs::default());
         let opts = Options { write_tags: false, ..Default::default() };
         let plan = build_plan(&tracks, &index, &opts, &Custom::default());
-        let r = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], |_| {});
+        let r = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], &AtomicBool::new(false), |_| {});
         assert_eq!((r.copied, r.errors.len(), r.written.len()), (3, 0, 3), "{:?}", r.errors);
         assert!(dst.join("Muse/Absolution/01 - Intro.mp3").exists());
         assert!(dst.join("Muse/Singles/Muse - Hysteria.mp3").exists());
-        let again = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], |_| {});
+        let again = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], &AtomicBool::new(false), |_| {});
         assert_eq!((again.copied, again.unchanged), (0, 3));
         fs::remove_dir_all(root).unwrap();
     }
@@ -474,7 +493,7 @@ mod tests {
         let index = build(&tracks, &ArtistPrefs::default());
         let opts = Options { write_tags: false, clean_mac_files: false, ..Default::default() };
         let plan = build_plan(&tracks, &index, &opts, &Custom::default());
-        let r = execute(&tracks, &plan, &src, &src, Mode::MoveInPlace, &opts, &[], |_| {});
+        let r = execute(&tracks, &plan, &src, &src, Mode::MoveInPlace, &opts, &[], &AtomicBool::new(false), |_| {});
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         assert_eq!((r.moved, r.unchanged), (1, 2));
         assert!(src.join("Muse/Singles/Muse - Hysteria.mp3").exists());
@@ -508,7 +527,7 @@ mod tests {
         let expect = |parts: &[&str]| parts.iter().collect::<PathBuf>();
         assert!(rels.contains(&expect(&["MUSE", "01 - Showbiz", "01 - Sunburn.mp3"]).as_path()), "{rels:?}");
         assert!(rels.contains(&expect(&["MUSE", "02 - Absolution", "01 - Intro.mp3"]).as_path()), "{rels:?}");
-        let first = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], |_| {});
+        let first = execute(&tracks, &plan, &src, &dst, Mode::CopyTo, &opts, &[], &AtomicBool::new(false), |_| {});
 
         // Drop Showbiz from the card: its file goes, and so does its now-empty folder.
         custom.excluded_albums.insert(showbiz);

@@ -20,6 +20,12 @@ pub(super) enum Action {
     CardArtist(usize, bool),
     /// Move extra copies of songs stored twice to the Trash: (extra copy, the copy that stays).
     TrashRepeats(Vec<(usize, usize)>),
+    /// Open the tag editor on these songs.
+    EditTags(Vec<usize>),
+    /// Add a song to the selection or take it out; add a run of songs.
+    Select(usize),
+    SelectRun(Vec<usize>),
+    ClearSelection,
 }
 
 pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
@@ -43,6 +49,13 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::CardAlbum(a, b, on) => app.card_album(a, b, on),
             Action::CardArtist(a, on) => app.card_artist(a, on),
             Action::TrashRepeats(pairs) => app.trash_repeats(pairs),
+            Action::EditTags(songs) => app.edit_tags(songs),
+            Action::Select(t) => app.toggle_selected(t),
+            Action::SelectRun(ts) => app.select_run(ts),
+            Action::ClearSelection => {
+                app.selected.clear();
+                app.select_anchor = None;
+            }
             Action::Name(c, n) => {
                 app.set_cluster_name(c, n);
                 app.renaming = None;

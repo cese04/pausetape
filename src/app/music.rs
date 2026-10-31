@@ -18,7 +18,7 @@ impl App {
         if self.busy.is_some() {
             return;
         }
-        self.busy = Some(Busy { label: "reading tags".into(), done: 0, total: 0 });
+        self.busy = Some(Busy::new("reading tags", 0));
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
             let mut db = Db::open_default();
@@ -127,11 +127,21 @@ impl App {
         if dirty.is_empty() || self.busy.is_some() {
             return;
         }
-        self.busy = Some(Busy { label: "writing tags".into(), done: 0, total: dirty.len() });
+        let (busy, stop) = Busy::stoppable("writing tags", dirty.len());
+        self.busy = Some(busy);
+        let ctx = self.ctx.clone();
         self.spawn(move |tx| {
             let mut ok = Vec::new();
             let mut errors = Vec::new();
-            for (i, t) in dirty {
+            let total = dirty.len();
+            for (n, (i, t)) in dirty.into_iter().enumerate() {
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                if n % 10 == 0 {
+                    let _ = tx.send(Msg::WriteProgress(n, total));
+                    ctx.request_repaint();
+                }
                 match library::write_tags(&t, &t.path) {
                     Ok(()) => {
                         let (size, mtime) = std::fs::metadata(&t.path).map(|m| (m.len(), library::mtime_of(&m))).unwrap_or((t.size, t.mtime));
@@ -152,12 +162,16 @@ impl App {
             return;
         }
         let files: Vec<(PathBuf, PathBuf)> = pairs.iter().map(|&(c, k)| (self.tracks[c].path.clone(), self.tracks[k].path.clone())).collect();
-        self.busy = Some(Busy { label: "moving to the Trash".into(), done: 0, total: files.len() });
+        let (busy, stop) = Busy::stoppable("moving to the Trash", files.len());
+        self.busy = Some(busy);
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
             let mut errors = Vec::new();
             let mut moved = 0;
             for (n, (copy, keep)) in files.iter().enumerate() {
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
                 let same = || {
                     let (a, b) = (std::fs::metadata(copy).ok()?.len(), std::fs::metadata(keep).ok()?.len());
                     Some(a == b && card::adopt::sample(copy, a).ok()? == card::adopt::sample(keep, b).ok()?)

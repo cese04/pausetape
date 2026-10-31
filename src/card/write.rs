@@ -7,6 +7,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use serde::{Deserialize, Serialize};
 
@@ -138,10 +139,17 @@ pub struct Outcome {
     pub removed: usize,
     pub cleaned: usize,
     pub errors: Vec<String>,
+    /// Stopped by the user before the end: playlists and the last clean-up were left for the next write.
+    pub stopped: bool,
 }
 
 /// Remove what the previous write left that the plan no longer wants, copy the plan and
 /// playlists to the card, then remove what's left over (playlist files, songs that failed).
+///
+/// Once `stop` is set, the song being copied is finished and the write ends there. Its
+/// manifest then holds what it copied plus the earlier files still on the card, so the next
+/// write carries on from there and can still remove anything of its own.
+#[allow(clippy::too_many_arguments)]
 pub fn write(
     w: &WriteProfile,
     tracks: &[Track],
@@ -149,6 +157,7 @@ pub fn write(
     playlists: &[Playlist],
     source: &Path,
     dest: &Path,
+    stop: &AtomicBool,
     mut progress: impl FnMut(Progress),
 ) -> Outcome {
     // Removing first makes room: a choice that fits only once old albums are gone would
@@ -163,7 +172,14 @@ pub fn write(
     };
     // Clean the macOS files once at the end, after playlists too.
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
-    let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, &mut progress);
+    let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, stop, &mut progress);
+    if r.stopped {
+        let mut manifest = r.written;
+        let mut have: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
+        manifest.extend(w.manifest.iter().filter(|m| have.insert(m.rel.to_string_lossy().to_lowercase()) && dest.join(&m.rel).exists()).cloned());
+        let cleaned = if w.options.clean_mac_files { super::clean_mac_files(dest) } else { 0 };
+        return Outcome { manifest, copied: r.copied, unchanged: r.unchanged, skipped: r.skipped, tagged: r.tagged, removed: early, cleaned, errors: r.errors, stopped: true };
+    }
 
     let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
     let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.rules(), &w.manifest, |_, _| {});
@@ -185,6 +201,7 @@ pub fn write(
         removed: early + removed + pl.removed,
         cleaned,
         errors,
+        stopped: false,
     }
 }
 
@@ -219,7 +236,7 @@ mod tests {
             println!("  left out: {} ({})", tracks[p.track].path.display(), p.skip.unwrap());
         }
         let t = std::time::Instant::now();
-        let out = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        let out = write(&w, &tracks, &plan, &[], &src, &card, &AtomicBool::new(false), |_| {});
         println!("first write: {} made in {:.1?}, errors {:?}", out.copied, t.elapsed(), out.errors);
         assert!(out.errors.is_empty());
         for (m, p) in out.manifest.iter().zip(plan.iter().filter(|p| p.skip.is_none())) {
@@ -242,7 +259,7 @@ mod tests {
             assert!((props.duration().as_secs_f32() - src.duration.as_secs_f32()).abs() < 0.2, "same length as the source");
         }
         w.manifest = out.manifest;
-        let again = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        let again = write(&w, &tracks, &plan, &[], &src, &card, &AtomicBool::new(false), |_| {});
         println!("second write: {} made, {} unchanged", again.copied, again.unchanged);
         assert_eq!(again.copied, 0);
         let _ = fs::remove_dir_all(&card);
@@ -263,7 +280,7 @@ mod tests {
         let mut w = WriteProfile::default();
         let plan = w.plan(&tracks, &index);
         let t = std::time::Instant::now();
-        let out = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        let out = write(&w, &tracks, &plan, &[], &src, &card, &AtomicBool::new(false), |_| {});
         println!("first write: {} cut/copied in {:.1?}, errors {:?}", out.copied, t.elapsed(), out.errors);
         assert!(out.errors.is_empty());
         for m in &out.manifest {
@@ -272,13 +289,60 @@ mod tests {
         }
         w.manifest = out.manifest;
         let p = preview(&w, &tracks, &index, &[], &card);
-        let again = write(&w, &tracks, &plan, &[], &src, &card, |_| {});
+        let again = write(&w, &tracks, &plan, &[], &src, &card, &AtomicBool::new(false), |_| {});
         println!("preview: {} to copy, {} unchanged; second write: {} copied, {} unchanged", p.to_copy, p.unchanged, again.copied, again.unchanged);
         assert_eq!((p.to_copy, again.copied), (0, 0));
         let _ = fs::remove_dir_all(&card);
     }
     use crate::library::grouping::{ArtistPrefs, build};
     use crate::library::scan;
+
+    #[test]
+    fn stopped_write_records_what_is_on_the_card() {
+        use std::sync::atomic::Ordering;
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-stop-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (src, card) = (root.join("src"), root.join("card"));
+        for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Muse/Absolution/03 - Time Is Running Out.mp3"] {
+            fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
+            fs::write(src.join(f), f.as_bytes()).unwrap();
+        }
+        let (mut tracks, _) = scan(&src, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        let mut w = WriteProfile { dest: Some(card.clone()), options: Options { write_tags: false, ..Default::default() }, ..Default::default() };
+        let plan = w.plan(&tracks, &index);
+        // Stop once the first song is on the card.
+        fn stop_after_one(stop: &AtomicBool) -> impl FnMut(Progress) + '_ {
+            move |p: Progress| {
+                if let Progress::Step { done, .. } = p
+                    && done >= 1
+                {
+                    stop.store(true, Ordering::Relaxed);
+                }
+            }
+        }
+
+        let stop = AtomicBool::new(false);
+        let out = write(&w, &tracks, &plan, &[], &src, &card, &stop, stop_after_one(&stop));
+        assert!(out.stopped);
+        assert_eq!((out.copied, out.manifest.len()), (1, 1));
+        assert!(card.join(&out.manifest[0].rel).exists());
+        w.manifest = out.manifest;
+
+        let out = write(&w, &tracks, &plan, &[], &src, &card, &AtomicBool::new(false), |_| {});
+        assert!(!out.stopped);
+        assert_eq!((out.copied, out.unchanged, out.manifest.len()), (2, 1, 3), "the next write carries on");
+        w.manifest = out.manifest;
+
+        // Everything to copy again, stopped after one: the songs it didn't reach are still the write's.
+        for t in &mut tracks {
+            t.dirty = true;
+        }
+        let stop = AtomicBool::new(false);
+        let out = write(&w, &tracks, &plan, &[], &src, &card, &stop, stop_after_one(&stop));
+        assert_eq!((out.copied, out.manifest.len()), (1, 3));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn rewrite_after_deselecting_artist_and_playlist_cleans_up() {
@@ -300,7 +364,7 @@ mod tests {
 
         let pv = preview(&w, &tracks, &index, &playlists, &card);
         assert_eq!((pv.to_copy, pv.unchanged, pv.playlist_files), (3, 0, 1));
-        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, |_| {});
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
         assert!(out.errors.is_empty(), "{:?}", out.errors);
         assert_eq!(out.manifest.len(), 4, "2 albums tracks + 1 playlist copy + 1 m3u8");
         w.manifest = out.manifest;
@@ -310,7 +374,7 @@ mod tests {
         w.playlists.clear();
         let pv = preview(&w, &tracks, &index, &playlists, &card);
         assert_eq!((pv.to_copy, pv.unchanged, pv.to_remove.len()), (0, 1, 3));
-        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, |_| {});
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
         assert!(!card.join("Blur").exists());
         assert!(!card.join("_Playlists/Mix.m3u8").exists());
         assert!(card.join("Muse/Absolution/01 - Intro.mp3").exists());

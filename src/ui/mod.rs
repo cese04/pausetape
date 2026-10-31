@@ -13,6 +13,7 @@ mod playlists;
 #[cfg(debug_assertions)]
 pub mod screenshots;
 mod settings;
+mod tag_editor;
 pub mod text;
 pub mod theme;
 pub mod widgets;
@@ -36,6 +37,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let r = egui::Panel::top("nav").frame(bar).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.bottom(), Stroke::new(1.0, ink.faint));
+    if app.busy.is_some() {
+        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: 40, right: 40, top: 10, bottom: 0 });
+        egui::Panel::top("job").frame(frame).show_separator_line(false).show(ui, |ui| job(app, ui));
+    }
     if let Some(n) = app.notices.last().cloned() {
         let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: 40, right: 40, top: 10, bottom: 0 });
         egui::Panel::top("notice").frame(frame).show_separator_line(false).show(ui, |ui| notice(app, ui, &n));
@@ -57,6 +62,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }
     });
     folders::pickers(app, ui);
+    tag_editor::dialog(app, ui);
 }
 
 /// The tab bar: the app's name, the tabs, and what's running in the background.
@@ -84,14 +90,37 @@ fn header(app: &mut App, ui: &mut Ui) {
                 app.duplicates_only = false;
             }
         }
-        if let Some(b) = &app.busy {
+    });
+}
+
+/// What's running: how far along, the time left at the pace so far, and a way to stop it.
+fn job(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    let Some(b) = &app.busy else { return };
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        ui.add(egui::Spinner::new().size(14.0).color(ink.accent));
+        ui.label(RichText::new(&b.label).size(14.5).color(ink.text));
+        let mut facts = match (b.done, b.total) {
+            (_, 0) if b.done > 0 => b.done.to_string(),
+            (_, 0) => String::new(),
+            (d, t) => format!("{d} of {t}"),
+        };
+        if b.stopping() {
+            facts = "stopping after the file it's on…".into();
+        } else if let Some(left) = b.time_left() {
+            facts.push_str(&format!(" · {} left", text::time_left(left)));
+        }
+        ui.label(RichText::new(facts).size(13.5).color(ink.muted));
+        if b.total > 0 {
+            hairline_progress(ui, b.done as f32 / b.total as f32, (ui.available_width() - 120.0).clamp(60.0, 260.0));
+        }
+        if let Some(stop) = b.stop.clone().filter(|_| !b.stopping()) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.x = 10.0;
-                if b.total > 0 {
-                    hairline_progress(ui, b.done as f32 / b.total as f32, 110.0);
+                let hint = "Finishes the file it's on and stops there. What's done stays done: a stopped write keeps what it copied, and the next Sync carries on.";
+                if widgets::button_with(ui, Icon::Close, "Stop").on_hover_text(hint).clicked() {
+                    stop.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
-                let txt = if b.total > 0 { format!("{} {}/{}", b.label, b.done, b.total) } else { format!("{} {}…", b.label, if b.done > 0 { b.done.to_string() } else { String::new() }) };
-                ui.add(egui::Label::new(RichText::new(txt).size(13.5).color(ink.accent)).truncate());
             });
         }
     });

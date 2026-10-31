@@ -373,3 +373,26 @@ Calibre's device view, for music: the library is where you choose what goes on t
   while one writer puts files on the card: each finished song as soon as it's ready, plain
   copies in between. At most a few finished songs wait in the work folder, so it can't fill the
   disk. 6 hi-res FLAC at CD quality and 6 M4A to MP3: 18.0 s before, 3.8 s now (12 cores).
+
+### 27. Stop and time left (2026-10-30)
+- **What's running** has its own line under the tab bar: what it is, how far ("1204 of 2466"),
+  the time left at the pace so far once there are a few seconds of it to go on, a progress
+  line, and a **Stop** button.
+- **Stop** finishes the file it's on and stops there. A stopped card write records what it
+  copied plus the earlier files still on the card, so the next Sync carries on where it
+  stopped and can still remove what's its own; playlists and the final clean-up wait for that
+  Sync. Reorganising the music folder, copying music from the card, moving extra copies to the
+  Trash and writing corrected tags can stop too (their undo journal and rescans work as before).
+
+### 28. Editing tags by hand (2026-10-30)
+- **edit tags** on an album opens a dialog with the album, album artist, artist, year and disc
+  (one box each for all its songs) and each song's number and title. Where the songs differ,
+  the box starts empty ("several values"); what's typed goes to all of them, and an empty box
+  changes nothing.
+- **Choosing songs:** ⌘-click (Ctrl-click) adds a song to a selection, shift-click a run of
+  songs in an album; selected rows are shaded, and a bar above the list offers **edit their
+  tags**, **play them** and **clear** (or Esc). Right-click a song for *edit tags of this song*,
+  *of the album* or *of the selected songs*.
+- Saved edits are corrections like MusicBrainz's: marked *edited*, kept in the library database
+  across restarts, in card copies at the next Sync, and in the music files with *write
+  corrected tags*. The library regroups at once (a new album name or artist moves the songs).

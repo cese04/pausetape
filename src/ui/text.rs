@@ -61,6 +61,16 @@ pub fn shorten(s: &str, max: usize) -> String {
     out
 }
 
+/// Rounded for a job's remaining time: "less than a minute", "about 12 min", "about 1 h 20 min".
+pub fn time_left(d: Duration) -> String {
+    let min = (d.as_secs() + 30) / 60;
+    match min {
+        0 => "less than a minute".into(),
+        m if m < 60 => format!("about {m} min"),
+        m => format!("about {} h {:02} min", m / 60, m % 60),
+    }
+}
+
 pub fn plural(n: usize, word: &str) -> String {
     if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
 }

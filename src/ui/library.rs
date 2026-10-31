@@ -58,14 +58,16 @@ impl Mark {
 }
 
 /// A track row painted directly so columns line up like a table without any grid lines.
-/// `repeat`: an extra copy of a song the album already has.
+/// `repeat`: an extra copy of a song the album already has. `selected`: chosen for editing tags.
 #[allow(clippy::too_many_arguments)]
-fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
     let p = ui.painter_at(rect);
-    if resp.hovered() {
+    if selected {
+        p.rect_filled(rect, 4.0, ink.chip);
+    } else if resp.hovered() {
         p.rect_filled(rect, 0.0, ink.hover);
     }
     let y = rect.center().y;
@@ -214,6 +216,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(6.0);
     }
     let mut actions = Vec::new();
+    if !app.selected.is_empty() {
+        super::tag_editor::selection_bar(app, ui, &mut actions);
+    }
     // Albums (by base id) where one copy covers another, or with songs stored twice, for the
     // duplicates view.
     let duplicated: std::collections::HashSet<String> = app
@@ -256,6 +261,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let needle = app.filter.to_lowercase();
     let current = app.current();
     let can_add = app.active_playlist.is_some();
+    let mods = ui.input(|i| i.modifiers);
     let present: std::collections::BTreeSet<char> = app.index.artists.iter().map(|a| initial(&a.name)).collect();
     let jump = app.jump_to.take();
     let source_root = app.saved.source.clone().unwrap_or_default();
@@ -352,8 +358,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 n if n == al.tracks.len() => "won't play on RECHO".to_string(),
                                 n => format!("{n} won't play on RECHO"),
                             };
-                            // The title gets whatever the counts, warning and "play · look up" leave.
-                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 420.0;
+                            // The title gets whatever the counts, warning and the album's commands leave.
+                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 510.0;
                             let shown = RichText::new(title).italics().size(17.0);
                             widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
                             let r = ui.label(RichText::new(meta).color(ink.muted));
@@ -388,6 +394,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 {
                                     actions.push(Action::CardAlbum(ai, better, true));
                                 }
+                                if widgets::icon_link(ui, Icon::Rename, "edit tags")
+                                    .on_hover_text("Album, artists, year, numbers and titles. To edit any songs together, ⌘-click them.")
+                                    .clicked()
+                                {
+                                    actions.push(Action::EditTags(al.tracks.clone()));
+                                }
                                 if widgets::icon_link(ui, Icon::Search, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
                                     actions.push(Action::LookupAlbum(ai, bi));
                                 }
@@ -421,10 +433,36 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 (None, _) => String::new(),
                             };
                             let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
-                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti));
-                            if r.double_clicked() || r.clicked() {
+                            let selected = app.selected.contains(&ti);
+                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
+                            if r.clicked() && mods.command {
+                                actions.push(Action::Select(ti));
+                            } else if r.clicked() && mods.shift {
+                                // A run from the last song clicked, if it's in this album.
+                                let from = app.select_anchor.and_then(|a| al.tracks.iter().position(|&x| x == a)).unwrap_or(pos);
+                                actions.push(Action::SelectRun(al.tracks[from.min(pos)..=from.max(pos)].to_vec()));
+                            } else if r.double_clicked() || r.clicked() {
                                 actions.push(Action::Play(al.tracks.clone(), pos));
                             }
+                            r.context_menu(|ui| {
+                                let several = selected && app.selected.len() > 1;
+                                if several && widgets::icon_link(ui, Icon::Rename, format!("edit tags of the {} selected songs", app.selected.len())).clicked() {
+                                    actions.push(Action::EditTags(app.selected.iter().copied().collect()));
+                                    ui.close();
+                                }
+                                if widgets::icon_link(ui, Icon::Rename, "edit tags of this song").clicked() {
+                                    actions.push(Action::EditTags(vec![ti]));
+                                    ui.close();
+                                }
+                                if widgets::icon_link(ui, Icon::Rename, "edit tags of the album").clicked() {
+                                    actions.push(Action::EditTags(al.tracks.clone()));
+                                    ui.close();
+                                }
+                                if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "unselect (⌘-click)" } else { "select (⌘-click)" }).clicked() {
+                                    actions.push(Action::Select(ti));
+                                    ui.close();
+                                }
+                            });
                             if add {
                                 actions.push(Action::Add(ti));
                             }
