@@ -20,7 +20,7 @@ reading the code; each says what would happen and where.
 | [R6](#r6) | Medium | Undoing a take-over fails once the card is mounted somewhere else (**fixed**) | All |
 | [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card (**fixed**) | All |
 | [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs (**fixed**) | All |
-| [R9](#r9) | Medium | Songs with unsaved corrections are copied again at every Sync | All |
+| [R9](#r9) | Medium | Songs with unsaved corrections are copied again at every Sync (**fixed**) | All |
 | [R10](#r10) | Medium | "Moved to the Trash" may really delete, on some drives | Windows, Linux |
 | [R11](#r11) | Medium | Playback stops for good when the audio device changes | All |
 | [R12](#r12) | Medium | Every ffmpeg run flashes a console window | Windows |
@@ -174,8 +174,10 @@ A corrected song's card copy gets the corrected tags, but the next Sync can't te
 current, so it copies and retags it again, every time, until the corrections are written into
 the music files.
 
-*Fix:* record, for corrected songs, a key of the tags written (as `source_key` does for
-converted songs) and compare it.
+**Fixed 2026-10-31.** A corrected song's card copy is recorded with a key of the source and the
+corrected tags, as converted songs are; it's copied again only when the corrections change.
+Tested in `corrected_songs_are_copied_once`. One edge left: turning **write corrected tags**
+on afterwards doesn't retag copies already made without them.
 
 ### R10
 **"Moved to the Trash" may really delete, on some drives.**

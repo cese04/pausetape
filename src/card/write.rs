@@ -96,7 +96,7 @@ pub fn renamed(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem]) -> Vec<(us
     let mut out = Vec::new();
     for (j, p) in plan.iter().enumerate() {
         let t = &tracks[p.track];
-        if p.skip.is_some() || t.dirty || on_card.contains(&lower(&p.rel)) {
+        if p.skip.is_some() || on_card.contains(&lower(&p.rel)) {
             continue;
         }
         let key = super::copy::source_key(t, p.target).unwrap_or_else(|| format!("{}|{}", t.size, ext(&p.rel)));
@@ -133,7 +133,8 @@ fn relocate(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem], dest: &Path) 
             continue;
         }
         // Names differing only in case are the same file on the card, so never come here.
-        let same = p.target != Target::Copy || matches!((super::adopt::sample(&old, m.size), super::adopt::sample(&t.path, t.size)), (Ok(a), Ok(b)) if a == b);
+        // A file made or retagged for the card is known by its key; a plain copy, by its bytes.
+        let same = super::copy::source_key(t, p.target).is_some() || matches!((super::adopt::sample(&old, m.size), super::adopt::sample(&t.path, t.size)), (Ok(a), Ok(b)) if a == b);
         if !same || new.exists() {
             continue;
         }
@@ -455,6 +456,34 @@ mod tests {
         let stop = AtomicBool::new(false);
         let out = write(&w, &tracks, &plan, &[], &src, &card, &stop, stop_after_one(&stop));
         assert_eq!((out.copied, out.manifest.len()), (1, 3));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn corrected_songs_are_copied_once() {
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-corrected-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (src, card) = (root.join("src"), root.join("card"));
+        for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3"] {
+            fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
+            fs::write(src.join(f), f.as_bytes()).unwrap();
+        }
+        let (mut tracks, _) = scan(&src, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        let mut w = WriteProfile { options: Options { write_tags: false, ..Default::default() }, ..Default::default() };
+        let sync = |w: &mut WriteProfile, tracks: &[Track]| {
+            let out = write(w, tracks, &w.plan(tracks, &index), &[], &src, &card, &AtomicBool::new(false), |_| {});
+            w.manifest = out.manifest;
+            (out.copied, out.unchanged)
+        };
+        assert_eq!(sync(&mut w, &tracks), (2, 0));
+        // A correction not yet in the music file: copied once, then left alone until it changes.
+        tracks[0].year = Some(2003);
+        tracks[0].dirty = true;
+        assert_eq!(sync(&mut w, &tracks), (1, 1));
+        assert_eq!(sync(&mut w, &tracks), (0, 2), "not copied again at every Sync");
+        tracks[0].year = Some(2004);
+        assert_eq!(sync(&mut w, &tracks), (1, 1));
         fs::remove_dir_all(root).unwrap();
     }
 

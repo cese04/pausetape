@@ -53,8 +53,9 @@ pub struct Report {
 pub struct Written {
     pub rel: PathBuf,
     pub size: u64,
-    /// For a song cut from an album file: what it was cut from (`source_key`). The cut file's
-    /// size can't be compared with anything in the music folder, so this says whether it's current.
+    /// For a file that isn't a plain copy (converted, cut from an album file, or carrying
+    /// corrections): what it was made from (`source_key`). Its size can't be compared with
+    /// anything in the music folder, so this says whether it's current.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
 }
@@ -65,13 +66,15 @@ pub fn by_rel(previous: &[Written]) -> HashMap<String, &Written> {
     previous.iter().map(|w| (w.rel.to_string_lossy().to_lowercase(), w)).collect()
 }
 
-/// What a card file made by ffmpeg (a converted song, or one cut out of an album file) was
-/// made from: the track, the target format, where it lies in its file, the source's size and
+/// What a card file was made from, when it isn't the library's file as it is: a song made by
+/// ffmpeg (converted, or cut out of an album file), or a copy given corrections not yet in the
+/// music file. The track, the target format, where it lies in its file, the source's size and
 /// date, its tags and any cover being added. `None` for plain copies, which compare by size.
 pub fn source_key(t: &Track, target: Target) -> Option<String> {
     use std::hash::{Hash, Hasher};
     let format = match target {
-        Target::Copy => return None,
+        Target::Copy if !t.dirty => return None,
+        Target::Copy => "tagged",
         Target::Flac => "flac",
         Target::FlacCd => "flac16",
         Target::Mp3 => "mp3",
@@ -84,9 +87,6 @@ pub fn source_key(t: &Track, target: Target) -> Option<String> {
 
 /// The card already holds `t` at `dst` as a write would put it there now.
 pub fn up_to_date(t: &Track, target: Target, dst: &Path, previous: Option<&Written>) -> bool {
-    if t.dirty {
-        return false;
-    }
     let size = fs::metadata(dst).ok().map(|m| m.len());
     match source_key(t, target) {
         None => size == Some(t.size),
