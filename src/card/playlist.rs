@@ -187,14 +187,14 @@ mod tests {
             .collect();
         let mut pl = Playlist { name: "Road: Trip".into(), tracks: vec![tracks[1].path.clone(), tracks[0].path.clone()] };
         let dest = root.join("card");
-        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, cd_quality: false }, &[], |_, _| {});
+        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, cd_quality: false, lossless_mp3: false }, &[], |_, _| {});
         assert_eq!((r.copied, r.errors.len(), r.written.len()), (2, 0, 3));
         let dir = dest.join("_Playlists/Road - Trip");
         assert!(dir.join("01 - X - B.mp3").exists() && dir.join("02 - X - A.mp3").exists());
         assert!(dest.join("_Playlists/Road - Trip.m3u8").exists());
 
         pl.tracks.pop();
-        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, cd_quality: false }, &[], |_, _| {});
+        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, cd_quality: false, lossless_mp3: false }, &[], |_, _| {});
         assert_eq!((r.unchanged, r.removed), (1, 1));
         fs::remove_dir_all(root).unwrap();
     }

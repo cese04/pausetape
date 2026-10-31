@@ -280,38 +280,46 @@ struct Sizes {
     /// What writing hi-res songs at CD quality would save on the selected music, when the
     /// write doesn't already.
     cd_saving: u64,
+    /// The same for writing every lossless song as MP3 320.
+    mp3_saving: u64,
+    /// Artists with music chosen, largest first: (artist, albums chosen, bytes chosen).
+    largest: Vec<(usize, usize, u64)>,
 }
 
 impl Sizes {
     fn compute(app: &App) -> Self {
         let w = app.write();
-        let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0, cd_saving: 0 };
+        let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0, cd_saving: 0, mp3_saving: 0, largest: Vec::new() };
         let rules = w.options.rules();
         let cd = Rules { cd_quality: true, ..rules };
-        for a in &app.index.artists {
+        let mp3 = Rules { lossless_mp3: true, ..rules };
+        for (ai, a) in app.index.artists.iter().enumerate() {
             let ck = &app.index.clusters[a.cluster].key;
             for al in &a.albums {
                 let id = al.id(ck);
-                let bytes: u64 = al
-                    .tracks
-                    .iter()
-                    .map(|&i| &app.tracks[i])
-                    .filter_map(|t| target(t, rules).ok().map(|to| card_size(t, to)))
-                    .sum();
+                let under = |rules| -> u64 { al.tracks.iter().map(|&i| &app.tracks[i]).filter_map(|t| target(t, rules).ok().map(|to| card_size(t, to))).sum() };
+                let bytes = under(rules);
                 // Of several editions, only the one going on the card counts towards the artist.
                 if al.edition.is_none() || w.custom.on_card(ck, al, &a.albums) {
                     *s.artist.entry(ck.clone()).or_default() += bytes;
                 }
                 if w.custom.includes(ck, al, &a.albums) {
                     s.selected += bytes;
-                    if !rules.cd_quality {
-                        let at_cd: u64 = al.tracks.iter().map(|&i| &app.tracks[i]).filter_map(|t| target(t, cd).ok().map(|to| card_size(t, to))).sum();
-                        s.cd_saving += bytes.saturating_sub(at_cd);
+                    match s.largest.last_mut() {
+                        Some((a, n, b)) if *a == ai => (*n, *b) = (*n + 1, *b + bytes),
+                        _ => s.largest.push((ai, 1, bytes)),
+                    }
+                    if !rules.cd_quality && !rules.lossless_mp3 {
+                        s.cd_saving += bytes.saturating_sub(under(cd));
+                    }
+                    if !rules.lossless_mp3 {
+                        s.mp3_saving += bytes.saturating_sub(under(mp3));
                     }
                 }
                 s.album.insert(id, bytes);
             }
         }
+        s.largest.sort_by_key(|&(_, _, bytes)| std::cmp::Reverse(bytes));
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
         s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules)
@@ -347,18 +355,71 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     }
     space_bar(ui, need, room, ui.available_width().min(560.0));
     if need > room {
-        ui.label(RichText::new(format!("doesn't fit: {} over. Take some artists or albums off below, or in the library.", text::bytes(need - room))).color(ink.accent).size(13.0));
-        // Hi-res songs at CD quality may be enough on their own.
-        if sizes.cd_saving > 0 {
-            ui.horizontal_wrapped(|ui| {
-                let enough = need - sizes.cd_saving <= room;
-                muted(ui, format!("Writing hi-res FLAC at CD quality would save about {}{}.", text::bytes(sizes.cd_saving), if enough { ", enough to fit" } else { "" }));
-                if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
-                    app.write_mut().options.cd_quality = true;
-                    app.refresh_on_card();
-                }
-            });
+        fit(app, ui, sizes, need - room);
+    }
+}
+
+/// Ways to make the choice fit, by how much each saves: smaller files first (nothing to
+/// choose again), then the artists taking most room.
+fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
+    let ink = ink(ui);
+    ui.label(RichText::new(format!("doesn't fit: {} over. Some ways to make it fit:", text::bytes(over))).color(ink.accent).size(13.0));
+    let enough = |saving: u64| if saving >= over { ", enough to fit" } else { "" };
+    let mut set = None;
+    if sizes.cd_saving > 0 {
+        ui.horizontal_wrapped(|ui| {
+            muted(ui, format!("Write hi-res FLAC at CD quality: saves about {}{}.", text::bytes(sizes.cd_saving), enough(sizes.cd_saving)));
+            if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
+                set = Some(false);
+            }
+        });
+    }
+    if sizes.mp3_saving > 0 {
+        ui.horizontal_wrapped(|ui| {
+            muted(ui, format!("Write lossless songs as MP3 320: saves about {}{}.", text::bytes(sizes.mp3_saving), enough(sizes.mp3_saving)));
+            if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("Hard to tell apart from the original on a portable player; your music folder keeps the lossless files, so this can be undone at any sync").clicked() {
+                set = Some(true);
+            }
+        });
+    }
+    match set {
+        Some(true) => (app.write_mut().options.cd_quality, app.write_mut().options.lossless_mp3) = (true, true),
+        Some(false) => app.write_mut().options.cd_quality = true,
+        None => {}
+    }
+    if set.is_some() {
+        app.refresh_on_card();
+        return;
+    }
+    // Enough of the largest artists to cover what's over, but never a long list (this panel
+    // stays in view).
+    let mut shown = Vec::new();
+    let mut covered = 0;
+    for &(ai, albums, bytes) in sizes.largest.iter().take(5) {
+        if covered >= over {
+            break;
         }
+        covered += bytes;
+        shown.push((ai, albums, bytes));
+    }
+    if shown.is_empty() {
+        return;
+    }
+    muted(ui, if covered >= over { "Or leave out the artists taking most room; these would be enough:" } else { "Or leave out the artists taking most room:" });
+    let mut leave = None;
+    for (ai, albums, bytes) in shown {
+        let a = &app.index.artists[ai];
+        ui.horizontal(|ui| {
+            ui.add_space(16.0);
+            widgets::fitted(ui, RichText::new(&a.name).color(ink.text), 280.0, Sense::hover()).on_hover_text(&a.name);
+            muted(ui, format!("{} · {}", plural(albums, "album"), text::bytes(bytes)));
+            if widgets::icon_link(ui, Icon::Remove, "leave out").on_hover_text("or untick some of their albums below").clicked() {
+                leave = Some(ai);
+            }
+        });
+    }
+    if let Some(ai) = leave {
+        app.card_artist(ai, false);
     }
 }
 
@@ -526,7 +587,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
             if w.options.unplayable == Unplayable::Convert {
                 // What converting would make of them, and what still can't go (no ffmpeg, AC-4…).
                 let (mut flac, mut mp3, mut left) = (0, 0, BTreeMap::<&str, usize>::new());
-                let rules = Rules { unplayable: Unplayable::Convert, cd_quality: w.options.cd_quality };
+                let rules = Rules { unplayable: Unplayable::Convert, ..w.options.rules() };
                 for t in app.tracks.iter().filter(|t| !t.on_recho() && t.cue.is_none()) {
                     match target(t, rules) {
                         Ok(Target::Flac | Target::FlacCd) => flac += 1,
@@ -540,7 +601,8 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                     made.push(format!("{} to FLAC (lossless ones, nothing lost)", plural(flac, "song")));
                 }
                 if mp3 > 0 {
-                    made.push(format!("{} to MP3 320 (AAC, Dolby and other lossy ones, in stereo)", plural(mp3, "song")));
+                    let which = if rules.lossless_mp3 { "in stereo, as chosen under saving space" } else { "AAC, Dolby and other lossy ones, in stereo" };
+                    made.push(format!("{} to MP3 320 ({which})", plural(mp3, "song")));
                 }
                 ui.horizontal(|ui| {
                     ui.add_space(24.0);
@@ -570,9 +632,18 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
             }
         });
     }
-    widgets::setting(ui, "Hi-res songs", |ui| {
-        changed |= ui.checkbox(&mut w.options.cd_quality, "write them at CD quality to save space").changed();
-        widgets::help(ui, "16-bit, 44.1 or 48 kHz FLAC instead of 24-bit at 96 or 192 kHz: a third to a sixth of the space. Through earbuds the difference isn't audible; your music folder keeps the originals.");
+    widgets::setting(ui, "Saving space", |ui| {
+        let mut quality = (w.options.cd_quality || w.options.lossless_mp3, w.options.lossless_mp3);
+        let before = quality;
+        ui.radio_value(&mut quality, (false, false), "lossless songs as they are");
+        ui.radio_value(&mut quality, (true, false), "hi-res songs at CD quality");
+        widgets::help(ui, "16-bit, 44.1 or 48 kHz FLAC instead of 24-bit at 96 or 192 kHz: a third to a sixth of the space. Through earbuds the difference isn't audible.");
+        ui.radio_value(&mut quality, (true, true), "all lossless songs as MP3 320");
+        widgets::help(ui, "About a quarter of the space of CD-quality FLAC. Your music folder keeps the originals either way, and choosing again re-makes the card's copies at the next sync.");
+        if quality != before {
+            (w.options.cd_quality, w.options.lossless_mp3) = quality;
+            changed = true;
+        }
     });
     widgets::setting(ui, "Housekeeping", |ui| {
         changed |= ui.checkbox(&mut w.options.write_tags, "write corrected tags into the copies").changed();
@@ -580,7 +651,9 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         changed |= ui.checkbox(&mut w.options.clean_mac_files, "delete macOS ._ and .DS_Store files on the card").changed();
     });
     if changed {
+        // Names and sizes on the card may have changed with the options.
         app.write_preview = None;
+        app.refresh_on_card();
     }
 }
 

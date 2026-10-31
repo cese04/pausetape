@@ -118,6 +118,14 @@ impl Shooter {
             if std::env::var_os("NEATLIBRARY_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();
             }
+            // NEATLIBRARY_SHOT_ROOM=<GB>: pretend the card (an empty temporary folder) has this
+            // much room, to show what the card tab offers when the choice doesn't fit.
+            if let Some(gb) = std::env::var("NEATLIBRARY_SHOT_ROOM").ok().and_then(|v| v.parse::<f64>().ok()) {
+                let card = std::env::temp_dir().join("neatlibrary-shot-card");
+                let _ = std::fs::create_dir_all(&card);
+                app.write_mut().dest = Some(card);
+                app.room_while_writing = Some((gb * 1e9) as u64);
+            }
             app.preview_write();
         }
         let (n, half) = (self.step / 2, self.step % 2);
