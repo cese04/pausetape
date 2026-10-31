@@ -171,6 +171,7 @@ impl App {
                     self.busy = None;
                     for &(i, size, mtime) in &ok {
                         let t = &mut self.tracks[i];
+                        t.embedded_cover |= t.cover.is_some();
                         (t.dirty, t.size, t.mtime, t.cover) = (false, size, mtime, None);
                     }
                     // A cover now embedded in the playing track: look it up again.
@@ -189,6 +190,10 @@ impl App {
                         let tex = img.map(|img| self.ctx.load_texture("cover", img, egui::TextureOptions::LINEAR));
                         self.cover = Some((path, tex, file));
                     }
+                }
+                Msg::CoversFound(found, stopped) => {
+                    self.busy = None;
+                    self.covers_found(found, stopped);
                 }
                 Msg::Envelope(id, env) => {
                     if self.current().is_some_and(|i| self.tracks[i].id() == id) {

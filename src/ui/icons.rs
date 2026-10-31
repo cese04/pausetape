@@ -32,6 +32,8 @@ pub enum Icon {
     Down,
     Copy,
     Check,
+    /// A picture: covers.
+    Image,
 }
 
 /// Paint `icon` inside `rect` (meant to be square) in `color`.
@@ -163,6 +165,12 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
         }
         Icon::Check => {
             p.add(line(&[(0.16, 0.52), (0.4, 0.76), (0.86, 0.24)]));
+        }
+        Icon::Image => {
+            // A frame with a hill and the sun.
+            p.add(closed(&[(0.1, 0.18), (0.9, 0.18), (0.9, 0.82), (0.1, 0.82)]));
+            p.add(line(&[(0.1, 0.72), (0.38, 0.44), (0.6, 0.66), (0.72, 0.54), (0.9, 0.72)]));
+            p.circle_filled(at(0.68, 0.36), s * 0.07, color);
         }
     }
 }

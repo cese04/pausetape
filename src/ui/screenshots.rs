@@ -11,13 +11,15 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 10] = [
+const TABS: [(Tab, &str); 12] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
     (Tab::Library, "library"),
     (Tab::Library, "tageditor"),
     (Tab::Library, "job"),
+    (Tab::Library, "albums"),
+    (Tab::Library, "covers"),
     (Tab::Artists, "artists"),
     (Tab::Card, "card"),
     (Tab::Playlists, "playlists"),
@@ -140,6 +142,12 @@ impl Shooter {
                 "cardpicker" => Some(crate::ui::folders::Picker::Card { browse: None, show_all: true }),
                 _ => None,
             };
+            let filter = std::env::var("NEATLIBRARY_SHOT_FILTER").unwrap_or_default();
+            app.saved.album_table = TABS[n].1 == "albums";
+            app.filter = if TABS[n].1 == "covers" { "cover:no".into() } else { filter };
+            if TABS[n].1 == "albums" {
+                app.selected_albums = app.album_rows(&app.query()).iter().skip(2).take(2).map(|r| r.id.clone()).collect();
+            }
             match TABS[n].1 {
                 "tageditor" => app.edit_tags(app.queue.clone()),
                 "job" => {

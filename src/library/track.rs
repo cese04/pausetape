@@ -55,6 +55,8 @@ pub struct Track {
     /// An image beside the track to embed as its front cover when tags are next written (the
     /// user chose to add it). Part of the corrections, like edited fields.
     pub cover: Option<PathBuf>,
+    /// The file's tags hold a picture (the Echo Mini shows only embedded covers).
+    pub embedded_cover: bool,
 }
 
 impl Track {
@@ -78,6 +80,11 @@ impl Track {
             Some(_) => self.lossless(),
             None => RECHO_FORMATS.contains(&self.ext.as_str()),
         }
+    }
+
+    /// More than CD quality: over 16 bits or 48 kHz.
+    pub fn hires(&self) -> bool {
+        self.bit_depth.is_some_and(|b| b > 16) || self.sample_rate.is_some_and(|r| r > 48_000)
     }
 
     /// FLAC, WAV, APE, WavPack, AIFF, ALAC: no quality lost.

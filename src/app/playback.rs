@@ -59,10 +59,15 @@ impl App {
         }
     }
 
-    /// Look up the cover for a track path in the background (`Msg::Cover`).
+    /// Look up the cover for a track path in the background (`Msg::Cover`): one waiting to be
+    /// embedded, else the file's own.
     pub fn load_cover(&mut self, p: std::path::PathBuf) {
+        let pending = self.tracks.iter().find(|t| t.path == p).and_then(|t| t.cover.clone());
         self.spawn(move |tx| {
-            let found = crate::library::cover::load(&p);
+            let found = match pending {
+                Some(f) => crate::library::cover::load_image(&f).map(|img| (img, Some(f))),
+                None => crate::library::cover::load(&p),
+            };
             let file = found.as_ref().and_then(|(_, f)| f.clone());
             let img = found.map(|(rgba, _)| egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw()));
             let _ = tx.send(Msg::Cover(p.clone(), img, file));

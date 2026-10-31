@@ -14,8 +14,10 @@ use rusqlite::{Connection, params};
 use crate::library::Track;
 
 /// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
-/// and bit depth), so files get re-read.
-const SCHEMA_VERSION: i64 = 3;
+/// and bit depth; 4: embedded cover), so files get re-read.
+const SCHEMA_VERSION: i64 = 4;
+/// Corrections saved since this version stay valid: the fields they change haven't changed.
+const EDITS_SINCE: i64 = 3;
 
 pub struct Db {
     conn: Connection,
@@ -71,8 +73,12 @@ impl Db {
         )?;
         let version: Option<i64> = conn.query_row("SELECT value FROM meta WHERE key = 'schema'", [], |r| r.get(0)).ok();
         if version.is_some_and(|v| v != SCHEMA_VERSION) {
-            // Older layout: the cache is disposable, so start over rather than migrate.
-            conn.execute_batch("DELETE FROM tracks; DELETE FROM edits;")?;
+            // Older layout: the cache is disposable, so start over rather than migrate. The
+            // user's corrections aren't, so they're kept when they still fit.
+            conn.execute_batch("DELETE FROM tracks;")?;
+            if version.is_some_and(|v| !(EDITS_SINCE..=SCHEMA_VERSION).contains(&v)) {
+                conn.execute_batch("DELETE FROM edits;")?;
+            }
         }
         conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema', ?1)", params![SCHEMA_VERSION])?;
         Ok(Db { conn })

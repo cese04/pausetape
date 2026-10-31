@@ -2,9 +2,11 @@
 //! `crate::ui`; this module owns the data, starts background work and folds its results back in.
 //!
 //! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `edit` (tags
-//! edited by hand), `writes` (card writes, reorganising, playlists), `playback`, and `events`
+//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `writes` (card writes, reorganising, playlists), `playback`, and `events`
 //! (the per-frame message pump).
 
+mod browse;
+mod covers;
 mod edit;
 mod events;
 mod music;
@@ -21,6 +23,8 @@ use std::time::{Duration, Instant};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use serde::{Deserialize, Serialize};
 
+pub use browse::{AlbumRow, SortBy};
+pub use covers::FoundCover;
 pub use edit::{Shared, TagEdit};
 
 use crate::audio::{self, Audio};
@@ -56,6 +60,8 @@ pub struct Saved {
     pub theme: ThemePref,
     /// The library's format warning is collapsed to one line.
     pub format_note_collapsed: bool,
+    /// The library shows a table of albums rather than the list by artist.
+    pub album_table: bool,
 }
 
 impl Default for Saved {
@@ -72,6 +78,7 @@ impl Default for Saved {
             volume: 0.8,
             theme: ThemePref::System,
             format_note_collapsed: false,
+            album_table: false,
         }
     }
 }
@@ -114,6 +121,8 @@ enum Msg {
     Envelope(PathBuf, Vec<f32>),
     /// Cover for a track path, and the image file it came from if it isn't embedded.
     Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
+    /// Covers found for albums without one, and whether the search was stopped.
+    CoversFound(Vec<FoundCover>, bool),
 }
 
 pub struct Busy {
@@ -211,6 +220,13 @@ pub struct App {
     pub select_anchor: Option<usize>,
     /// The open tag editor.
     pub tag_edit: Option<TagEdit>,
+    /// Albums the last cover search found nothing for, and why.
+    pub cover_misses: Vec<(String, String)>,
+    /// The album table's order: column, and largest/last first.
+    pub album_sort: (SortBy, bool),
+    /// Albums chosen in the table (by `AlbumNode::id`), and the last one clicked.
+    pub selected_albums: BTreeSet<String>,
+    pub album_anchor: Option<String>,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
     tx: Sender<Msg>,
@@ -293,6 +309,10 @@ impl App {
             selected: BTreeSet::new(),
             select_anchor: None,
             tag_edit: None,
+            cover_misses: Vec::new(),
+            album_sort: (SortBy::Artist, false),
+            selected_albums: BTreeSet::new(),
+            album_anchor: None,
             busy: None,
             notices: Vec::new(),
             tx,

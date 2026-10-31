@@ -21,7 +21,7 @@ const FOLDER_CHARS: usize = 60;
 
 /// Where a song or album stands with the card, as of the last write against what's chosen now.
 #[derive(Clone, Copy, PartialEq)]
-enum Mark {
+pub(super) enum Mark {
     /// On the card and staying.
     On,
     /// Chosen; the next Sync copies it (for an album, some of it may be there already).
@@ -41,7 +41,7 @@ impl Mark {
     }
 
     /// A dot like a library card's stamp: filled when there, a ring while waiting for Sync.
-    fn paint(self, p: &egui::Painter, at: egui::Pos2, r: f32, ink: &theme::Ink) {
+    pub(super) fn paint(self, p: &egui::Painter, at: egui::Pos2, r: f32, ink: &theme::Ink) {
         match self {
             Mark::On => {
                 p.circle_filled(at, r, ink.muted);
@@ -150,8 +150,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     ui.horizontal_wrapped(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        ui.add(egui::TextEdit::singleline(&mut app.filter).hint_text("filter by artist, album or title").desired_width(280.0));
-        if widgets::icon_link(ui, Icon::Collapse, "collapse all").clicked() {
+        ui.add(egui::TextEdit::singleline(&mut app.filter).hint_text("search, or try format:flac").desired_width(260.0))
+            .on_hover_text(crate::library::search::HELP);
+        filters_menu(app, ui);
+        ui.add_space(6.0);
+        if widgets::tab(ui, "artists", !app.saved.album_table).on_hover_text("albums by artist, with their songs").clicked() {
+            app.saved.album_table = false;
+        }
+        if widgets::tab(ui, "albums", app.saved.album_table).on_hover_text("a table of albums: sort by any column, select several").clicked() {
+            app.saved.album_table = true;
+        }
+        ui.add_space(6.0);
+        if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "collapse all").clicked() {
             app.expanded.clear();
         }
         let dirty = app.dirty_in_files();
@@ -175,6 +185,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             if widgets::chip(ui, Icon::Copy, format!("{} stored twice ({})", plural(repeats.len(), "song"), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
                 app.duplicates_only = true;
             }
+        }
+        let coverless = app.albums_without_cover().len();
+        if coverless > 0
+            && widgets::chip(ui, Icon::Image, format!("{} without a cover", plural(coverless, "album")), ink.text)
+                .on_hover_text("The Echo Mini shows covers embedded in the songs. Click to show only these albums, and find covers for them.")
+                .clicked()
+        {
+            app.filter = "cover:no".into();
+            app.duplicates_only = false;
         }
         if !app.index.suggestions.is_empty()
             && widgets::chip(ui, Icon::Artists, format!("{} possible duplicate artists", app.index.suggestions.len()), ink.text).on_hover_text("Artists whose names look alike. Decide in the artists tab.").clicked()
@@ -258,7 +277,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
         ui.add_space(8.0);
     }
-    let needle = app.filter.to_lowercase();
+    let query = app.query();
+    if query.wants(&crate::library::search::Filter::Cover(false)) {
+        covers_panel(app, ui, &query, &mut actions);
+    }
+    if app.saved.album_table {
+        super::albums::show(app, ui, &query, &mut actions);
+        apply(app, actions);
+        return;
+    }
     let current = app.current();
     let can_add = app.active_playlist.is_some();
     let mods = ui.input(|i| i.modifiers);
@@ -278,26 +305,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 let mut last_initial = None;
                 for (ai, artist) in app.index.artists.iter().enumerate() {
                     let akey = crate::library::names::artist_key(&artist.name);
-                    let hit = |s: &str| s.to_lowercase().contains(&needle);
                     let ck = &app.index.clusters[artist.cluster].key;
                     let matching: Vec<usize> = if app.duplicates_only {
                         (0..artist.albums.len()).filter(|&i| duplicated.contains(&artist.albums[i].base_id(ck))).collect()
-                    } else if needle.is_empty() {
-                        (0..artist.albums.len()).collect()
-                    } else if hit(&artist.name) {
+                    } else if query.is_empty() {
                         (0..artist.albums.len()).collect()
                     } else {
-                        (0..artist.albums.len())
-                            .filter(|&i| {
-                                let al = &artist.albums[i];
-                                al.title.as_deref().is_some_and(hit) || al.tracks.iter().any(|&t| hit(&app.tracks[t].display_title()))
-                            })
-                            .collect()
+                        (0..artist.albums.len()).filter(|&i| query.album_matches(&app.album_facts(ai, i))).collect()
                     };
                     if matching.is_empty() {
                         continue;
                     }
-                    let open = app.expanded.contains(&akey) || app.duplicates_only || (!needle.is_empty() && matching.len() < 6);
+                    let open = app.expanded.contains(&akey) || app.duplicates_only || (!query.is_empty() && matching.len() < 6);
                     let n_tracks: usize = artist.albums.iter().map(|a| a.tracks.len()).sum();
                     // Letter headings, which the A–Z rail scrolls to.
                     let letter = initial(&artist.name);
@@ -359,7 +378,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 n => format!("{n} won't play on RECHO"),
                             };
                             // The title gets whatever the counts, warning and the album's commands leave.
-                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 510.0;
+                            let no_cover = app.lacks_cover(al);
+                            let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 510.0 + if no_cover { 100.0 } else { 0.0 };
                             let shown = RichText::new(title).italics().size(17.0);
                             widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
                             let r = ui.label(RichText::new(meta).color(ink.muted));
@@ -403,6 +423,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 if widgets::icon_link(ui, Icon::Search, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
                                     actions.push(Action::LookupAlbum(ai, bi));
                                 }
+                                if no_cover
+                                    && app.busy.is_none()
+                                    && widgets::icon_link(ui, Icon::Image, "find cover").on_hover_text("No cover in the songs, which is what the Echo Mini shows. Looks in the album's folder, then on the Cover Art Archive.").clicked()
+                                {
+                                    actions.push(Action::FindCovers(vec![(ai, bi)]));
+                                }
                                 if widgets::icon_link(ui, Icon::Play, "play").clicked() {
                                     actions.push(Action::Play(al.tracks.clone(), 0));
                                 }
@@ -422,9 +448,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         if app.duplicates_only {
                             continue;
                         }
+                        let album_name = al.title.as_deref().unwrap_or("");
+                        let every_song = query.names_match(&artist.name, album_name);
                         for (pos, &ti) in al.tracks.iter().enumerate() {
                             let t = &app.tracks[ti];
-                            if !needle.is_empty() && !hit(&artist.name) && !al.title.as_deref().is_some_and(hit) && !hit(&t.display_title()) {
+                            if !every_song && !query.song_matches(&artist.name, album_name, &t.display_title()) {
                                 continue;
                             }
                             let num = match (t.track, al.multi_disc) {
@@ -484,7 +512,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
 /// An album's mark and words for where it stands with the card ("on card", "added at the next
 /// sync"…), or no mark and "" when it isn't chosen and isn't there.
-fn album_status(app: &App, ck: &str, artist: &crate::library::grouping::ArtistNode, al: &crate::library::grouping::AlbumNode) -> (Option<Mark>, String) {
+pub(super) fn album_status(app: &App, ck: &str, artist: &crate::library::grouping::ArtistNode, al: &crate::library::grouping::AlbumNode) -> (Option<Mark>, String) {
     let cs = &app.card_state;
     let planned = al.tracks.iter().filter(|i| cs.planned.contains(i)).count();
     let there = al.tracks.iter().filter(|i| cs.on_card.contains(i)).count();
@@ -671,4 +699,69 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
         }
     });
     ui.add_space(4.0);
+}
+
+/// Search terms worth a click, toggled in the search box.
+const QUICK_FILTERS: &[(&str, &str)] = &[
+    ("card:on", "on the card"),
+    ("card:off", "not on the card, nor chosen"),
+    ("card:sync", "changing at the next Sync"),
+    ("card:better", "on the card while a better copy exists"),
+    ("cover:no", "without a cover"),
+    ("quality:lossy", "with lossy songs (MP3, AAC…)"),
+    ("quality:hires", "hi-res"),
+    ("edited:yes", "with corrected tags not yet in the files"),
+];
+
+/// A menu of common search terms; ticking one adds it to the search box, unticking removes it.
+fn filters_menu(app: &mut App, ui: &mut Ui) {
+    let active = QUICK_FILTERS.iter().filter(|(term, _)| app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term))).count();
+    let label = if active > 0 { format!("filters ({active})") } else { "filters".to_string() };
+    ui.menu_button(RichText::new(label).color(ink(ui).muted), |ui| {
+        for (term, what) in QUICK_FILTERS {
+            let mut on = app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term));
+            if ui.checkbox(&mut on, format!("{what}  ")).on_hover_text(*term).changed() {
+                let mut words: Vec<&str> = app.filter.split_whitespace().filter(|w| !w.eq_ignore_ascii_case(term)).collect();
+                if on {
+                    words.push(term);
+                }
+                app.filter = words.join(" ");
+            }
+        }
+        ui.separator();
+        widgets::help(ui, "Or type them, with other terms: hover over the search box for the list.");
+    });
+}
+
+/// Above albums without a cover: find covers for them, and what the last search couldn't find.
+fn covers_panel(app: &mut App, ui: &mut Ui, query: &crate::library::search::Query, actions: &mut Vec<Action>) {
+    let ink = ink(ui);
+    let albums: Vec<(usize, usize)> = app.albums_without_cover().into_iter().filter(|&(a, b)| query.album_matches(&app.album_facts(a, b))).collect();
+    theme::panel_frame(ui).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_wrapped(|ui| {
+            let what = if albums.is_empty() { "No albums without a cover here.".to_string() } else { format!("{} without a cover shown.", plural(albums.len(), "album")) };
+            ui.label(RichText::new(what).color(ink.text));
+            if !albums.is_empty() && app.busy.is_none() {
+                let hint = "For each album: an image in its folder (cover.jpg, folder.jpg…) if there is one, else the front cover of the matching MusicBrainz release, from the Cover Art Archive (about two seconds an album). Nothing changes in your files until you write corrected tags.";
+                if widgets::button_with(ui, Icon::Image, format!("find covers for {}", if albums.len() == 1 { "it".to_string() } else { format!("these {}", albums.len()) })).on_hover_text(hint).clicked() {
+                    actions.push(Action::FindCovers(albums.clone()));
+                }
+            }
+            if widgets::icon_link(ui, Icon::Close, "show everything").clicked() {
+                app.filter.clear();
+            }
+        });
+        if !app.cover_misses.is_empty() {
+            ui.add_space(4.0);
+            let n = app.cover_misses.len();
+            ui.collapsing(RichText::new(format!("not found last time: {}", plural(n, "album"))).size(13.0).color(ink.muted), |ui| {
+                for (album, why) in app.cover_misses.iter().take(300) {
+                    ui.add(egui::Label::new(RichText::new(format!("{album}: {why}")).size(12.5).color(ink.muted)).truncate());
+                }
+            });
+            widgets::help(ui, "Fixing an album's name (look up, or edit tags) often helps. Or put a cover.jpg in its folder.");
+        }
+    });
+    ui.add_space(8.0);
 }

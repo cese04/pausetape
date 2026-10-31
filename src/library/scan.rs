@@ -119,7 +119,8 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
             match edits.get(t.id().to_string_lossy().as_ref()) {
                 Some(e) if e.size == t.size && e.mtime == t.mtime => {
                     stats.edits += 1;
-                    Track { dirty: true, ..e.track.clone() }
+                    // What the file holds now, under the corrections.
+                    Track { dirty: true, embedded_cover: t.embedded_cover, ..e.track.clone() }
                 }
                 Some(_) => {
                     // The file changed since the correction was made; trust the file.
@@ -168,6 +169,7 @@ fn read_track(path: &Path, ext: &str) -> Track {
         t.year = tag.date().map(|d| d.year).filter(|&y| y > 0);
         t.compilation = matches!(tag.get_string(ItemKey::FlagCompilation), Some("1" | "true"));
     }
+    t.embedded_cover = file.tags().iter().any(|tag| tag.picture_count() > 0);
     t
 }
 

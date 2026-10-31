@@ -4,6 +4,8 @@
 //! nothing is applied until the user accepts it.
 
 use std::collections::HashSet;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -16,6 +18,10 @@ use crate::library::grouping::UNKNOWN;
 use crate::library::names::{artist_key, clean_album, clean_title, primary_artist, similar_keys, title_key};
 
 const API: &str = "https://musicbrainz.org/ws/2";
+const COVER_ART: &str = "https://coverartarchive.org";
+/// When the app last asked MusicBrainz: lookups and cover searches run on different threads
+/// but share the one-request-a-second allowance.
+static LAST_REQUEST: Mutex<Option<Instant>> = Mutex::new(None);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Field {
@@ -98,16 +104,35 @@ impl Client {
     }
 }
 
+/// An album to find a front cover for.
+pub struct CoverJob {
+    pub artist: String,
+    pub album: String,
+    pub tracks: Vec<LocalTrack>,
+}
+
+/// Look each album up as *look up* does and fetch its front cover from the Cover Art Archive
+/// (the release's, else its release group's), reporting each album's JPEG and the release it
+/// came from. Stops between albums once `stop` is set.
+pub fn find_covers(user_agent: String, jobs: &[CoverJob], stop: &AtomicBool, mut each: impl FnMut(usize, Result<(Vec<u8>, String), String>)) {
+    let mut w = Worker::new(user_agent);
+    for (i, job) in jobs.iter().enumerate() {
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+        each(i, w.cover(&job.artist, &job.album, &job.tracks).map_err(|e| format!("{e:#}")));
+    }
+}
+
 struct Worker {
     agent: ureq::Agent,
     user_agent: String,
-    last: Option<Instant>,
 }
 
 impl Worker {
     fn new(user_agent: String) -> Self {
         let agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(20))).build().into();
-        Worker { agent, user_agent, last: None }
+        Worker { agent, user_agent }
     }
 
     fn run(mut self, jobs: Receiver<Job>, replies: Sender<Reply>, wake: impl Fn()) {
@@ -132,11 +157,13 @@ impl Worker {
 
     fn get(&mut self, path: &str, params: &[(&str, &str)]) -> Result<Value> {
         for attempt in 0..3 {
-            if let Some(last) = self.last {
-                let wait = Duration::from_millis(1100).saturating_sub(last.elapsed());
-                thread::sleep(wait);
+            {
+                let mut last = LAST_REQUEST.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(at) = *last {
+                    thread::sleep(Duration::from_millis(1100).saturating_sub(at.elapsed()));
+                }
+                *last = Some(Instant::now());
             }
-            self.last = Some(Instant::now());
             let mut req = self.agent.get(format!("{API}/{path}")).header("User-Agent", &self.user_agent).query("fmt", "json");
             for (k, v) in params {
                 req = req.query(*k, *v);
@@ -173,6 +200,33 @@ impl Worker {
     /// Search for the release, check the best candidates against the local songs, and suggest
     /// changes from the first one that is clearly the same album.
     fn album(&mut self, artist: &str, album: &str, local: &[LocalTrack]) -> Result<(String, Vec<FieldChange>)> {
+        let (release, matched, changes) = self.release(artist, album, local)?;
+        Ok((release.label(matched, local.len()), changes))
+    }
+
+    /// The front cover of the release that matches the album, as a JPEG, and that release.
+    fn cover(&mut self, artist: &str, album: &str, local: &[LocalTrack]) -> Result<(Vec<u8>, String)> {
+        let (release, matched, _) = self.release(artist, album, local)?;
+        let label = release.label(matched, local.len());
+        let mut tried = vec![format!("{COVER_ART}/release/{}/front-500", release.id)];
+        if !release.group_id.is_empty() {
+            tried.push(format!("{COVER_ART}/release-group/{}/front-500", release.group_id));
+        }
+        for url in tried {
+            match self.agent.get(&url).header("User-Agent", &self.user_agent).call() {
+                Ok(mut resp) => {
+                    let bytes = resp.body_mut().with_config().limit(20_000_000).read_to_vec().context("downloading the cover")?;
+                    return Ok((bytes, label));
+                }
+                Err(ureq::Error::StatusCode(404)) => continue,
+                Err(e) => return Err(e).context("Cover Art Archive request"),
+            }
+        }
+        Err(anyhow!("{label} has no cover in the Cover Art Archive"))
+    }
+
+    /// The release that is clearly this album, how many songs matched, and the changes it suggests.
+    fn release(&mut self, artist: &str, album: &str, local: &[LocalTrack]) -> Result<(Release, usize, Vec<FieldChange>)> {
         let artist = known_artist(artist);
         let name = clean_album(album, artist).album;
         let mut queries = Vec::new();
@@ -196,7 +250,7 @@ impl Worker {
                 let rel = self.get(&format!("release/{id}"), &[("inc", "recordings artist-credits release-groups labels")])?;
                 let release = Release::from_json(&rel);
                 match compare(&release, local) {
-                    Some((changes, matched)) => return Ok((release.label(matched, local.len()), changes)),
+                    Some((changes, matched)) => return Ok((release, matched, changes)),
                     None => rejected.push(format!("“{}” by {}", release.title, release.artist)),
                 }
             }
@@ -329,6 +383,8 @@ fn title_score(lt: &LocalTrack, remote: &str, artists: &[&str]) -> f64 {
 }
 
 struct Release {
+    id: String,
+    group_id: String,
     title: String,
     artist: String,
     year: Option<u16>,
@@ -354,6 +410,8 @@ impl Release {
             }
         }
         Release {
+            id: str_of(&rel["id"]),
+            group_id: str_of(&rel["release-group"]["id"]),
             title: str_of(&rel["title"]),
             artist: credit(&rel["artist-credit"]),
             year: year_of(&rel["release-group"]["first-release-date"]).or_else(|| year_of(&rel["date"])),
@@ -533,7 +591,7 @@ mod tests {
             .enumerate()
             .map(|(i, (t, s))| RemoteTrack { disc: 1, number: i as u32 + 1, title: t.to_string(), artist: "Joy Division".into(), seconds: Some(*s) })
             .collect();
-        Release { title: "Unknown Pleasures".into(), artist: "Joy Division".into(), year: Some(1979), country: String::new(), label: String::new(), tracks, multi_disc: false }
+        Release { id: String::new(), group_id: String::new(), title: "Unknown Pleasures".into(), artist: "Joy Division".into(), year: Some(1979), country: String::new(), label: String::new(), tracks, multi_disc: false }
     }
 
     fn local(titles: &[(&str, f64)]) -> Vec<LocalTrack> {
@@ -587,5 +645,19 @@ mod tests {
         let hits = w.artist("Guns and Roses").unwrap();
         println!("{:?}", hits.iter().map(|h| (&h.name, h.score)).collect::<Vec<_>>());
         assert!(hits.iter().any(|h| h.name == "Guns N’ Roses" || h.name == "Guns N' Roses"));
+    }
+
+    /// Hits the live API and the Cover Art Archive: `cargo test -- --ignored musicbrainz_cover`
+    #[test]
+    #[ignore]
+    fn musicbrainz_cover() {
+        let job = CoverJob { artist: "Radiohead".into(), album: "OK Computer".into(), tracks: vec![lt(0, "Airbag", Some(1)), lt(1, "Karma Police", Some(6)), lt(2, "Paranoid Android", Some(2))] };
+        let mut got = None;
+        find_covers(format!("NeatLibrary-tests/{}", env!("CARGO_PKG_VERSION")), &[job], &AtomicBool::new(false), |i, r| got = Some((i, r)));
+        let (i, r) = got.expect("one reply");
+        let (bytes, label) = r.unwrap();
+        println!("{label}: {} bytes", bytes.len());
+        assert_eq!(i, 0);
+        assert!(image::load_from_memory(&bytes).is_ok_and(|img| img.width() >= 250), "a real image");
     }
 }

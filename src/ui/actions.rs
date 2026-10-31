@@ -26,6 +26,16 @@ pub(super) enum Action {
     Select(usize),
     SelectRun(Vec<usize>),
     ClearSelection,
+    /// Find covers for these albums (artist, album).
+    FindCovers(Vec<(usize, usize)>),
+    /// Albums on the card or off it.
+    CardAlbums(Vec<(usize, usize)>, bool),
+    SortAlbums(crate::app::SortBy),
+    /// In the album table: ⌘-click one album, shift-click a run, a plain click just one.
+    ToggleAlbum(String),
+    AddAlbums(Vec<String>),
+    OnlyAlbum(String),
+    ClearAlbums,
 }
 
 pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
@@ -55,6 +65,27 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::ClearSelection => {
                 app.selected.clear();
                 app.select_anchor = None;
+            }
+            Action::FindCovers(albums) => app.find_covers(albums),
+            Action::CardAlbums(albums, on) => app.card_albums(&albums, on),
+            Action::SortAlbums(by) => app.sort_albums(by),
+            Action::ToggleAlbum(id) => {
+                if !app.selected_albums.remove(&id) {
+                    app.selected_albums.insert(id.clone());
+                }
+                app.album_anchor = Some(id);
+            }
+            Action::AddAlbums(ids) => {
+                app.album_anchor = ids.last().cloned().or(app.album_anchor.take());
+                app.selected_albums.extend(ids);
+            }
+            Action::OnlyAlbum(id) => {
+                app.selected_albums = [id.clone()].into();
+                app.album_anchor = Some(id);
+            }
+            Action::ClearAlbums => {
+                app.selected_albums.clear();
+                app.album_anchor = None;
             }
             Action::Name(c, n) => {
                 app.set_cluster_name(c, n);

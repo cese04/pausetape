@@ -223,13 +223,18 @@ impl App {
         self.rebuild();
     }
 
-    fn mb(&mut self) -> &musicbrainz::Client {
+    /// How the app introduces itself to MusicBrainz, with the user's contact if given.
+    pub(super) fn user_agent(&self) -> String {
         let contact = self.saved.mb_contact.trim();
-        let ua = if contact.is_empty() {
+        if contact.is_empty() {
             format!("NeatLibrary/{}", env!("CARGO_PKG_VERSION"))
         } else {
             format!("NeatLibrary/{} ( {contact} )", env!("CARGO_PKG_VERSION"))
-        };
+        }
+    }
+
+    fn mb(&mut self) -> &musicbrainz::Client {
+        let ua = self.user_agent();
         if self.mb.as_ref().is_none_or(|(u, _)| *u != ua) {
             let wake = self.ctx.clone();
             let client = musicbrainz::Client::spawn(ua.clone(), self.mb_tx.clone(), move || wake.request_repaint());
@@ -249,9 +254,18 @@ impl App {
         let a = &self.index.artists[artist];
         let al: &AlbumNode = &a.albums[album];
         let id = al.id(&self.index.clusters[a.cluster].key);
-        let tracks: Vec<LocalTrack> = al
-            .tracks
-            .iter()
+        let tracks = self.local_tracks(&al.tracks);
+        let job = match &al.title {
+            Some(title) => Job::Album { album_id: id.clone(), artist: a.name.clone(), album: title.clone(), tracks },
+            None => Job::Loose { album_id: id.clone(), tracks },
+        };
+        self.lookups.insert(id, Lookup::Pending);
+        self.mb().send(job);
+    }
+
+    /// Songs as MusicBrainz lookups compare them.
+    pub(super) fn local_tracks(&self, idxs: &[usize]) -> Vec<LocalTrack> {
+        idxs.iter()
             .map(|&i| {
                 let t = &self.tracks[i];
                 LocalTrack {
@@ -266,13 +280,7 @@ impl App {
                     seconds: t.duration.as_secs_f64(),
                 }
             })
-            .collect();
-        let job = match &al.title {
-            Some(title) => Job::Album { album_id: id.clone(), artist: a.name.clone(), album: title.clone(), tracks },
-            None => Job::Loose { album_id: id.clone(), tracks },
-        };
-        self.lookups.insert(id, Lookup::Pending);
-        self.mb().send(job);
+            .collect()
     }
 
     /// Add the cover image found beside the playing track to the tags of its album's songs (or

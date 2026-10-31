@@ -74,7 +74,7 @@ pub struct Rules {
 
 /// More than CD quality: over 16 bits or 48 kHz.
 pub fn hires(t: &Track) -> bool {
-    t.bit_depth.is_some_and(|b| b > 16) || t.sample_rate.is_some_and(|r| r > 48_000)
+    t.hires()
 }
 
 /// The CD-quality rate for a hi-res rate: 48 kHz for its family (96, 192…), 44.1 for its own

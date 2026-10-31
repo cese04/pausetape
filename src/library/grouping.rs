@@ -437,6 +437,16 @@ fn split_copies(tracks: &[Track], idxs: Vec<usize>) -> Vec<Vec<Copy>> {
 /// Editions in rank order. First: the copy with the most lossless songs RECHO plays (a FLAC
 /// vinyl rip over an MP3 with bonus tracks), then the most songs RECHO plays, then the most
 /// songs, then the highest quality, then the one not needing a CUE sheet cut, then by folder.
+/// "FLAC 16/44.1", "MP3 320": the songs' most common format, at the quality of the weakest.
+pub fn describe(tracks: &[Track], idxs: &[usize]) -> (String, Quality) {
+    let q = Quality::of(tracks, idxs);
+    let mut names: BTreeMap<String, usize> = BTreeMap::new();
+    for &i in idxs {
+        *names.entry(if tracks[i].cue.is_some() { tracks[i].ext.to_uppercase() } else { tracks[i].format_label() }).or_default() += 1;
+    }
+    (q.label(&most_common(&names, |_| 0).unwrap_or_default()), q)
+}
+
 /// Each edition notes whether another has all its songs, and no less music, in the same or
 /// higher quality.
 fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, Edition)> {
@@ -448,17 +458,7 @@ fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, Edition)> {
         (count(&|t| t.on_recho() && t.lossless()), count(&|t| t.on_recho()), usize::MAX - c.tracks.len(), quality, cue, c.dirs[0].clone())
     });
     let quality: Vec<Quality> = copies.iter().map(|c| Quality::of(tracks, &c.tracks)).collect();
-    let format: Vec<String> = copies
-        .iter()
-        .zip(&quality)
-        .map(|(c, q)| {
-            let mut names: BTreeMap<String, usize> = BTreeMap::new();
-            for &i in &c.tracks {
-                *names.entry(if tracks[i].cue.is_some() { tracks[i].ext.to_uppercase() } else { tracks[i].format_label() }).or_default() += 1;
-            }
-            q.label(&most_common(&names, |_| 0).unwrap_or_default())
-        })
-        .collect();
+    let format: Vec<String> = copies.iter().map(|c| describe(tracks, &c.tracks).0).collect();
     let songs: Vec<Vec<String>> = copies.iter().map(|c| c.tracks.iter().map(|&i| song_key(&tracks[i].display_title())).collect()).collect();
     // Also by length: the same titles can hide more music (a hidden track at the end).
     let length: Vec<f64> = copies.iter().map(|c| c.tracks.iter().map(|&i| tracks[i].duration.as_secs_f64()).sum()).collect();

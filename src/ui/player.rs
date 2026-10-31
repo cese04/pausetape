@@ -163,7 +163,12 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     ui.add_space(12.0);
     if t.cover.is_some() {
         let when = if t.cue.is_some() { "in card copies when you next write" } else { "in card copies when you next write, and in the music files with \"write corrected tags\"" };
-        muted(ui, "cover will be added to the songs' tags").on_hover_text(format!("{name}: {when}"));
+        muted(ui, "cover will be added to the songs' tags ·").on_hover_text(format!("{name}: {when}"));
+        if super::widgets::link(ui, "don't").on_hover_text("keep the songs as they are").clicked() {
+            let album = app.index.artists.iter().flat_map(|a| &a.albums).find(|al| al.tracks.contains(&ti));
+            let songs = album.map(|al| al.tracks.clone()).unwrap_or_else(|| vec![ti]);
+            app.drop_cover(&songs);
+        }
         return;
     }
     muted(ui, format!("cover from {}, not in the songs' tags ·", text::shorten(&name, 28)));

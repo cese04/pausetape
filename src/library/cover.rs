@@ -29,7 +29,7 @@ const SCAN_DIRS: &[&str] = &["covers", "cover", "artwork", "scans", "art", "imag
 /// A cover beside the track: a conventional name ("folder.jpg"), else an image named after the
 /// audio file (common for albums stored as one file), else "front"/"cover" in a scans
 /// subfolder, else the first image that isn't a spectrogram or a back cover.
-fn beside(path: &Path) -> Option<PathBuf> {
+pub fn beside(path: &Path) -> Option<PathBuf> {
     let dir = path.parent()?;
     let images = images_in(dir);
     let stem = |p: &Path| p.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -69,9 +69,18 @@ pub fn load(path: &Path) -> Option<(image::RgbaImage, Option<PathBuf>)> {
             (std::fs::read(&f).ok()?, Some(f))
         }
     };
-    let img = image::load_from_memory(&bytes).ok()?;
+    Some((decode(&bytes)?, file))
+}
+
+/// An image file decoded and downscaled for the player: a cover waiting to be embedded.
+pub fn load_image(file: &Path) -> Option<image::RgbaImage> {
+    decode(&std::fs::read(file).ok()?)
+}
+
+fn decode(bytes: &[u8]) -> Option<image::RgbaImage> {
+    let img = image::load_from_memory(bytes).ok()?;
     let img = if img.width() > MAX_SIDE || img.height() > MAX_SIDE { img.thumbnail(MAX_SIDE, MAX_SIDE) } else { img };
-    Some((img.to_rgba8(), file))
+    Some(img.to_rgba8())
 }
 
 /// An image file as a cover to embed: at most `EMBED_SIDE` pixels, baseline JPEG.

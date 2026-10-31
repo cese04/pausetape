@@ -7,6 +7,7 @@ pub mod db;
 pub mod grouping;
 pub mod mp4;
 pub mod names;
+pub mod search;
 mod scan;
 mod tags;
 mod track;

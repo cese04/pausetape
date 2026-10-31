@@ -2,6 +2,7 @@
 //! folder pickers, and the shared theme, widgets and text helpers.
 
 mod actions;
+mod albums;
 mod artists;
 mod card;
 pub mod folders;
