@@ -519,3 +519,13 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Playback no longer drops out while a card write (or a scan) reads the same drive: songs are
   decoded up to 8 seconds ahead, on a thread of their own. Measured on the external music drive
   under load: dropouts of up to 1.9 s before, none after.
+
+### 39. A music drive not connected loses nothing (2026-10-31)
+- Starting with the music folder's drive unplugged no longer empties the library database (and
+  with it the corrections not yet written into the files). The library keeps what it had, says
+  "Can't reach the music folder: is its drive connected?", and reads it again by itself once the
+  drive is back. An empty folder where the drive should be counts as not reachable too, and a
+  folder inside that can't be read keeps the songs known there.
+- Sync, taking over the card, copying music in, and tidying wait while the music folder can't be
+  reached or the library is empty; the card tab says why in place of **Sync**.
+- A Sync that would take most of the setup's songs off the card (at least 20) asks first.

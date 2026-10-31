@@ -18,6 +18,11 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        // Against an empty library everything would look new.
+        if let Some(why) = self.library_unavailable() {
+            self.notice(why);
+            return;
+        }
         if self.saved.source.as_ref().is_some_and(|s| from.starts_with(s) || s.starts_with(&from)) {
             self.notice("that folder is your music folder, or holds it: choose one outside it to add from");
             return;
@@ -42,6 +47,11 @@ impl App {
     pub fn add_checked_folder(&mut self) {
         let Some(music) = self.saved.source.clone() else { return };
         if self.busy.is_some() {
+            return;
+        }
+        // Copying into a music folder whose drive is gone would make the folder on this disk.
+        if let Some(why) = self.library_unavailable() {
+            self.notice(why);
             return;
         }
         let Some(mut a) = self.adding.take() else { return };

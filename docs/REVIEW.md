@@ -12,8 +12,8 @@ reading the code; each says what would happen and where.
 
 | | Severity | Finding | Systems |
 |---|---|---|---|
-| [R1](#r1) | **High** | Starting the app with the music drive unplugged empties the library database, unsaved corrections included | All |
-| [R2](#r2) | **High** | A Sync with an empty library removes the setup's songs from the card | All |
+| [R1](#r1) | **High** | Starting the app with the music drive unplugged empties the library database, unsaved corrections included (**fixed**) | All |
+| [R2](#r2) | **High** | A Sync with an empty library removes the setup's songs from the card (**fixed**) | All |
 | [R3](#r3) | Medium | MusicBrainz suggestions that arrive after a rescan change the wrong songs | All |
 | [R4](#r4) | Medium | Renaming a card setup while it syncs or takes over the card loses what it did | All |
 | [R5](#r5) | Medium | Choosing another music folder while something runs leaves the library empty, and can crash | All |
@@ -39,9 +39,8 @@ reading the code; each says what would happen and where.
 | [R24](#r24) | Low | The card tab recomputes sizes on every frame | All |
 | [R26](#r26) | Low | ffmpeg's errors during playback go to the terminal, not the app | All |
 
-Fix R1 and R2 first: they lose data in a situation that's easy to get into (an external music
-drive, as here). Until then: **keep the music drive connected when starting the app, and don't
-Sync when the library shows 0 songs.**
+R1 and R2 lost data in a situation that's easy to get into (an external music drive, as here);
+both are fixed (2026-10-31).
 
 ---
 
@@ -58,9 +57,11 @@ the files, and the corrections are lost for good. Reproduced: a library of one s
 correction scanned with its folder renamed away ended with `(0 tracks, 0 corrections)` in the
 database.
 
-*Fix:* before scanning, check that the music folder exists and can be read; if not, keep the
-database as it is, show "music folder not found: is its drive connected?", and offer **Rescan**.
-More generally, an error reading the folder itself should abort the scan, not count as empty.
+**Fixed 2026-10-31.** A music folder that can't be read, or that holds no music where the
+database knows some (an empty mount point), now changes nothing: the library keeps what it had,
+says "Can't reach the music folder: is its drive connected?", and reads it again by itself as
+soon as it's back. A folder inside that can't be read keeps the songs known there. Tested in
+`rescans_reuse_unchanged_files_and_keep_corrections`.
 
 ### R2
 **A Sync with an empty library removes the setup's songs from the card.**
@@ -71,9 +72,11 @@ song the setup put on the card: removal only looks at the setup's own record of 
 none of those files are wanted any more. The card tab still offers **Sync** whenever the card is
 connected. Reproduced: a card written with one song, synced again with an empty library, lost it.
 
-*Fix:* refuse to Sync (and to take over a card) while the music folder is missing or the library
-is empty. Also ask before a Sync that would remove most of what's on the card ("This removes
-4,100 of the 4,400 songs on the card. Continue?"); **Compare** already counts them.
+**Fixed 2026-10-31.** Sync, taking over or comparing the card's music, copying from the card or
+from another folder, and tidying all wait while the music folder can't be reached or the library
+is empty, and the card tab says why in place of **Sync**. A Sync that would take at least 20
+songs and most of the setup's songs off the card asks first ("Take 4100 of 4412 songs off the
+card?"); songs it only renames don't count. Tested in `a_new_pattern_renames_on_the_card`.
 
 ## Medium
 

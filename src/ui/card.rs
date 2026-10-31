@@ -21,7 +21,16 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
         writes_bar(app, ui);
         ui.add_space(14.0);
-        muted(ui, "Choose a source in the folders tab first.");
+        let why = if app.saved.source.is_none() {
+            "Choose your music folder in the folders tab first."
+        } else if app.source_missing {
+            "Can't reach the music folder: is its drive connected? The card waits until it's back."
+        } else if app.busy.is_some() {
+            "Reading the library…"
+        } else {
+            "The music folder holds no songs yet."
+        };
+        muted(ui, why);
         return;
     }
     let sizes = Sizes::compute(app);
@@ -100,9 +109,14 @@ fn sync_row(app: &mut App, ui: &mut Ui) {
         None if w.last_written.is_none() && w.manifest.is_empty() => "nothing written to the card yet".into(),
         None => "the card has what you chose".into(),
     };
+    let unavailable = ready.then(|| app.library_unavailable()).flatten();
     ui.horizontal(|ui| {
         if !ready {
             muted(ui, "choose a destination below to sync");
+            return;
+        }
+        if let Some(why) = unavailable {
+            ui.label(RichText::new(format!("Sync waits: {why}")).color(ink(ui).accent));
             return;
         }
         ui.allocate_ui(vec2(ui.available_width() - 240.0, 0.0), |ui| {
@@ -136,7 +150,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     let connected = w.dest.as_deref().is_some_and(|d| d.exists());
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
-    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none();
+    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable().is_none();
     let frame = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(14, 8));
     frame.show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -283,6 +297,47 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     if device != app.write().options.device {
         app.write_mut().options.device = device;
         app.refresh_on_card();
+    }
+}
+
+/// A Sync that would take most of the setup's songs off the card: say so, and go ahead only on a yes.
+pub fn sync_confirm_dialog(app: &mut App, ui: &mut Ui) {
+    let Some((id, removing, songs)) = app.sync_confirm.clone() else { return };
+    if id != app.write().id {
+        app.sync_confirm = None;
+        return;
+    }
+    let ink = ink(ui);
+    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let mut answer = None;
+    let r = egui::Modal::new(egui::Id::unique("sync confirm")).frame(frame).show(ui.ctx(), |ui| {
+        ui.set_width(520.0f32.min(ui.ctx().content_rect().width() - 80.0));
+        ui.label(RichText::new(format!("Take {removing} of {songs} songs off the card?")).size(18.0).color(ink.text));
+        ui.add_space(6.0);
+        widgets::help(
+            ui,
+            format!(
+                "This Sync removes most of what “{}” put on the card: everything no longer chosen. If you meant to choose less music, go ahead. If the library looks incomplete (a drive not connected, a folder moved), cancel and check it first.",
+                app.write().name
+            ),
+        );
+        ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            if widgets::primary_with(ui, Icon::Sync, "Take them off and sync").clicked() {
+                answer = Some(true);
+            }
+            if widgets::button(ui, "Cancel").clicked() {
+                answer = Some(false);
+            }
+        });
+    });
+    if r.should_close() {
+        answer.get_or_insert(false);
+    }
+    match answer {
+        Some(true) => app.sync_confirmed(),
+        Some(false) => app.sync_confirm = None,
+        None => {}
     }
 }
 

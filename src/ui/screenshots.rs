@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 15] = [
+const TABS: [(Tab, &str); 16] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
@@ -23,6 +23,7 @@ const TABS: [(Tab, &str); 15] = [
     (Tab::Artists, "artists"),
     (Tab::Card, "card"),
     (Tab::Card, "cardowner"),
+    (Tab::Card, "syncconfirm"),
     (Tab::Card, "takeover"),
     (Tab::Card, "playertest"),
     (Tab::Playlists, "playlists"),
@@ -48,7 +49,9 @@ impl Shooter {
         ctx.request_repaint();
         // The "job" shot shows a pretend write, so it doesn't wait for that one.
         let pretend = app.busy.as_ref().is_some_and(|b| b.stop.is_some()) && self.step / 2 < TABS.len() && TABS[self.step.saturating_sub(1) / 2].1 == "job";
-        if app.tracks.is_empty() || (app.busy.is_some() && !pretend) || self.until.is_some_and(|t| Instant::now() < t) {
+        // NEATLIBRARY_SHOT_SOURCE=<missing folder>: the library stays empty; go on once that's known.
+        let waiting = app.tracks.is_empty() && !app.source_missing;
+        if waiting || (app.busy.is_some() && !pretend) || self.until.is_some_and(|t| Instant::now() < t) {
             return;
         }
         if self.survey && app.write_preview.as_ref().is_some_and(|(_, p)| p.foreign > 0) {
@@ -180,6 +183,7 @@ impl Shooter {
                     app.set_tested(s, Some(a));
                 }
             }
+            app.sync_confirm = (TABS[n].1 == "syncconfirm").then(|| (app.write().id.clone(), 4100, 4412));
             if TABS[n].1 == "cardowner" {
                 // Another setup's card where this one writes: the note, and no Sync.
                 if app.saved.writes.len() < 2 {

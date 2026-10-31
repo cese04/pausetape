@@ -251,6 +251,9 @@ pub struct App {
     /// The music folder couldn't be read at the last scan (its drive not connected?). The library
     /// keeps what it had, and work that relies on it waits (`library_unavailable`).
     pub source_missing: bool,
+    /// A Sync that would take most of the setup's songs off the card, waiting for a yes:
+    /// (setup id, songs it removes, songs the setup has there).
+    pub sync_confirm: Option<(String, usize, usize)>,
     /// The naming pattern being typed in the card tab, while it isn't valid yet.
     pub pattern_draft: Option<String>,
     /// The dialog for testing the card's player.
@@ -356,6 +359,7 @@ impl App {
             take_over_open: false,
             adding: None,
             source_missing: false,
+            sync_confirm: None,
             pattern_draft: None,
             player_test_open: false,
             test_card: None,

@@ -67,6 +67,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
     player_test::dialog(app, ui);
+    card::sync_confirm_dialog(app, ui);
     folders::add_dialog(app, ui);
 }
 

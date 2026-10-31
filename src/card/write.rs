@@ -107,6 +107,16 @@ pub fn renamed(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem]) -> Vec<(us
     out
 }
 
+/// (songs a Sync with `plan` would take off the card, songs the setup has there). Songs that
+/// only change name don't count; playlist copies aren't songs here.
+pub fn removing(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem]) -> (usize, usize) {
+    let wanted: HashSet<String> = plan.iter().filter(|p| p.skip.is_none()).map(|p| p.rel.to_string_lossy().to_lowercase()).collect();
+    let moving: HashSet<usize> = renamed(w, tracks, plan).into_iter().map(|(i, _)| i).collect();
+    let songs: Vec<(usize, &Written)> = w.manifest.iter().enumerate().filter(|(_, m)| !w.in_playlists(&m.rel)).collect();
+    let gone = songs.iter().filter(|(i, m)| !moving.contains(i) && !wanted.contains(&m.rel.to_string_lossy().to_lowercase())).count();
+    (gone, songs.len())
+}
+
 /// Move what `renamed` finds to its new name. A copy moves only if its first and last 64 KB are
 /// the library song's. The manifest with the new names, how many moved, and what went wrong.
 fn relocate(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem], dest: &Path) -> (Vec<Written>, usize, Vec<String>) {
@@ -470,6 +480,9 @@ mod tests {
         w.options.pattern = Some("{albumartist} - {album}/{track}. {title}".into());
         let pv = preview(&w, &tracks, &index, &playlists, &card);
         assert_eq!((pv.renamed, pv.to_copy, pv.to_remove.len()), (3, 0, 0));
+        // Renamed isn't removed: nothing to ask about. Choosing nothing would take all three off.
+        assert_eq!(removing(&w, &tracks, &w.plan(&tracks, &index)), (0, 3));
+        assert_eq!(removing(&w, &tracks, &[]), (3, 3));
         let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
         assert!(out.errors.is_empty(), "{:?}", out.errors);
         assert_eq!((out.renamed, out.copied, out.unchanged, out.removed), (3, 0, 4, 0));
