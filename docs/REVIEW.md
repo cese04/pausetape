@@ -24,7 +24,7 @@ reading the code; each says what would happen and where.
 | [R10](#r10) | Medium | "Moved to the Trash" may really delete, on some drives | Windows, Linux |
 | [R11](#r11) | Medium | Playback stops for good when the audio device changes | All |
 | [R12](#r12) | Medium | Every ffmpeg run flashes a console window | Windows |
-| [R25](#r25) | Medium | Playback can stutter while the music drive is busy | All |
+| [R25](#r25) | Medium | Playback can stutter while the music drive is busy (**fixed**) | All |
 | [R13](#r13) | Medium | Plugging in a card doesn't bring up its setup | Windows |
 | [R14](#r14) | Low | Writing tags can't clear a field, shortens dates to the year, and leaves old secondary tags | All |
 | [R15](#r15) | Low | Undoing a tidy can overwrite a file | macOS, Linux |
@@ -213,9 +213,11 @@ decodes the whole song at once as it starts), the callback waits and the sound d
 moment. Reported 2026-10-31: "sometimes the audio sounded clipped", with the music on an external
 USB drive.
 
-*Fix:* decode on the playback thread into a buffer a few seconds ahead of the output, so the
-callback only copies samples; and make the waveform read the song after playback has its head
-start (or read it from the decoded buffer).
+**Fixed 2026-10-31** (`audio/prefetch.rs`): songs are decoded on a thread of their own, up to 8
+seconds ahead of the output, which only takes what's ready. Measured with the `stutter` test, 20
+seconds of a 24-bit song from the external drive while another thread read about 1.1 GB from it:
+read as before, 2 and 6 slices of 10 ms came late (the longest wait 1.9 s and 0.8 s, each an
+audible dropout); through the read-ahead, none (the longest wait under 0.5 ms).
 
 ## Low
 

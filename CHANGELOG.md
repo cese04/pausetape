@@ -509,3 +509,13 @@ Calibre's device view, for music: the library is where you choose what goes on t
   comparison and the sync line count them as renames.
 - The test folder no longer leaves macOS "._" files beside its samples on FAT cards, where a
   player would list them as songs that don't play.
+
+### 38. Code review, and no dropouts during card writes (2026-10-31)
+- [docs/REVIEW.md](docs/REVIEW.md) lists 26 bugs and risks found by reading the whole code base,
+  with what each does, where, and a fix; [TESTING](docs/TESTING.md) §3 has those Windows and
+  Linux testers will meet. Two lose data and come first: starting with the music drive unplugged
+  empties the library database (unsaved corrections included), and a Sync with an empty library
+  removes the setup's songs from the card.
+- Playback no longer drops out while a card write (or a scan) reads the same drive: songs are
+  decoded up to 8 seconds ahead, on a thread of their own. Measured on the external music drive
+  under load: dropouts of up to 1.9 s before, none after.

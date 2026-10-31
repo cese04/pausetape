@@ -91,7 +91,8 @@ src/
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
 ├── audio/             playing music
 │   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI
-│   └── decode.rs      Symphonia or ffmpeg (conversion cache), loudness envelope
+│   ├── decode.rs      Symphonia or ffmpeg (conversion cache), loudness envelope
+│   └── prefetch.rs    decoding a few seconds ahead of the output, so a busy disk isn't heard
 ├── app/               state and the glue between background work and the UI
 │   ├── mod.rs         App, Saved (persisted), Tab, messages, eframe::App
 │   ├── music.rs       scanning, tag corrections, artist decisions, MusicBrainz
@@ -181,7 +182,7 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 55 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 58 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
@@ -191,7 +192,7 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
 `cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
-(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `writes_test_card` (`NEATLIBRARY_TESTCARD=<folder>`), `queue_advances_without_ui`
+(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `writes_test_card` (`NEATLIBRARY_TESTCARD=<folder>`), `stutter` (`NEATLIBRARY_STUTTER=<song>|<song>|<folder>`: playback waits while a folder is read), `queue_advances_without_ui`
 (`NEATLIBRARY_PLAY=<song>`), `survey_a_real_card` (`NEATLIBRARY_SURVEY=<card>:<music folder>`).
 
 ## Conventions

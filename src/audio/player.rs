@@ -74,7 +74,8 @@ impl Queue {
                 Ok(src) => {
                     let total = st.skipped + skipped;
                     *st = Status { len: src.total_duration(), path: Some(path), index: Some(i), skipped: total, ..Default::default() };
-                    player.append(src);
+                    // Decoded ahead on a thread of its own: a busy disk mustn't reach the speakers.
+                    player.append(super::prefetch::Prefetch::new(src));
                     player.play();
                     self.live = true;
                     wake();
