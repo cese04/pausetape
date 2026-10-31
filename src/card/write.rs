@@ -21,6 +21,8 @@ use crate::library::grouping::Index;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WriteProfile {
+    /// Names the setup on the card's label (`card::label`); unlike the name, never changes.
+    pub id: String,
     pub name: String,
     pub dest: Option<PathBuf>,
     pub options: Options,
@@ -40,6 +42,7 @@ pub struct WriteProfile {
 impl Default for WriteProfile {
     fn default() -> Self {
         WriteProfile {
+            id: super::label::new_id(),
             name: "Echo Mini".into(),
             dest: None,
             options: Options::default(),
@@ -163,6 +166,8 @@ pub fn write(
     stop: &AtomicBool,
     mut progress: impl FnMut(Progress),
 ) -> Outcome {
+    // Labelled first, so a write stopped halfway still says whose card it is.
+    let labelled = super::Label::of(w).save(dest).map_err(|e| format!("{e:#}"));
     // Removing first makes room: a choice that fits only once old albums are gone would
     // otherwise fill the card halfway. Playlist files wait for the end, when their names are known.
     let early = if w.prune {
@@ -175,7 +180,8 @@ pub fn write(
     };
     // Clean the macOS files once at the end, after playlists too.
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
-    let r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, stop, &mut progress);
+    let mut r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, stop, &mut progress);
+    r.errors.extend(labelled.err());
     if r.stopped {
         let mut manifest = r.written;
         let mut have: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();

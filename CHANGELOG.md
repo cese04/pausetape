@@ -479,3 +479,16 @@ Calibre's device view, for music: the library is where you choose what goes on t
   E2b).
 - The test folder isn't counted as music the write didn't put on the card, and **take it off
   the card** removes only the files the test wrote.
+
+### 36. Recognising a card (2026-10-31)
+- Every write and take-over puts a small `.neatlibrary` file at the top of the card naming the
+  card setup (and its player), as calibre's `metadata.calibre` does. Players skip it. Setups
+  now have an id for this, which saved setups get when they load.
+- A card plugged in brings up its setup: the app looks at the mounted drives every few seconds,
+  points the setup at where the card is mounted (a renamed card, or "Untitled 1"), and says so.
+  If the active setup's own card is among those plugged in, it stays; while something runs, it
+  only says so.
+- A card that belongs to another setup on this Mac isn't synced or taken over by this one. The
+  card tab says whose it is, with **switch to** it or **use it for this setup** (relabels the
+  card). A card labelled by a setup that isn't on this Mac can be synced: only the setup's own
+  files are ever removed.

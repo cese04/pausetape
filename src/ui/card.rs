@@ -110,7 +110,7 @@ fn sync_row(app: &mut App, ui: &mut Ui) {
                 muted(ui, "card not connected");
                 return;
             }
-            if app.busy.is_none() && widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text("copy what you added, take off what you removed, update what changed").clicked() {
+            if app.busy.is_none() && app.refused_by_label().is_none() && widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text("copy what you added, take off what you removed, update what changed").clicked() {
                 app.run_write();
             }
             if app.busy.is_none() && widgets::button_with(ui, Icon::Compare, "Compare").on_hover_text("look at the card: what would be copied and removed; changes nothing").clicked() {
@@ -132,7 +132,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     let connected = w.dest.as_deref().is_some_and(|d| d.exists());
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
-    let can_sync = connected && pending.is_some() && app.busy.is_none();
+    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none();
     let frame = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(14, 8));
     frame.show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -259,6 +259,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
             app.picker = Some(crate::ui::folders::Picker::Card { browse: None, show_all: false });
         }
     });
+    label_note(app, ui);
     // The player decides what's converted, what's warned about, and how much fits.
     let mut device = app.write().options.device;
     ui.horizontal_wrapped(|ui| {
@@ -278,6 +279,35 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     if device != app.write().options.device {
         app.write_mut().options.device = device;
         app.refresh_on_card();
+    }
+}
+
+/// When the card's label names another setup: whose card it is, and what to do about it.
+fn label_note(app: &mut App, ui: &mut Ui) {
+    let Some(l) = app.card_owner().cloned() else { return };
+    let ink = ink(ui);
+    let this = app.write().name.clone();
+    match app.owner_setup() {
+        Some(i) => {
+            ui.label(RichText::new(format!("This card belongs to “{}” (written {}), so “{this}” won't sync to it or take it over.", l.name, ago(l.written))).color(ink.accent));
+            ui.horizontal_wrapped(|ui| {
+                if widgets::icon_link(ui, Icon::Card, format!("switch to “{}”", l.name)).clicked() {
+                    app.select_write(i);
+                }
+                if widgets::icon_link(ui, Icon::Check, "use it for this setup")
+                    .on_hover_text(format!("relabels the card for “{this}”; “{}” won't sync to it any more, and the files it put there stay", l.name))
+                    .clicked()
+                {
+                    app.claim_card();
+                }
+            });
+        }
+        None => {
+            widgets::help(
+                ui,
+                format!("Last written by NeatLibrary for “{}”, a card setup not on this Mac ({}). Sync makes it “{this}”'s; it only ever removes files “{this}” put there.", l.name, l.device.name()),
+            );
+        }
     }
 }
 

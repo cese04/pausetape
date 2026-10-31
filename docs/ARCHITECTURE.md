@@ -80,6 +80,7 @@ src/
 │   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows,
 │   │                  corrected by test results (Player)
 │   ├── testcard.rs    the test card: a folder of samples per format, a cover, accented titles, a playlist
+│   ├── label.rs       the card's label (.neatlibrary): which card setup a card belongs to
 │   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
@@ -97,6 +98,7 @@ src/
 │   ├── covers.rs      finding covers for albums without one
 │   ├── browse.rs      search facts per album; the album table's rows, order and selection
 │   ├── add.rs         adding music from another folder
+│   ├── cards.rs       noticing cards plugged in by their label; refusing another setup's card
 │   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── playback.rs    play queue, waveform and cover loading
@@ -178,9 +180,9 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 51 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 53 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
-editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, layout plans, copy/move/undo,
+editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash. They use temporary folders and fake audio files,

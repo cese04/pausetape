@@ -2,11 +2,12 @@
 //! `crate::ui`; this module owns the data, starts background work and folds its results back in.
 //!
 //! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `edit` (tags
-//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `writes` (card writes, reorganising, playlists), `playback`, and `events`
+//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `cards` (noticing cards plugged in), `writes` (card writes, reorganising, playlists), `playback`, and `events`
 //! (the per-frame message pump).
 
 mod add;
 mod browse;
+mod cards;
 mod covers;
 mod edit;
 mod events;
@@ -283,6 +284,11 @@ pub struct App {
     /// Library A–Z rail: jump to the first artist under this letter on the next frame.
     pub jump_to: Option<char>,
     pub volumes: Vec<Volume>,
+    /// Drives mounted at the last look, and when that was (`cards`).
+    mounted: HashSet<PathBuf>,
+    last_watch: Option<Instant>,
+    /// The label on the active setup's card, as of the last look.
+    pub dest_label: Option<card::Label>,
     pub card_filter: String,
     pub card_expanded: HashSet<String>,
     /// Inline rename on the card tab: ("artist"/"album", key, text).
@@ -360,6 +366,9 @@ impl App {
             picker: None,
             jump_to: None,
             volumes: card::volumes(),
+            mounted: HashSet::new(),
+            last_watch: None,
+            dest_label: None,
             card_filter: String::new(),
             card_expanded: HashSet::new(),
             card_renaming: None,
@@ -441,6 +450,7 @@ fn plural_files(n: usize) -> String {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll();
+        self.watch_cards();
         #[cfg(debug_assertions)]
         if let Some(mut s) = self.shooter.take() {
             s.tick(self, ui.ctx());

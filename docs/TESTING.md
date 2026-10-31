@@ -230,6 +230,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     there. Try them on the player and tick yes or no; the text at the bottom says what changes.
     Untick a format the player couldn't play and **Compare** converts it. **take it off the card**
     removes only the test's files.
+20c. **Sync** to the card, then look at its top folder (⇧⌘. shows hidden files): `.neatlibrary`
+    names the card setup. Make a second setup (**duplicate**), switch to it: the card tab says the
+    card belongs to the first and offers **switch to** and **use it for this setup**; Sync is gone.
+    Eject the card, switch back to the second setup, plug the card in: within a few seconds the
+    app switches to the first setup and says so.
 
 ### F. Playlists
 21. Create a playlist, add tracks with the **+** at the end of a track row, reorder, include

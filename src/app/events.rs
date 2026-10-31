@@ -98,6 +98,7 @@ impl App {
                     self.write_preview = None;
                     self.volumes = card::volumes();
                     self.refresh_on_card();
+                    self.refresh_label();
                 }
                 Msg::Surveyed(name, s) => {
                     self.busy = None;
@@ -122,6 +123,7 @@ impl App {
                     let cleaned = if out.cleaned > 0 { format!(", {} macOS ._ files removed", out.cleaned) } else { String::new() };
                     self.notice(format!("card taken over: {} songs moved into place, {} other files gathered{deleted}{cleaned}{errors}", out.moved, out.gathered));
                     self.refresh_on_card();
+                    self.refresh_label();
                     self.preview_write();
                 }
                 Msg::ImportedFromCard(mut out) => {
@@ -176,7 +178,8 @@ impl App {
                         // A card with music the app didn't put there, before any write: explain
                         // the take-over once, on its own.
                         let w = &mut self.saved.writes[self.saved.active_write];
-                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered {
+                        let owned = self.dest_label.as_ref().is_some_and(|l| l.id != w.id);
+                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered && !owned {
                             w.take_over_offered = true;
                             self.take_over_open = true;
                         }

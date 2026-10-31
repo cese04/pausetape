@@ -5,6 +5,7 @@ pub mod adopt;
 mod copy;
 mod device;
 mod journal;
+pub mod label;
 mod plan;
 pub mod playlist;
 pub mod testcard;
@@ -13,6 +14,7 @@ mod write;
 
 pub use device::{Device, Player, Results, Sample, Tested};
 pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, up_to_date};
+pub use label::Label;
 pub use journal::{latest_journal, save_problems, undo_latest};
 pub use plan::{AlbumOrder, Chosen, Custom, Options, PlanItem, REPEAT, Rules, Target, Unplayable, album_folder, build_plan, card_size, target, tidy_plan};
 pub use volumes::{SpaceInfo, Volume, space, volumes};

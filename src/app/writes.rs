@@ -62,6 +62,7 @@ impl App {
         self.write_preview = None;
         self.card_survey = None;
         self.refresh_on_card();
+        self.refresh_label();
         self.card_renaming = None;
     }
 
@@ -97,6 +98,7 @@ impl App {
         }
         w.name = format!("{} {}", if copy_current { w.name.as_str() } else { "Card" }, self.saved.writes.len() + 1);
         // A new layout hasn't written anything yet, even if it targets the same card.
+        w.id = card::label::new_id();
         w.manifest.clear();
         w.last_written = None;
         self.saved.writes.push(w);
@@ -133,6 +135,10 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        if let Some(why) = self.refused_by_label() {
+            self.notice(why);
+            return;
+        }
         let plan = w.plan(&self.tracks, &self.index);
         let tracks = self.tracks.clone();
         let ctx = self.ctx.clone();
@@ -156,17 +162,26 @@ impl App {
             self.card_survey = Some((name, survey));
             return;
         }
+        if let Some(why) = self.refused_by_label() {
+            self.notice(why);
+            return;
+        }
+        let label = card::Label::of(self.write());
         let (gather, clean, clean_mac) = (self.gather_on_take_over, self.delete_clutter_on_take_over, self.write().options.clean_mac_files);
         let ctx = self.ctx.clone();
         self.busy = Some(Busy::new("taking over the card", 0));
         self.problems = None;
         self.spawn(move |tx| {
-            let out = card::adopt::take_over(&survey, &dest, gather, clean, clean_mac, &name, |done, total| {
+            let mut out = card::adopt::take_over(&survey, &dest, gather, clean, clean_mac, &name, |done, total| {
                 if done % 10 == 0 || done == total {
                     let _ = tx.send(Msg::WriteProgress(done, total));
                     ctx.request_repaint();
                 }
             });
+            // Taken over, the card is this setup's.
+            if let Err(e) = label.save(&dest) {
+                out.errors.push(format!("{e:#}"));
+            }
             let _ = tx.send(Msg::TookOver(name, Box::new(out)));
         });
     }
@@ -227,6 +242,10 @@ impl App {
         let w = self.write().clone();
         let (Some(dest), Some(source)) = (w.dest.clone(), self.saved.source.clone()) else { return };
         if self.busy.is_some() {
+            return;
+        }
+        if let Some(why) = self.refused_by_label() {
+            self.notice(why);
             return;
         }
         let plan = w.plan(&self.tracks, &self.index);

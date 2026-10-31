@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 14] = [
+const TABS: [(Tab, &str); 15] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
@@ -22,6 +22,7 @@ const TABS: [(Tab, &str); 14] = [
     (Tab::Library, "covers"),
     (Tab::Artists, "artists"),
     (Tab::Card, "card"),
+    (Tab::Card, "cardowner"),
     (Tab::Card, "takeover"),
     (Tab::Card, "playertest"),
     (Tab::Playlists, "playlists"),
@@ -34,11 +35,13 @@ pub struct Shooter {
     until: Option<Instant>,
     /// NEATLIBRARY_SHOT_SURVEY: check the card's own music once the comparison is in (reads only).
     survey: bool,
+    /// The app looks for cards plugged in only once the demo is set up (NEATLIBRARY_SHOT_WATCH).
+    pub watch: bool,
 }
 
 impl Shooter {
     pub fn from_env() -> Option<Self> {
-        std::env::var_os("NEATLIBRARY_SHOT").map(|d| Shooter { dir: d.into(), step: 0, until: None, survey: std::env::var_os("NEATLIBRARY_SHOT_SURVEY").is_some() })
+        std::env::var_os("NEATLIBRARY_SHOT").map(|d| Shooter { dir: d.into(), step: 0, until: None, survey: std::env::var_os("NEATLIBRARY_SHOT_SURVEY").is_some(), watch: false })
     }
 
     pub fn tick(&mut self, app: &mut App, ctx: &egui::Context) {
@@ -136,6 +139,17 @@ impl Shooter {
                 app.write_mut().dest = Some(card);
                 app.room_while_writing = Some((gb * 1e9) as u64);
             }
+            // NEATLIBRARY_SHOT_WATCH=<a mounted scratch volume>: label it for a second setup,
+            // "Road trip", that shares the first one's destination, then look for cards: the
+            // volume should bring "Road trip" up. Writes only the label there.
+            if let Some(vol) = std::env::var_os("NEATLIBRARY_SHOT_WATCH").map(PathBuf::from) {
+                app.write_mut().dest = Some(vol.clone());
+                app.new_write(true);
+                app.write_mut().name = "Road trip".into();
+                let _ = crate::card::Label::of(app.write()).save(&vol);
+                app.select_write(0);
+                self.watch = true;
+            }
             app.preview_write();
         }
         let (n, half) = (self.step / 2, self.step % 2);
@@ -160,6 +174,16 @@ impl Shooter {
                 for (s, a) in [(Sample::Flac, true), (Sample::Aac, false), (Sample::Alac, true), (Sample::Flac384, false), (Sample::Cover, true)] {
                     app.set_tested(s, Some(a));
                 }
+            }
+            if TABS[n].1 == "cardowner" {
+                // Another setup's card where this one writes: the note, and no Sync.
+                if app.saved.writes.len() < 2 {
+                    app.new_write(true);
+                    app.write_mut().name = "Road trip".into();
+                }
+                let other = crate::card::Label::of(&app.saved.writes[1]);
+                app.select_write(0);
+                app.dest_label.get_or_insert(other);
             }
             app.filter = if TABS[n].1 == "covers" { "cover:no".into() } else { filter };
             if TABS[n].1 == "albums" {
