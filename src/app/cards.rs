@@ -1,6 +1,8 @@
 //! Noticing cards: every few seconds the mounted drives are listed, and a card plugged in with a
 //! label (`card::label`) brings up the card setup it belongs to.
 
+use std::path::Path;
+
 use super::*;
 use crate::card::Label;
 
@@ -30,6 +32,10 @@ impl App {
             self.card_arrived(path, label, bring_up, first);
         }
         self.refresh_label();
+        // The music folder's drive is back.
+        if self.source_missing && self.busy.is_none() && self.saved.source.as_deref().is_some_and(Path::is_dir) {
+            self.scan();
+        }
     }
 
     /// Point the card's setup at where it's mounted, and say so. At startup (`first`), a card

@@ -235,6 +235,40 @@ mod tests {
         // `force` ignores the cache.
         let (_, s) = scan(&music, Some(&mut db), true, |_| {});
         assert_eq!((s.cached, s.read), (0, 2));
+
+        // The drive isn't connected: no folder, or an empty mount point where it was. Nothing is
+        // forgotten, corrections included.
+        let tracks = scan(&music, Some(&mut db), false, |_| {}).0;
+        let mut t = tracks[0].clone();
+        t.title = Some("Corrected".into());
+        t.dirty = true;
+        db.save_edits([&t]).unwrap();
+        std::fs::rename(&music, root.join("elsewhere")).unwrap();
+        let (tracks, s) = scan(&music, Some(&mut db), false, |_| {});
+        assert!(s.unreachable && tracks.is_empty());
+        std::fs::create_dir(&music).unwrap();
+        let (tracks, s) = scan(&music, Some(&mut db), false, |_| {});
+        assert!(s.unreachable && tracks.is_empty(), "an empty folder where songs were known");
+        assert_eq!(db.counts(), (2, 1));
+        // Back again: everything as it was.
+        std::fs::remove_dir(&music).unwrap();
+        std::fs::rename(root.join("elsewhere"), &music).unwrap();
+        let (tracks, s) = scan(&music, Some(&mut db), false, |_| {});
+        assert_eq!((tracks.len(), s.cached, s.edits, s.unreachable), (2, 2, 1, false));
+
+        // A folder inside that can't be read: its songs aren't forgotten.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let muse = music.join("Muse");
+            std::fs::create_dir_all(music.join("Blur/Parklife")).unwrap();
+            std::fs::write(music.join("Blur/Parklife/02 - Tracy Jacks.mp3"), b"x").unwrap();
+            std::fs::set_permissions(&muse, std::fs::Permissions::from_mode(0o000)).unwrap();
+            let (tracks, s) = scan(&music, Some(&mut db), false, |_| {});
+            std::fs::set_permissions(&muse, std::fs::Permissions::from_mode(0o755)).unwrap();
+            assert_eq!((tracks.len(), s.unreadable, s.removed, s.unreachable), (1, 1, 0, false));
+            assert_eq!(db.counts(), (3, 1));
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 

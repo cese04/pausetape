@@ -16,6 +16,12 @@ impl App {
                     if Some(&root) != self.saved.source.as_ref() {
                         continue;
                     }
+                    self.source_missing = stats.unreachable;
+                    if stats.unreachable {
+                        // Keep what the library had: nothing was read, and nothing forgotten.
+                        self.notice(format!("Can't reach the music folder ({}): is its drive connected? It's read again as soon as it's back.", root.display()));
+                        continue;
+                    }
                     let device = self.player();
                     let unplayable = tracks.iter().filter(|t| !device.plays(t)).count();
                     let mut parts = vec![format!("{} songs", tracks.len())];
@@ -31,6 +37,9 @@ impl App {
                     }
                     if unplayable > 0 {
                         parts.push(format!("{unplayable} in formats {} can't play", device.short()));
+                    }
+                    if stats.unreadable > 0 {
+                        parts.push(format!("{} couldn't be read; the songs known there were kept", crate::ui::text::plural(stats.unreadable, "folder")));
                     }
                     if let Some(e) = &stats.db_error {
                         parts.push(format!("database unavailable, read everything: {e}"));

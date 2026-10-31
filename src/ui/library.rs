@@ -146,6 +146,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text("pick up files added or changed since").clicked() {
             app.scan();
         }
+        if app.source_missing {
+            ui.label(RichText::new("can't reach this folder: is its drive connected? It's read again once it's back").color(ink.accent));
+        }
         if app.busy.is_none() && widgets::icon_link(ui, Icon::Add, "add music").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
             app.picker = Some(crate::ui::folders::Picker::AddFrom(crate::ui::navigator::Navigator::new(crate::ui::folders::dirs_downloads().as_deref())));
         }
@@ -240,7 +243,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
     ui.add_space(10.0);
     if app.tracks.is_empty() {
-        muted(ui, "Choose the folder that holds your music in the folders tab. It can be as messy as it likes; nothing in it changes unless you ask.");
+        // An unreachable folder is said in red above.
+        if !app.source_missing {
+            muted(ui, "Choose the folder that holds your music in the folders tab. It can be as messy as it likes; nothing in it changes unless you ask.");
+        }
         return;
     }
 

@@ -248,6 +248,9 @@ pub struct App {
     pub take_over_open: bool,
     /// A folder of new music checked against the library, waiting to be added.
     pub adding: Option<Adding>,
+    /// The music folder couldn't be read at the last scan (its drive not connected?). The library
+    /// keeps what it had, and work that relies on it waits (`library_unavailable`).
+    pub source_missing: bool,
     /// The naming pattern being typed in the card tab, while it isn't valid yet.
     pub pattern_draft: Option<String>,
     /// The dialog for testing the card's player.
@@ -328,6 +331,11 @@ impl App {
             saved.writes.push(WriteProfile::default());
         }
         saved.active_write = saved.active_write.min(saved.writes.len() - 1);
+        // Screenshots of a music folder that can't be reached (never saved: see `save`).
+        #[cfg(debug_assertions)]
+        if let Some(dir) = std::env::var_os("NEATLIBRARY_SHOT_SOURCE").filter(|_| std::env::var_os("NEATLIBRARY_SHOT").is_some()) {
+            saved.source = Some(dir.into());
+        }
         let first_run = saved.source.is_none();
         let mut app = App {
             active_playlist: (!saved.playlists.is_empty()).then_some(0),
@@ -347,6 +355,7 @@ impl App {
             album_anchor: None,
             take_over_open: false,
             adding: None,
+            source_missing: false,
             pattern_draft: None,
             player_test_open: false,
             test_card: None,

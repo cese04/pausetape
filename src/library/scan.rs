@@ -28,6 +28,11 @@ pub struct ScanStats {
     /// Unsaved in-app corrections restored from the database.
     pub edits: usize,
     pub db_error: Option<String>,
+    /// The music folder couldn't be read, or held no music where the database knows some (a drive
+    /// not connected, an empty mount point): no tracks, and nothing in the database changed.
+    pub unreachable: bool,
+    /// Folders inside it that couldn't be read. Songs the database knows there are kept.
+    pub unreadable: usize,
 }
 
 pub fn mtime_of(meta: &std::fs::Metadata) -> u64 {
@@ -39,6 +44,12 @@ pub fn mtime_of(meta: &std::fs::Metadata) -> u64 {
 /// re-reads every file. Calls `progress` with the number of files seen.
 pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: impl FnMut(usize)) -> (Vec<Track>, ScanStats) {
     let mut stats = ScanStats::default();
+    // A folder that isn't there must never read as an empty library: that would forget every
+    // song, and the corrections waiting to be written into them.
+    if std::fs::read_dir(root).is_err() {
+        stats.unreachable = true;
+        return (Vec::new(), stats);
+    }
     let mut cached = match db.as_deref().map(|d| d.tracks_under(root)) {
         Some(Ok(c)) => c,
         Some(Err(e)) => {
@@ -56,6 +67,7 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
         None => Default::default(),
     };
 
+    let known = cached.len();
     let mut raw: Vec<Track> = Vec::new();
     let mut fresh: Vec<Track> = Vec::new();
     let mut sheets: Vec<PathBuf> = Vec::new();
@@ -63,7 +75,11 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
         // Skip hidden entries, including macOS "._" AppleDouble files on FAT volumes.
         e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')
     });
-    for entry in entries.flatten() {
+    for entry in entries {
+        let Ok(entry) = entry else {
+            stats.unreadable += 1;
+            continue;
+        };
         if !entry.file_type().is_file() {
             continue;
         }
@@ -97,8 +113,14 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
         }
     }
 
-    // What's left in `cached` was not found on disk any more.
-    let gone: Vec<String> = cached.into_keys().collect();
+    // An empty mount point where the drive should be (or the drive gone mid-walk): change nothing.
+    if raw.is_empty() && known > 0 {
+        stats.unreachable = true;
+        return (Vec::new(), stats);
+    }
+    // What's left in `cached` was not found on disk any more, unless part of the folder couldn't
+    // be read: then it may well still be there.
+    let gone: Vec<String> = if stats.unreadable == 0 { cached.into_keys().collect() } else { Vec::new() };
     stats.removed = gone.len();
     if let Some(db) = db.as_deref_mut()
         && let Err(e) = db.update(&fresh, &gone)
