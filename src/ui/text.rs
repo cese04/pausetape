@@ -1,11 +1,26 @@
 //! Words and numbers as shown to the user: durations, sizes, plurals, shortened names, and
-//! the notes about formats the Echo Mini can't play.
+//! the notes about formats the card's player can't play.
 
 use std::time::Duration;
+
+use crate::card::Device;
 
 pub fn duration(d: Duration) -> String {
     let s = d.as_secs();
     if s >= 3600 { format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60) } else { format!("{}:{:02}", s / 60, s % 60) }
+}
+
+/// "8,192".
+pub fn count(n: usize) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 pub fn bytes(n: u64) -> String {
@@ -17,30 +32,28 @@ pub fn bytes(n: u64) -> String {
     }
 }
 
-/// Why a file is flagged, for tooltips.
-pub fn format_note(t: &crate::library::Track) -> Option<String> {
-    if t.on_recho() {
+/// Why a file is flagged for the card's player, for tooltips.
+pub fn format_note(t: &crate::library::Track, device: Device) -> Option<String> {
+    if device.plays(t) {
         return None;
     }
-    let label = t.format_label();
+    let (label, on) = (t.format_label(), device.short());
     if !t.native() && !t.ffmpeg_can_decode() {
-        return Some(format!("{label}: no decoder exists for this format yet, here or on the Echo Mini. It's still organised with the rest."));
+        return Some(format!("{label}: no decoder exists for this format yet, here or on {on}. It's still organised with the rest."));
     }
     Some(match (t.native(), crate::audio::ffmpeg().is_some()) {
-        (true, _) => format!("{label}: plays here, but the Echo Mini (RECHO) plays FLAC, MP3 and WAV only, so a card write converts it."),
-        (false, true) => format!(
-            "{label}: plays here by converting it with ffmpeg first (surround is mixed down to stereo). The Echo Mini (RECHO) won't play it as it is, so a card write converts it."
-        ),
-        (false, false) => format!("{label}: needs ffmpeg to play here (brew install ffmpeg). The Echo Mini (RECHO) won't play it either."),
+        (true, _) => format!("{label}: plays here, but not on {on}, so a card write converts it. {}", device.plays_text()),
+        (false, true) => format!("{label}: plays here by converting it with ffmpeg first (surround is mixed down to stereo). It won't play on {on} as it is, so a card write converts it."),
+        (false, false) => format!("{label}: needs ffmpeg to play here (brew install ffmpeg). It won't play on {on} either."),
     })
 }
 
 /// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play".
-pub fn format_badge(t: &crate::library::Track) -> String {
+pub fn format_badge(t: &crate::library::Track, device: Device) -> String {
     let state = match (t.plays_here(), t.ffmpeg_can_decode()) {
-        (true, _) => "not on RECHO",
-        (false, true) => "needs ffmpeg",
-        (false, false) => "can't play",
+        (true, _) => format!("not on {}", device.short()),
+        (false, true) => "needs ffmpeg".into(),
+        (false, false) => "can't play".into(),
     };
     format!("{} · {state}", t.format_label())
 }

@@ -75,8 +75,8 @@ fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
         muted(ui, meta.join(" · "));
         if st.converting {
             ui.label(RichText::new("converting with ffmpeg…").size(12.5).color(ink.muted));
-        } else if let Some(note) = text::format_note(t) {
-            ui.label(RichText::new(text::format_badge(t)).size(12.5).color(ink.accent)).on_hover_text(note);
+        } else if let Some(note) = text::format_note(t, app.device()) {
+            ui.label(RichText::new(text::format_badge(t, app.device())).size(12.5).color(ink.accent)).on_hover_text(note);
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             muted(ui, format!("{} / {}", text::duration(st.pos), text::duration(len)));
@@ -154,7 +154,7 @@ fn transport(app: &mut App, ui: &mut Ui, st: &Status) {
 }
 
 /// When the cover shown comes from an image file rather than the songs' tags, offer to add it:
-/// the Echo Mini shows embedded covers, not image files in the folder.
+/// players (the Echo Mini's stock firmware among them) show embedded covers, not image files in the folder.
 fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     let Some(ti) = app.current() else { return };
     let t = &app.tracks[ti];
@@ -172,7 +172,7 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
         return;
     }
     muted(ui, format!("cover from {}, not in the songs' tags ·", text::shorten(&name, 28)));
-    let hint = "Embed this image as the cover of the album's songs (resized to 600 px JPEG). Players like the Echo Mini show embedded covers, not image files in the folder.";
+    let hint = "Embed this image as the cover of the album's songs (resized to 600 px JPEG). Most players, the Echo Mini's stock firmware among them, show embedded covers, not image files in the folder.";
     if super::widgets::link(ui, "add it").on_hover_text(hint).clicked() {
         app.add_cover(ti, file);
     }

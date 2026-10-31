@@ -447,3 +447,20 @@ Calibre's device view, for music: the library is where you choose what goes on t
   copies, left out) and other versions of songs it has (optional); **Add them** copies the new
   ones, with covers and booklets, into `Added` in the music folder, then rescans. The folder
   itself isn't changed.
+
+### 34. More than one player: RECHO or the stock firmware (2026-10-30)
+- Each card setup now says which **player** it's for, next to its destination in the card tab:
+  *Echo Mini · RECHO* (the default, so existing setups are unchanged) or *Echo Mini · stock
+  firmware*. This is the first step of [NEXT](docs/NEXT.md) part E: device profiles, the way
+  calibre has a driver per reader.
+- The player decides what's converted. The stock firmware plays FLAC, MP3, WAV, APE, AAC (M4A),
+  Ogg Vorbis and WMA, so those go to the card as they are; ALAC, Opus, AIFF, WavPack and Dolby
+  are still converted. On this library: 701 songs converted instead of RECHO's 871.
+- Warnings, format badges, album notes and the scan summary name the chosen player ("won't play
+  on RECHO" / "on the Echo Mini").
+- For the stock firmware the card tab warns above 8,192 songs (playlist copies included), and
+  the playlists tab warns that a player listing songs by tags shows each playlist copy as a
+  second song.
+- Cover hints no longer say the Echo Mini shows covers under RECHO: RECHO's site says it shows
+  none. Covers matter for this app's player, the stock firmware and most other players.
+- The stock firmware's facts come from reviews and haven't been checked on a player yet.

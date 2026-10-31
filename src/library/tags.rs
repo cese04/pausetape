@@ -52,7 +52,7 @@ pub fn write_tags(t: &Track, path: &Path) -> Result<()> {
 
 /// Give `dst` the front cover of `src` (embedded, else the image beside it) when `dst` has none:
 /// files made by ffmpeg (converted, or cut from an album file) carry no pictures over, and the
-/// Echo Mini shows embedded covers, not image files.
+/// players show embedded covers, not image files.
 pub fn carry_cover(src: &Path, dst: &Path) -> Result<()> {
     let mut file = lofty::read_from_path(dst).with_context(|| format!("reading {}", dst.display()))?;
     if file.tags().iter().any(|t| t.pictures().iter().any(|p| p.pic_type() == PictureType::CoverFront)) {

@@ -34,7 +34,8 @@ pub struct AlbumRow {
     pub card: CardFacts,
     pub cover: bool,
     pub edited: bool,
-    pub plays_on_recho: bool,
+    /// Every song plays on the card's player as it is.
+    pub plays_on_device: bool,
 }
 
 impl App {
@@ -80,6 +81,7 @@ impl App {
                     continue;
                 }
                 let (format, quality) = describe(&self.tracks, &al.tracks);
+                let device = self.device();
                 rows.push(AlbumRow {
                     artist: ai,
                     album: bi,
@@ -94,7 +96,7 @@ impl App {
                     card: facts.card,
                     cover: facts.cover,
                     edited: facts.tracks.iter().any(|t| t.dirty),
-                    plays_on_recho: facts.tracks.iter().all(|t| t.on_recho()),
+                    plays_on_device: facts.tracks.iter().all(|t| device.plays(t)),
                 });
             }
         }

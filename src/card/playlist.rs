@@ -53,7 +53,7 @@ pub struct Planned<'a> {
 
 /// Where each playlist's copies go: `<folder>/<Name>/NN - Artist - Title.ext`.
 /// Returns, per playlist, its folder (relative) and its copies; missing tracks are skipped.
-/// Tracks RECHO can't play are converted, copied or left out as `rules` say (numbering closes
+/// Tracks the player can't play are converted, copied or left out as `rules` say (numbering closes
 /// the gaps).
 pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, folder: &str, rules: Rules) -> Vec<(PathBuf, Vec<Planned<'a>>, usize)> {
     let root = PathBuf::from(sanitize_component(folder, 80));
@@ -187,14 +187,14 @@ mod tests {
             .collect();
         let mut pl = Playlist { name: "Road: Trip".into(), tracks: vec![tracks[1].path.clone(), tracks[0].path.clone()] };
         let dest = root.join("card");
-        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, cd_quality: false, lossless_mp3: false }, &[], |_, _| {});
+        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, ..Default::default() }, &[], |_, _| {});
         assert_eq!((r.copied, r.errors.len(), r.written.len()), (2, 0, 3));
         let dir = dest.join("_Playlists/Road - Trip");
         assert!(dir.join("01 - X - B.mp3").exists() && dir.join("02 - X - A.mp3").exists());
         assert!(dest.join("_Playlists/Road - Trip.m3u8").exists());
 
         pl.tracks.pop();
-        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, cd_quality: false, lossless_mp3: false }, &[], |_, _| {});
+        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, ..Default::default() }, &[], |_, _| {});
         assert_eq!((r.unchanged, r.removed), (1, 1));
         fs::remove_dir_all(root).unwrap();
     }

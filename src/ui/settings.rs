@@ -83,7 +83,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
             None => {
                 ui.label(RichText::new("not found").color(ink(ui).accent));
-                help(ui, "Install it (brew install ffmpeg) to play Dolby, Opus, APE, WavPack and WMA files here, and to convert songs the Echo Mini can't play when writing to the card.");
+                help(ui, "Install it (brew install ffmpeg) to play Dolby, Opus, APE, WavPack and WMA files here, and to convert songs the card's player can't play when writing to it.");
             }
         });
 

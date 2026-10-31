@@ -13,7 +13,7 @@ use super::icons::Icon;
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
 use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
-use crate::card::{AlbumOrder, Rules, Target, Unplayable, album_folder, card_size, target};
+use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, album_folder, card_size, target};
 use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -259,6 +259,21 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
             app.picker = Some(crate::ui::folders::Picker::Card { browse: None, show_all: false });
         }
     });
+    // The player decides what's converted, what's warned about, and how much fits.
+    let mut device = app.device();
+    ui.horizontal_wrapped(|ui| {
+        caps(ui, "player");
+        egui::ComboBox::from_id_salt("player").selected_text(device.name()).show_ui(ui, |ui| {
+            for d in Device::ALL {
+                ui.selectable_value(&mut device, d, d.name()).on_hover_text(d.about());
+            }
+        });
+        muted(ui, device.about());
+    });
+    if device != app.device() {
+        app.write_mut().options.device = device;
+        app.refresh_on_card();
+    }
 }
 
 fn ago(t: u64) -> String {
@@ -277,6 +292,8 @@ struct Sizes {
     album: HashMap<String, u64>,
     selected: u64,
     playlists: u64,
+    /// Songs the write would put on the card, playlist copies included.
+    songs: usize,
     /// What writing hi-res songs at CD quality would save on the selected music, when the
     /// write doesn't already.
     cd_saving: u64,
@@ -289,7 +306,7 @@ struct Sizes {
 impl Sizes {
     fn compute(app: &App) -> Self {
         let w = app.write();
-        let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0, cd_saving: 0, mp3_saving: 0, largest: Vec::new() };
+        let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0, songs: 0, cd_saving: 0, mp3_saving: 0, largest: Vec::new() };
         let rules = w.options.rules();
         let cd = Rules { cd_quality: true, ..rules };
         let mp3 = Rules { lossless_mp3: true, ..rules };
@@ -305,6 +322,7 @@ impl Sizes {
                 }
                 if w.custom.includes(ck, al, &a.albums) {
                     s.selected += bytes;
+                    s.songs += al.tracks.iter().filter(|&&i| target(&app.tracks[i], rules).is_ok()).count();
                     match s.largest.last_mut() {
                         Some((a, n, b)) if *a == ai => (*n, *b) = (*n + 1, *b + bytes),
                         _ => s.largest.push((ai, 1, bytes)),
@@ -322,10 +340,9 @@ impl Sizes {
         s.largest.sort_by_key(|&(_, _, bytes)| std::cmp::Reverse(bytes));
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        s.playlists = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules)
-            .iter()
-            .flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target)))
-            .sum();
+        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules);
+        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target))).sum();
+        s.songs += planned.iter().map(|(_, copies, _)| copies.len()).sum::<usize>();
         s
     }
 }
@@ -348,6 +365,13 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         }
         muted(ui, s);
     });
+    let device = w.options.device;
+    if let Some(max) = device.max_songs()
+        && sizes.songs > max
+    {
+        let copies = if sizes.playlists > 0 { ", playlist copies included" } else { "" };
+        ui.label(RichText::new(format!("{} chosen{copies}, but {} lists at most {}: the rest won't show up on the player.", plural(sizes.songs, "song"), device.name(), text::count(max))).color(ink.accent).size(13.0));
+    }
     let Some((_, room)) = space else { return };
     let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.name).map(|(_, s)| s.used_bytes()).unwrap_or(0);
     if adoptable > 0 {
@@ -612,7 +636,8 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
 }
 
 fn layout_options(app: &mut App, ui: &mut Ui) {
-    let off_recho = crate::library::non_recho_summary(&app.tracks);
+    let device = app.device();
+    let unplayable = crate::library::unplayable_summary(&app.tracks, |t| device.plays(t));
     let mut changed = false;
     let ink = ink(ui);
     let w = &mut app.saved.writes[app.saved.active_write];
@@ -636,8 +661,8 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
             ui.end_row();
         });
     });
-    if let Some((n, formats)) = &off_recho {
-        widgets::setting(ui, "Formats RECHO can't play", |ui| {
+    if let Some((n, formats)) = &unplayable {
+        widgets::setting(ui, &format!("Formats {} can't play", device.short()), |ui| {
             ui.label(RichText::new(format!("{}: {formats}", plural(*n, "song"))).color(ink.text));
             ui.add_space(2.0);
             changed |= ui
@@ -648,7 +673,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                 // What converting would make of them, and what still can't go (no ffmpeg, AC-4…).
                 let (mut flac, mut mp3, mut left) = (0, 0, BTreeMap::<&str, usize>::new());
                 let rules = Rules { unplayable: Unplayable::Convert, ..w.options.rules() };
-                for t in app.tracks.iter().filter(|t| !t.on_recho() && t.cue.is_none()) {
+                for t in app.tracks.iter().filter(|t| !device.plays(t) && t.cue.is_none()) {
                     match target(t, rules) {
                         Ok(Target::Flac | Target::FlacCd) => flac += 1,
                         Ok(Target::Mp3) => mp3 += 1,
@@ -682,9 +707,11 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                 theme::warning_frame(ui).show(ui, |ui| {
                     ui.label(
                         RichText::new(format!(
-                            "{} will be copied but won't play on the Echo Mini: RECHO plays FLAC, MP3 and WAV only. They'll take {} of space and show up in folders as files that do nothing.",
+                            "{} will be copied but won't play on {}. {} They'll take {} of space and show up as files that do nothing.",
                             plural(*n, "file"),
-                            text::bytes(app.tracks.iter().filter(|t| !t.on_recho()).map(|t| t.size).sum())
+                            device.short(),
+                            device.plays_text(),
+                            text::bytes(app.tracks.iter().filter(|t| !device.plays(t)).map(|t| t.size).sum())
                         ))
                         .color(ink.accent),
                     );
@@ -843,16 +870,17 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(12.5).color(ink.muted)).on_hover_text(hover);
                 }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
-                // Songs RECHO can't read as they are: converted, copied anyway, or left out.
-                let fates: Vec<Result<Target, &str>> = al.tracks.iter().map(|&i| &app.tracks[i]).filter(|t| !t.on_recho() && t.cue.is_none()).map(|t| target(t, w.options.rules())).collect();
+                // Songs the player can't read as they are: converted, copied anyway, or left out.
+                let device = w.options.device;
+                let fates: Vec<Result<Target, &str>> = al.tracks.iter().map(|&i| &app.tracks[i]).filter(|t| !device.plays(t) && t.cue.is_none()).map(|t| target(t, w.options.rules())).collect();
                 let converted = fates.iter().filter(|f| matches!(f, Ok(Target::Flac | Target::FlacCd | Target::Mp3))).count();
                 let copied = fates.iter().filter(|f| matches!(f, Ok(Target::Copy))).count();
                 let left: Vec<&str> = al.tracks.iter().filter_map(|&i| target(&app.tracks[i], w.options.rules()).err()).collect();
                 if converted > 0 {
-                    muted(ui, format!("{converted} converted")).on_hover_text("RECHO plays FLAC, MP3 and WAV only; these are converted on the way (lossless to FLAC, the rest to MP3 320)");
+                    muted(ui, format!("{converted} converted")).on_hover_text(format!("{} These are converted on the way (lossless to FLAC, the rest to MP3 320).", device.plays_text()));
                 }
                 if copied > 0 {
-                    ui.label(RichText::new(format!("{copied} won't play")).size(12.5).color(ink.accent)).on_hover_text("copied as they are, but RECHO plays FLAC, MP3 and WAV only; change this under layout below");
+                    ui.label(RichText::new(format!("{copied} won't play")).size(12.5).color(ink.accent)).on_hover_text(format!("copied as they are, though they won't play on {}; change this under options below", device.short()));
                 }
                 if let Some(why) = left.first() {
                     ui.label(RichText::new(format!("{} left out", left.len())).size(12.5).color(ink.accent)).on_hover_text(*why);

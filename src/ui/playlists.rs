@@ -17,10 +17,14 @@ use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
+    let device = app.device();
     muted(
         ui,
-        "RECHO has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is exported as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware.",
+        "The Echo Mini has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is exported as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware.",
     );
+    if device.browses_by_tags() {
+        ui.label(RichText::new(playlist_copies_warning(device)).size(13.0).color(ink.accent));
+    }
     ui.add_space(8.0);
     // Playlists hold track ids: a song inside an album file has its own ("…/Album.flac#03").
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
@@ -88,8 +92,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             Some(t) => {
                                 ui.label(t.display_title());
                                 muted(ui, t.artist.as_deref().unwrap_or(""));
-                                if let Some(note) = text::format_note(t) {
-                                    ui.label(RichText::new(text::format_badge(t)).size(12.0).color(ink.accent)).on_hover_text(note);
+                                if let Some(note) = text::format_note(t, device) {
+                                    ui.label(RichText::new(text::format_badge(t, device)).size(12.0).color(ink.accent)).on_hover_text(note);
                                 }
                             }
                             None => {
@@ -139,3 +143,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
 }
 
+
+/// A player that lists songs from their tags also lists a playlist's copies.
+pub fn playlist_copies_warning(device: crate::card::Device) -> String {
+    format!("{} lists songs by their tags, so each copy also shows up as a second song under its artist.", device.name())
+}

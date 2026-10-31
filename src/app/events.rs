@@ -16,7 +16,8 @@ impl App {
                     if Some(&root) != self.saved.source.as_ref() {
                         continue;
                     }
-                    let unplayable = tracks.iter().filter(|t| !t.on_recho()).count();
+                    let device = self.device();
+                    let unplayable = tracks.iter().filter(|t| !device.plays(t)).count();
                     let mut parts = vec![format!("{} songs", tracks.len())];
                     if stats.cached > 0 {
                         parts.push(format!("{} unchanged (from the library database)", plural_files(stats.cached)));
@@ -29,7 +30,7 @@ impl App {
                         parts.push(format!("{} unsaved corrections restored", stats.edits));
                     }
                     if unplayable > 0 {
-                        parts.push(format!("{unplayable} in formats RECHO can't play"));
+                        parts.push(format!("{unplayable} in formats {} can't play", device.short()));
                     }
                     if let Some(e) = &stats.db_error {
                         parts.push(format!("database unavailable, read everything: {e}"));

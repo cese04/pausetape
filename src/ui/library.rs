@@ -14,6 +14,7 @@ use super::theme::{self, ink};
 use super::widgets::{self, caps, link, muted, truncated};
 use super::ROW_H;
 use crate::app::{App, Lookup};
+use crate::card::Device;
 use crate::library::Track;
 
 /// Longest folder path shown before it's shortened with "…" in the middle.
@@ -60,7 +61,7 @@ impl Mark {
 /// A track row painted directly so columns line up like a table without any grid lines.
 /// `repeat`: an extra copy of a song the album already has. `selected`: chosen for editing tags.
 #[allow(clippy::too_many_arguments)]
-fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, device: Device, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -82,7 +83,7 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
     if show_artist && let Some(a) = &t.artist {
         title = format!("{title}  ·  {a}");
     }
-    let right_cols = if t.on_recho() && !repeat { 130.0 } else { 250.0 };
+    let right_cols = if device.plays(t) && !repeat { 130.0 } else { 250.0 };
     let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - 44.0 - right_cols);
     p.galley(egui::pos2(rect.left() + 44.0, y - galley.size().y / 2.0), galley, ink.text);
 
@@ -91,9 +92,9 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
     x -= 56.0;
     if repeat {
         p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(12.0), ink.accent);
-    } else if !t.on_recho() {
+    } else if !device.plays(t) {
         // A small outlined badge: the format, and what it means for the player.
-        let label = text::format_badge(t);
+        let label = text::format_badge(t, device);
         let g = ui.painter().layout_no_wrap(label, FontId::proportional(11.5), ink.accent);
         let badge = egui::Rect::from_min_size(egui::pos2(x - g.size().x - 8.0, y - g.size().y / 2.0 - 2.0), g.size() + vec2(8.0, 4.0));
         p.rect_stroke(badge, 3.0, Stroke::new(0.8, ink.accent), egui::StrokeKind::Inside);
@@ -110,7 +111,7 @@ fn track_row(ui: &mut Ui, t: &Track, number: &str, show_artist: bool, playing: b
         }
         added = r.clicked();
     }
-    let resp = match text::format_note(t) {
+    let resp = match text::format_note(t, device) {
         Some(note) => resp.on_hover_text(note),
         None if repeat => resp.on_hover_text(format!("Another file in this album is the same song (same number, size and length). The card gets it once.\n{}", t.path.display())),
         None => resp,
@@ -125,6 +126,7 @@ fn album_minutes(tracks: &[Track], idxs: &[usize]) -> String {
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
+    let device = app.device();
     // The music folder and what's in it.
     ui.horizontal_wrapped(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
@@ -197,7 +199,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let coverless = app.albums_without_cover().len();
         if coverless > 0
             && widgets::chip(ui, Icon::Image, format!("{} without a cover", plural(coverless, "album")), ink.text)
-                .on_hover_text("The Echo Mini shows covers embedded in the songs. Click to show only these albums, and find covers for them.")
+                .on_hover_text(covers_hint(device, "Click to show only these albums, and find covers for them."))
                 .clicked()
         {
             app.filter = "cover:no".into();
@@ -209,25 +211,29 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             app.tab = crate::app::Tab::Artists;
         }
     });
-    if let Some((n, formats)) = crate::library::non_recho_summary(&app.tracks) {
+    if let Some((n, formats)) = crate::library::unplayable_summary(&app.tracks, |t| device.plays(t)) {
         ui.add_space(6.0);
         let collapsed = app.saved.format_note_collapsed;
         theme::warning_frame(ui).show(ui, |ui| {
             ui.set_max_width(ui.available_width() - RAIL_W - 40.0);
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(format!("{} in formats the Echo Mini can't play: {formats}", plural(n, "song"))).color(ink.accent));
+                ui.label(RichText::new(format!("{} in formats {} can't play: {formats}", plural(n, "song"), device.short())).color(ink.accent));
                 if link(ui, if collapsed { "why?" } else { "hide" }).clicked() {
                     app.saved.format_note_collapsed = !collapsed;
                 }
             });
             if !collapsed {
+                let here = if crate::audio::ffmpeg().is_some() {
+                    "Here, AAC, ALAC, AIFF and Ogg play directly; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA by converting with ffmpeg first, in stereo; Dolby AC-4 has no decoder yet."
+                } else {
+                    "AAC, ALAC, AIFF and Ogg still play here; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg (brew install ffmpeg)."
+                };
                 muted(
                     ui,
-                    if crate::audio::ffmpeg().is_some() {
-                        "RECHO plays FLAC, MP3 and WAV only. Here, AAC, ALAC, AIFF and Ogg directly; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA by converting with ffmpeg first, in stereo; Dolby AC-4 has no decoder yet. On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab."
-                    } else {
-                        "RECHO plays FLAC, MP3 and WAV only. AAC, ALAC, AIFF and Ogg still play here; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg (brew install ffmpeg). On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab."
-                    },
+                    format!(
+                        "{} {here} On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab, where the player can be changed too.",
+                        device.plays_text()
+                    ),
                 );
             }
         });
@@ -388,11 +394,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 meta = format!("edition {} of {} · {} · {meta}", e.rank + 1, e.count, e.format);
                             }
                             let (mark, status) = album_status(app, ck, artist, al);
-                            let off = al.tracks.iter().filter(|&&i| !app.tracks[i].on_recho()).count();
+                            let off = al.tracks.iter().filter(|&&i| !device.plays(&app.tracks[i])).count();
                             let off_text = match off {
                                 0 => String::new(),
-                                n if n == al.tracks.len() => "won't play on RECHO".to_string(),
-                                n => format!("{n} won't play on RECHO"),
+                                n if n == al.tracks.len() => format!("won't play on {}", device.short()),
+                                n => format!("{n} won't play on {}", device.short()),
                             };
                             // The title gets whatever the counts, warning and the album's commands leave.
                             let no_cover = app.lacks_cover(al);
@@ -442,7 +448,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 }
                                 if no_cover
                                     && app.busy.is_none()
-                                    && widgets::icon_link(ui, Icon::Image, "find cover").on_hover_text("No cover in the songs, which is what the Echo Mini shows. Looks in the album's folder, then on the Cover Art Archive.").clicked()
+                                    && widgets::icon_link(ui, Icon::Image, "find cover").on_hover_text(covers_hint(device, "No cover in the songs. Looks in the album's folder, then on the Cover Art Archive.")).clicked()
                                 {
                                     actions.push(Action::FindCovers(vec![(ai, bi)]));
                                 }
@@ -479,7 +485,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             };
                             let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
                             let selected = app.selected.contains(&ti);
-                            let (r, add) = track_row(ui, t, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
+                            let (r, add) = track_row(ui, t, device, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
                             if r.clicked() && mods.command {
                                 actions.push(Action::Select(ti));
                             } else if r.clicked() && mods.shift {
@@ -597,6 +603,16 @@ fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::lib
             trash();
         }
     });
+}
+
+/// What a missing cover means on the card's player, then `then`.
+fn covers_hint(device: Device, then: &str) -> String {
+    let shows = if device.shows_covers() {
+        format!("{} shows covers embedded in the songs.", device.name())
+    } else {
+        format!("{} shows no covers, but this app's player and most others show the ones embedded in the songs.", device.short())
+    };
+    format!("{shows} {then}")
 }
 
 /// Songs the album holds twice: how many, what they take, and a way to bin the extra copies.

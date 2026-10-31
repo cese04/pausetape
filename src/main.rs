@@ -1,5 +1,6 @@
-//! NeatLibrary: organise a music collection into the Artist / Album / Track folders the
-//! RECHO firmware for the Snowsky Echo Mini browses, and listen to it on the way.
+//! NeatLibrary: organise a music collection, write it to SD cards in the Artist / Album / Track
+//! folders a portable player browses (the Snowsky Echo Mini, with RECHO or its own firmware),
+//! and listen to it on the way.
 
 mod app;
 mod audio;

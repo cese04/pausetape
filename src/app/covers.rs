@@ -1,7 +1,7 @@
 //! Covers for albums without one: an image already in the album's folder, else the front cover
 //! of the MusicBrainz release that matches the album, from the Cover Art Archive. Found covers
-//! are corrections like edited tags: embedded in card copies at the next Sync (the Echo Mini
-//! shows only embedded covers), and in the music files with "write corrected tags".
+//! are corrections like edited tags: embedded in card copies at the next Sync (players show
+//! embedded covers, not images beside the songs), and in the music files with "write corrected tags".
 
 use super::*;
 use crate::musicbrainz::CoverJob;
@@ -20,7 +20,7 @@ pub struct FoundCover {
 }
 
 impl App {
-    /// The album has no cover the Echo Mini would show: none embedded, none waiting to be.
+    /// The album has no cover a player would show: none embedded, none waiting to be.
     pub fn lacks_cover(&self, al: &AlbumNode) -> bool {
         al.tracks.iter().all(|&i| !self.tracks[i].embedded_cover && self.tracks[i].cover.is_none())
     }

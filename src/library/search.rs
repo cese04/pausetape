@@ -10,7 +10,7 @@ pub enum Filter {
     Format(String),
     Quality(Quality),
     Card(OnCard),
-    /// Has a cover the Echo Mini shows (embedded, or waiting to be).
+    /// Has a cover players show (embedded, or waiting to be).
     Cover(bool),
     /// Released in this range, both ends included.
     Year(Option<u16>, Option<u16>),

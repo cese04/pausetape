@@ -37,7 +37,7 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    or separate same-name albums. Songs an album holds twice (same number, size and length)
    are its `repeats`; the plan leaves them out.
    Result: `Index` = clusters, suggestions, and `artists → albums → track indices`.
-3. **Plan** (`card/plan.rs`): `Options` (album order, what to do with formats RECHO can't play,
+3. **Plan** (`card/plan.rs`): `Options` (the player, `card/device.rs`; album order, what to do with formats it can't play,
    …) + `Custom` (what the user chose: whole artists and single albums, `Chosen`; editions,
    names, order) → list of
    `PlanItem { track, rel path, skip reason, target }`, FAT-safe and collision-free
@@ -77,6 +77,7 @@ src/
 │   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
 │   └── search.rs      the search box: words and field:value terms (format:, card:, cover:…)
 ├── card/              putting music on the SD card (and tidying the music folder)
+│   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows
 │   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
@@ -173,9 +174,9 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 48 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 49 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
-editions and same-name albums (which edition a write uses, which copies another covers), which formats play where, layout plans, copy/move/undo,
+editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, and on each player), layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash. They use temporary folders and fake audio files,

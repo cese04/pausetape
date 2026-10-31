@@ -221,6 +221,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     time left. **Stop**: it says "stopping…", then the message says what was copied. **Sync**
     again: it carries on (what's done is unchanged) and finishes with the playlists.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
+20a. Card tab › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
+    converted (AAC, APE, WMA and Ogg go as they are), and the library's format note and badges
+    say "the Echo Mini" instead of "RECHO". Switch back to RECHO and the counts return.
 
 ### F. Playlists
 21. Create a playlist, add tracks with the **+** at the end of a track row, reorder, include

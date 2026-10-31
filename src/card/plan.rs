@@ -1,6 +1,6 @@
 //! The layout plan: which file goes where on the card (or in a tidied music folder).
 //!
-//! RECHO sorts entries by name, so ordering is encoded in names: albums get a year prefix
+//! RECHO (the Echo Mini firmware this began with) sorts entries by name, so ordering is encoded in names: albums get a year prefix
 //! ("1997 - OK Computer") or a custom position ("02 - OK Computer"), and tracks a zero-padded
 //! number ("1-03 - Title.flac" on multi-disc sets).
 
@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use super::Device;
 use crate::library::Track;
 use crate::library::grouping::{AlbumNode, Index};
 use crate::library::names::sanitize_component;
@@ -24,7 +25,7 @@ pub enum AlbumOrder {
     Custom,
 }
 
-/// What a layout does with songs in formats RECHO can't play (AAC, ALAC, Dolby, Opus…).
+/// What a layout does with songs in formats its player can't play (on RECHO: AAC, ALAC, Dolby, Opus…).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Unplayable {
     /// Leave them off the card.
@@ -41,13 +42,13 @@ pub enum Unplayable {
 pub enum Target {
     /// The file as it is.
     Copy,
-    /// Encoded to FLAC with ffmpeg: lossless sources RECHO can't read (ALAC, AIFF, APE…), and
+    /// Encoded to FLAC with ffmpeg: lossless sources the player can't read (ALAC, AIFF, APE…), and
     /// songs cut out of a lossless album file.
     Flac,
     /// Encoded to FLAC at CD quality: 16-bit, 44.1 or 48 kHz (`cd_rate`), dithered. For hi-res
     /// lossless songs when the write asks to save space.
     FlacCd,
-    /// Encoded to MP3 at 320 kbps, stereo: lossy sources RECHO can't read (AAC, Dolby, Opus…).
+    /// Encoded to MP3 at 320 kbps, stereo: lossy sources the player can't read (AAC, Dolby, Opus…).
     Mp3,
 }
 
@@ -63,8 +64,10 @@ impl Target {
 }
 
 /// What decides how songs reach the card, from a write's options.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Rules {
+    /// The player: what it plays goes as it is.
+    pub device: Device,
     pub unplayable: Unplayable,
     /// Write hi-res lossless songs at CD quality to save space.
     pub cd_quality: bool,
@@ -94,7 +97,7 @@ pub fn cd_rate(rate: u32) -> u32 {
 /// conversion. CD quality and MP3 for lossless are preferences: without ffmpeg (or LAME), songs
 /// go as they otherwise would.
 pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
-    let to = base_target(t, rules.unplayable)?;
+    let to = base_target(t, rules.device, rules.unplayable)?;
     let can_encode = crate::audio::ffmpeg().is_some() && t.ffmpeg_can_decode();
     Ok(match to {
         Target::Copy | Target::Flac if rules.lossless_mp3 && t.lossless() && can_encode && crate::audio::ffmpeg_encodes("libmp3lame") => Target::Mp3,
@@ -103,7 +106,7 @@ pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
     })
 }
 
-fn base_target(t: &Track, unplayable: Unplayable) -> Result<Target, &'static str> {
+fn base_target(t: &Track, device: Device, unplayable: Unplayable) -> Result<Target, &'static str> {
     let encode = |to: Target| {
         if crate::audio::ffmpeg().is_none() {
             Err(if t.cue.is_some() { "needs ffmpeg to cut the album file into songs" } else { "needs ffmpeg to convert" })
@@ -122,11 +125,11 @@ fn base_target(t: &Track, unplayable: Unplayable) -> Result<Target, &'static str
             (false, _) => Err("inside a lossy album file; can't be cut out without re-encoding"),
         };
     }
-    if t.on_recho() {
+    if device.plays(t) {
         return Ok(Target::Copy);
     }
     match unplayable {
-        Unplayable::Leave => Err("format not playable on RECHO"),
+        Unplayable::Leave => Err(device.unplayable_reason()),
         Unplayable::Copy => Ok(Target::Copy),
         Unplayable::Convert => encode(if t.lossless() { Target::Flac } else { Target::Mp3 }),
     }
@@ -150,6 +153,8 @@ pub fn card_size(t: &Track, target: Target) -> u64 {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Options {
+    /// The player the card is for.
+    pub device: Device,
     pub album_order: AlbumOrder,
     pub unplayable: Unplayable,
     /// Write hi-res lossless songs at CD quality (16-bit, 44.1/48 kHz) to save space.
@@ -163,13 +168,14 @@ pub struct Options {
 
 impl Options {
     pub fn rules(&self) -> Rules {
-        Rules { unplayable: self.unplayable, cd_quality: self.cd_quality, lossless_mp3: self.lossless_mp3 }
+        Rules { device: self.device, unplayable: self.unplayable, cd_quality: self.cd_quality, lossless_mp3: self.lossless_mp3 }
     }
 }
 
 impl Default for Options {
     fn default() -> Self {
         Options {
+            device: Device::default(),
             album_order: AlbumOrder::Year,
             unplayable: Unplayable::default(),
             cd_quality: false,
@@ -443,10 +449,10 @@ mod tests {
 
     #[test]
     fn what_unplayable_formats_become() {
-        let r = |unplayable| Rules { unplayable, cd_quality: false, lossless_mp3: false };
+        let r = |unplayable| Rules { unplayable, ..Default::default() };
         let m4a = |codec: &str| Track { ext: "m4a".into(), codec: Some(codec.into()), ..Default::default() };
         let flac = Track { ext: "flac".into(), ..Default::default() };
-        // RECHO's own formats are copied whatever the setting.
+        // What the player plays is copied whatever the setting.
         for u in [Unplayable::Leave, Unplayable::Copy, Unplayable::Convert] {
             assert_eq!(target(&flac, r(u)), Ok(Target::Copy));
         }
@@ -473,7 +479,7 @@ mod tests {
     #[test]
     fn cd_quality_for_hires() {
         let flac = |bits, rate| Track { ext: "flac".into(), bit_depth: Some(bits), sample_rate: Some(rate), size: 100_000_000, ..Default::default() };
-        let cd = Rules { unplayable: Unplayable::Convert, cd_quality: true, lossless_mp3: false };
+        let cd = Rules { unplayable: Unplayable::Convert, cd_quality: true, ..Default::default() };
         let ff = crate::audio::ffmpeg().is_some();
         assert_eq!(target(&flac(24, 192_000), cd), Ok(if ff { Target::FlacCd } else { Target::Copy }), "only with ffmpeg; else as it is");
         assert_eq!(target(&flac(16, 44_100), cd), Ok(Target::Copy), "already CD quality");
@@ -486,7 +492,7 @@ mod tests {
     #[test]
     fn lossless_as_mp3_to_save_space() {
         let song = |ext: &str| Track { ext: ext.into(), bit_depth: Some(24), sample_rate: Some(96_000), duration: std::time::Duration::from_secs(100), size: 100_000_000, ..Default::default() };
-        let mp3 = Rules { unplayable: Unplayable::Convert, cd_quality: true, lossless_mp3: true };
+        let mp3 = Rules { unplayable: Unplayable::Convert, cd_quality: true, lossless_mp3: true, ..Default::default() };
         let can = crate::audio::ffmpeg().is_some() && crate::audio::ffmpeg_encodes("libmp3lame");
         assert_eq!(target(&song("flac"), mp3), Ok(if can { Target::Mp3 } else { Target::Copy }), "MP3 wins over CD quality; without LAME, as it is");
         assert_eq!(target(&song("mp3"), mp3), Ok(Target::Copy), "lossy songs are never re-encoded");

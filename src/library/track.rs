@@ -1,4 +1,4 @@
-//! A track as the app knows it, and which formats the Echo Mini and this app can play.
+//! A track as the app knows it, and which formats this app (and nearly every player) can play.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -8,10 +8,11 @@ use serde::{Deserialize, Serialize};
 use super::cue::CueSpan;
 use super::mp4::codec_name;
 
-/// Formats the RECHO firmware plays (FLAC/WAV up to 24-bit/192 kHz, MP3 up to 320 kbps).
-pub const RECHO_FORMATS: &[&str] = &["flac", "mp3", "wav"];
+/// Formats nearly every player plays, and all that the Echo Mini's RECHO firmware does (FLAC/WAV
+/// up to 24-bit/192 kHz, MP3 up to 320 kbps). What a particular player plays is `card::Device`'s.
+pub const COMMON_FORMATS: &[&str] = &["flac", "mp3", "wav"];
 
-/// Formats NeatLibrary itself can decode and play (via Symphonia), beyond RECHO's.
+/// Formats NeatLibrary itself can decode and play (via Symphonia).
 pub const APP_FORMATS: &[&str] = &["flac", "mp3", "wav", "m4a", "m4b", "mp4", "aac", "alac", "aiff", "aif", "aifc", "ogg", "oga", "caf", "mka", "mp2"];
 
 /// MP4 sample entries Symphonia decodes. Anything else in an .m4a (Dolby, Opus…) needs ffmpeg.
@@ -55,7 +56,7 @@ pub struct Track {
     /// An image beside the track to embed as its front cover when tags are next written (the
     /// user chose to add it). Part of the corrections, like edited fields.
     pub cover: Option<PathBuf>,
-    /// The file's tags hold a picture (the Echo Mini shows only embedded covers).
+    /// The file's tags hold a picture (players show embedded covers, not images beside the file).
     pub embedded_cover: bool,
 }
 
@@ -73,12 +74,12 @@ impl Track {
         }
     }
 
-    /// The Echo Mini running RECHO can play this file, or (for a song in an album file) the
-    /// FLAC the song is cut into on the card.
-    pub fn on_recho(&self) -> bool {
+    /// FLAC, MP3 or WAV, which nearly every player plays; for a song in an album file, the FLAC
+    /// it's cut into on the card.
+    pub fn plays_anywhere(&self) -> bool {
         match self.cue {
             Some(_) => self.lossless(),
-            None => RECHO_FORMATS.contains(&self.ext.as_str()),
+            None => COMMON_FORMATS.contains(&self.ext.as_str()),
         }
     }
 
@@ -128,10 +129,10 @@ impl Track {
     }
 }
 
-/// "Dolby E-AC-3 ×28, M4A ×8, OPUS ×4" for the files RECHO can't play, most common first.
-pub fn non_recho_summary<'a>(tracks: impl IntoIterator<Item = &'a Track>) -> Option<(usize, String)> {
+/// "Dolby E-AC-3 ×28, M4A ×8, OPUS ×4" for the files a player can't play, most common first.
+pub fn unplayable_summary<'a>(tracks: impl IntoIterator<Item = &'a Track>, plays: impl Fn(&Track) -> bool) -> Option<(usize, String)> {
     let mut by_ext: std::collections::BTreeMap<String, usize> = Default::default();
-    for t in tracks.into_iter().filter(|t| !t.on_recho()) {
+    for t in tracks.into_iter().filter(|t| !plays(t)) {
         *by_ext.entry(t.format_label()).or_default() += 1;
     }
     let total: usize = by_ext.values().sum();
@@ -154,9 +155,9 @@ mod tests {
     #[test]
     fn what_plays_where() {
         let flac = Track { ext: "flac".into(), ..Default::default() };
-        assert!(flac.on_recho() && flac.native());
-        // AAC and ALAC in .m4a: not on RECHO, but the built-in decoder handles them.
-        assert!(!m4a("mp4a").on_recho() && m4a("mp4a").native() && m4a("alac").native());
+        assert!(flac.plays_anywhere() && flac.native());
+        // AAC and ALAC in .m4a: not everywhere, but the built-in decoder handles them.
+        assert!(!m4a("mp4a").plays_anywhere() && m4a("mp4a").native() && m4a("alac").native());
         // Dolby E-AC-3 (Atmos releases) needs ffmpeg; AC-4 has no decoder anywhere.
         assert!(!m4a("ec-3").native() && m4a("ec-3").ffmpeg_can_decode());
         assert!(!m4a("ac-4").native() && !m4a("ac-4").ffmpeg_can_decode() && !m4a("ac-4").plays_here());

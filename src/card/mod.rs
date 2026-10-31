@@ -3,12 +3,14 @@
 
 pub mod adopt;
 mod copy;
+mod device;
 mod journal;
 mod plan;
 pub mod playlist;
 mod volumes;
 mod write;
 
+pub use device::Device;
 pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, up_to_date};
 pub use journal::{latest_journal, save_problems, undo_latest};
 pub use plan::{AlbumOrder, Chosen, Custom, Options, PlanItem, REPEAT, Rules, Target, Unplayable, album_folder, build_plan, card_size, target, tidy_plan};

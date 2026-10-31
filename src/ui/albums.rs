@@ -113,7 +113,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             let title = if row.edited { format!("{} · edited", row.title) } else { row.title.clone() };
             text_at(2, title, &font, ink.text);
             text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &font, ink.muted);
-            text_at(4, row.format.clone(), &small, if row.plays_on_recho { ink.muted } else { ink.accent });
+            text_at(4, row.format.clone(), &small, if row.plays_on_device { ink.muted } else { ink.accent });
             let right = |k: usize, s: String| {
                 p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, small.clone(), ink.muted);
             };

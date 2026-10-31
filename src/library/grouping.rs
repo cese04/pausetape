@@ -78,7 +78,7 @@ pub struct Edition {
     /// What tells it apart, for people: the folder's edition details ("1986, UK, Factory
     /// Records, FACD 10"), else the folder name.
     pub label: String,
-    /// 0 = the edition a write uses unless told otherwise (the most complete one RECHO plays).
+    /// 0 = the edition a write uses unless told otherwise (the most complete one in formats every player plays).
     pub rank: usize,
     pub count: usize,
     /// "FLAC 16/44.1", "MP3 320".
@@ -434,9 +434,6 @@ fn split_copies(tracks: &[Track], idxs: Vec<usize>) -> Vec<Vec<Copy>> {
     albums
 }
 
-/// Editions in rank order. First: the copy with the most lossless songs RECHO plays (a FLAC
-/// vinyl rip over an MP3 with bonus tracks), then the most songs RECHO plays, then the most
-/// songs, then the highest quality, then the one not needing a CUE sheet cut, then by folder.
 /// "FLAC 16/44.1", "MP3 320": the songs' most common format, at the quality of the weakest.
 pub fn describe(tracks: &[Track], idxs: &[usize]) -> (String, Quality) {
     let q = Quality::of(tracks, idxs);
@@ -447,7 +444,10 @@ pub fn describe(tracks: &[Track], idxs: &[usize]) -> (String, Quality) {
     (q.label(&most_common(&names, |_| 0).unwrap_or_default()), q)
 }
 
-/// Each edition notes whether another has all its songs, and no less music, in the same or
+/// Editions in rank order. First: the copy with the most lossless songs in FLAC, MP3 or WAV (a
+/// FLAC vinyl rip over an MP3 with bonus tracks), then the most songs in those, then the most
+/// songs, then the highest quality, then the one not needing a CUE sheet cut, then by folder.
+/// Each edition also notes whether another has all its songs, and no less music, in the same or
 /// higher quality.
 fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, Edition)> {
     copies.sort_by_key(|c| {
@@ -455,7 +455,7 @@ fn editions(tracks: &[Track], mut copies: Vec<Copy>) -> Vec<(Copy, Edition)> {
         let cue = c.tracks.iter().filter(|&&i| tracks[i].cue.is_some()).count();
         let q = Quality::of(tracks, &c.tracks);
         let quality = (!q.lossless, u8::MAX - q.bit_depth, u32::MAX - q.sample_rate, u32::MAX - q.kbps);
-        (count(&|t| t.on_recho() && t.lossless()), count(&|t| t.on_recho()), usize::MAX - c.tracks.len(), quality, cue, c.dirs[0].clone())
+        (count(&|t| t.plays_anywhere() && t.lossless()), count(&|t| t.plays_anywhere()), usize::MAX - c.tracks.len(), quality, cue, c.dirs[0].clone())
     });
     let quality: Vec<Quality> = copies.iter().map(|c| Quality::of(tracks, &c.tracks)).collect();
     let format: Vec<String> = copies.iter().map(|c| describe(tracks, &c.tracks).0).collect();
