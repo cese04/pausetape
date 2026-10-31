@@ -372,8 +372,9 @@ fn tidy(s: &str) -> String {
     collapsed.trim_matches([' ', '-', '–', '—', '.', '_', ',', '\'', '"', '«', '»', '“', '”', '‘', '’']).to_string()
 }
 
-/// Make a single path component safe for FAT32/exFAT and pleasant to read on a small screen.
-pub fn sanitize_component(s: &str, max_chars: usize) -> String {
+/// `s` with the characters FAT can't hold in a name replaced or dropped (`/` becomes `-`, so a
+/// value can't make a folder). The rest of `sanitize_component`, without trimming.
+pub fn safe_chars(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -387,6 +388,12 @@ pub fn sanitize_component(s: &str, max_chars: usize) -> String {
             c => out.push(c),
         }
     }
+    out
+}
+
+/// Make a single path component safe for FAT32/exFAT and pleasant to read on a small screen.
+pub fn sanitize_component(s: &str, max_chars: usize) -> String {
+    let out = safe_chars(s);
     let collapsed = out.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut s: String = collapsed.chars().take(max_chars).collect();
     // Trailing dots/spaces are illegal on FAT; a leading dot would hide the entry.

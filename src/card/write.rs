@@ -69,6 +69,84 @@ impl WriteProfile {
     pub fn manifest_bytes(&self) -> u64 {
         self.manifest.iter().map(|w| w.size).sum()
     }
+
+    /// A card file of this write that's one of its playlist copies.
+    fn in_playlists(&self, rel: &Path) -> bool {
+        let dir = sanitize_component(&self.playlists_folder, 80).to_lowercase();
+        Path::new(&rel.to_string_lossy().to_lowercase()).starts_with(&dir)
+    }
+}
+
+/// Songs the last write put on the card that the plan now names differently (another pattern, a
+/// renamed album or artist, another order): (manifest index, plan index), to move on the card
+/// rather than copy again. Matched by what each was made from: a converted file by its source
+/// key, a copy by size and format. Playlist copies are the playlist export's.
+pub fn renamed(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem]) -> Vec<(usize, usize)> {
+    let lower = |p: &Path| p.to_string_lossy().to_lowercase();
+    let ext = |p: &Path| p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let wanted: HashSet<String> = plan.iter().filter(|p| p.skip.is_none()).map(|p| lower(&p.rel)).collect();
+    let on_card: HashSet<String> = w.manifest.iter().map(|m| lower(&m.rel)).collect();
+    let mut stale: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, m) in w.manifest.iter().enumerate().rev() {
+        if !wanted.contains(&lower(&m.rel)) && !w.in_playlists(&m.rel) {
+            let key = m.source.clone().unwrap_or_else(|| format!("{}|{}", m.size, ext(&m.rel)));
+            stale.entry(key).or_default().push(i);
+        }
+    }
+    let mut out = Vec::new();
+    for (j, p) in plan.iter().enumerate() {
+        let t = &tracks[p.track];
+        if p.skip.is_some() || t.dirty || on_card.contains(&lower(&p.rel)) {
+            continue;
+        }
+        let key = super::copy::source_key(t, p.target).unwrap_or_else(|| format!("{}|{}", t.size, ext(&p.rel)));
+        if let Some(i) = stale.get_mut(&key).and_then(Vec::pop) {
+            out.push((i, j));
+        }
+    }
+    out
+}
+
+/// Move what `renamed` finds to its new name. A copy moves only if its first and last 64 KB are
+/// the library song's. The manifest with the new names, how many moved, and what went wrong.
+fn relocate(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem], dest: &Path) -> (Vec<Written>, usize, Vec<String>) {
+    let mut manifest = w.manifest.clone();
+    let (mut moved, mut errors) = (0, Vec::new());
+    for (i, j) in renamed(w, tracks, plan) {
+        let (m, p, t) = (&manifest[i], &plan[j], &tracks[plan[j].track]);
+        // Records come from our own manifest, but never follow one outside the card.
+        if !m.rel.components().chain(p.rel.components()).all(|c| matches!(c, std::path::Component::Normal(_))) {
+            continue;
+        }
+        let (old, new) = (dest.join(&m.rel), dest.join(&p.rel));
+        if !std::fs::metadata(&old).is_ok_and(|md| md.len() == m.size) {
+            continue;
+        }
+        // Names differing only in case are the same file on the card, so never come here.
+        let same = p.target != Target::Copy || matches!((super::adopt::sample(&old, m.size), super::adopt::sample(&t.path, t.size)), (Ok(a), Ok(b)) if a == b);
+        if !same || new.exists() {
+            continue;
+        }
+        let res = new.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|()| std::fs::rename(&old, &new));
+        if let Err(e) = res {
+            errors.push(format!("renaming {} on the card: {e}", m.rel.display()));
+            continue;
+        }
+        // macOS's "._" companion stays behind under the old name.
+        if let Some(n) = old.file_name() {
+            let _ = std::fs::remove_file(old.with_file_name(format!("._{}", n.to_string_lossy())));
+        }
+        let mut dir = old.parent();
+        while let Some(d) = dir.filter(|d| *d != dest && d.starts_with(dest)) {
+            if std::fs::remove_dir(d).is_err() {
+                break;
+            }
+            dir = d.parent();
+        }
+        manifest[i].rel = p.rel.clone();
+        moved += 1;
+    }
+    (manifest, moved, errors)
 }
 
 #[derive(Default)]
@@ -82,6 +160,8 @@ pub struct Preview {
     /// Files from the previous write that would be removed.
     pub to_remove: Vec<PathBuf>,
     pub playlist_files: usize,
+    /// Songs already on the card under another name: moved there, not copied.
+    pub renamed: usize,
     pub total_bytes: u64,
     /// Files on the card this write didn't put there (by its manifest), and their size.
     pub foreign: usize,
@@ -111,9 +191,17 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
             }
         }
     };
-    for item in w.plan(tracks, index) {
+    let plan = w.plan(tracks, index);
+    let moves = renamed(w, tracks, &plan);
+    let moving: HashSet<usize> = moves.iter().map(|&(_, j)| j).collect();
+    let moved_from: HashSet<String> = moves.iter().map(|&(i, _)| w.manifest[i].rel.to_string_lossy().to_lowercase()).collect();
+    for (j, item) in plan.iter().enumerate() {
         if item.skip.is_some() {
             p.skipped += 1;
+        } else if moving.contains(&j) {
+            p.renamed += 1;
+            p.total_bytes += card_size(&tracks[item.track], item.target);
+            keep.insert(item.rel.to_string_lossy().to_lowercase());
         } else {
             check(&item.rel, &tracks[item.track], item.target, &mut p, &mut keep);
         }
@@ -128,7 +216,7 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
         keep.insert(dir.with_file_name(format!("{}.m3u8", dir.file_name().unwrap().to_string_lossy())).to_string_lossy().to_lowercase());
     }
     if w.prune {
-        p.to_remove = w.manifest.iter().filter(|m| !keep.contains(&m.rel.to_string_lossy().to_lowercase())).map(|m| m.rel.clone()).collect();
+        p.to_remove = w.manifest.iter().map(|m| (m, m.rel.to_string_lossy().to_lowercase())).filter(|(_, k)| !keep.contains(k) && !moved_from.contains(k)).map(|(m, _)| m.rel.clone()).collect();
     }
     let foreign = super::adopt::foreign_files(dest, &w.manifest);
     (p.foreign, p.foreign_bytes) = (foreign.len(), foreign.iter().map(|(_, n)| n).sum());
@@ -143,6 +231,8 @@ pub struct Outcome {
     pub skipped: usize,
     pub tagged: usize,
     pub removed: usize,
+    /// Songs moved to a new name on the card rather than copied again.
+    pub renamed: usize,
     pub cleaned: usize,
     pub errors: Vec<String>,
     /// Stopped by the user before the end: playlists and the last clean-up were left for the next write.
@@ -168,12 +258,15 @@ pub fn write(
 ) -> Outcome {
     // Labelled first, so a write stopped halfway still says whose card it is.
     let labelled = super::Label::of(w).save(dest).map_err(|e| format!("{e:#}"));
+    // Songs that only changed name move on the card instead of being copied again.
+    let (manifest, renamed, rename_errors) = relocate(w, tracks, plan, dest);
+    let moved = WriteProfile { manifest, ..w.clone() };
+    let w = &moved;
     // Removing first makes room: a choice that fits only once old albums are gone would
     // otherwise fill the card halfway. Playlist files wait for the end, when their names are known.
     let early = if w.prune {
         let wanted: HashSet<String> = plan.iter().filter(|p| p.skip.is_none()).map(|p| p.rel.to_string_lossy().to_lowercase()).collect();
-        let playlists_dir = sanitize_component(&w.playlists_folder, 80).to_lowercase();
-        let songs: Vec<Written> = w.manifest.iter().filter(|m| !Path::new(&m.rel.to_string_lossy().to_lowercase()).starts_with(&playlists_dir)).cloned().collect();
+        let songs: Vec<Written> = w.manifest.iter().filter(|m| !w.in_playlists(&m.rel)).cloned().collect();
         super::prune(dest, &songs, &wanted)
     } else {
         0
@@ -182,12 +275,13 @@ pub fn write(
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
     let mut r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, stop, &mut progress);
     r.errors.extend(labelled.err());
+    r.errors.extend(rename_errors);
     if r.stopped {
         let mut manifest = r.written;
         let mut have: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
         manifest.extend(w.manifest.iter().filter(|m| have.insert(m.rel.to_string_lossy().to_lowercase()) && dest.join(&m.rel).exists()).cloned());
         let cleaned = if w.options.clean_mac_files { super::clean_mac_files(dest) } else { 0 };
-        return Outcome { manifest, copied: r.copied, unchanged: r.unchanged, skipped: r.skipped, tagged: r.tagged, removed: early, cleaned, errors: r.errors, stopped: true };
+        return Outcome { manifest, copied: r.copied, unchanged: r.unchanged, skipped: r.skipped, tagged: r.tagged, removed: early, renamed, cleaned, errors: r.errors, stopped: true };
     }
 
     let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
@@ -208,6 +302,7 @@ pub fn write(
         skipped: r.skipped,
         tagged: r.tagged,
         removed: early + removed + pl.removed,
+        renamed,
         cleaned,
         errors,
         stopped: false,
@@ -350,6 +445,47 @@ mod tests {
         let stop = AtomicBool::new(false);
         let out = write(&w, &tracks, &plan, &[], &src, &card, &stop, stop_after_one(&stop));
         assert_eq!((out.copied, out.manifest.len()), (1, 3));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_new_pattern_renames_on_the_card() {
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-rename-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (src, card) = (root.join("src"), root.join("card"));
+        for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Muse/Absolution/03 - Time Is Running Out.mp3"] {
+            fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
+            fs::write(src.join(f), f.as_bytes()).unwrap();
+        }
+        let (tracks, _) = scan(&src, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        let playlists = vec![Playlist { name: "Mix".into(), tracks: vec![tracks[0].id()] }];
+        let mut w = WriteProfile { dest: Some(card.clone()), options: Options { write_tags: false, ..Default::default() }, ..Default::default() };
+        w.playlists.insert("Mix".into());
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert_eq!((out.copied, out.renamed), (4, 0));
+        w.manifest = out.manifest;
+
+        // A pattern of its own: the songs move on the card; the playlist's copy stays.
+        w.options.pattern = Some("{albumartist} - {album}/{track}. {title}".into());
+        let pv = preview(&w, &tracks, &index, &playlists, &card);
+        assert_eq!((pv.renamed, pv.to_copy, pv.to_remove.len()), (3, 0, 0));
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert_eq!((out.renamed, out.copied, out.unchanged, out.removed), (3, 0, 4, 0));
+        assert!(card.join("Muse - Absolution/01. Intro.mp3").is_file() && card.join("_Playlists/Mix").is_dir());
+        assert!(!card.join("Muse").exists(), "the old folders go once empty");
+        w.manifest = out.manifest;
+
+        // Back to the album order's names, with one card file changed behind the app's back
+        // (same size): that one isn't trusted to be the song, so it's copied afresh.
+        w.options.pattern = None;
+        let changed = card.join("Muse - Absolution/02. Apocalypse Please.mp3");
+        fs::write(&changed, vec![b'x'; fs::metadata(&changed).unwrap().len() as usize]).unwrap();
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert_eq!((out.renamed, out.copied), (2, 1));
+        assert_eq!(fs::read(card.join("Muse/Absolution/02 - Apocalypse Please.mp3")).unwrap(), b"Muse/Absolution/02 - Apocalypse Please.mp3");
+        assert!(!card.join("Muse - Absolution").exists());
         fs::remove_dir_all(root).unwrap();
     }
 

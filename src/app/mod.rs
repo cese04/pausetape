@@ -205,6 +205,8 @@ pub struct CardState {
     pub removed: usize,
     /// Songs on the card twice (see `AlbumNode::repeats`): Sync takes the extra copies off.
     pub repeats: usize,
+    /// Songs on the card under an old name (another pattern, a renamed album): Sync moves them.
+    pub renamed: usize,
     /// Bytes Sync copies, and frees.
     pub add_bytes: u64,
     pub remove_bytes: u64,
@@ -246,6 +248,8 @@ pub struct App {
     pub take_over_open: bool,
     /// A folder of new music checked against the library, waiting to be added.
     pub adding: Option<Adding>,
+    /// The naming pattern being typed in the card tab, while it isn't valid yet.
+    pub pattern_draft: Option<String>,
     /// The dialog for testing the card's player.
     pub player_test_open: bool,
     /// What the test card's samples became the last time it was written.
@@ -343,6 +347,7 @@ impl App {
             album_anchor: None,
             take_over_open: false,
             adding: None,
+            pattern_draft: None,
             player_test_open: false,
             test_card: None,
             busy: None,

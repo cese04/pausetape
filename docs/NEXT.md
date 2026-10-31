@@ -512,7 +512,7 @@ reads.
 | E2b | **Act on the other answers.** A playlist that shows → write playlists as `.m3u8` instead of numbered copies (no duplicate songs on a tag-browsing player). ID3v2.4 titles garbled but v2.3 fine → write ID3v2.3 into card copies. Both are recorded now, but don't change anything yet. | S | **On hold** (2026-10-31): until the player's developers confirm that playlists play |
 | E3 | **Recognising a card.** Write a small hidden file (`.neatlibrary`, like calibre's `metadata.calibre`) naming the card setup it belongs to, so a card plugged in brings up its own setup and player. RECHO only reads the card, so the file is harmless there. | S | **Done** (2026-10-31) |
 | E4 | **A side panel of facets** (format, quality, year, card status, genre) with counts, each a click to filter. The search terms behind it exist already (`library/search.rs`); genre needs reading from tags. | M | |
-| E5 | **An editable naming pattern**, like calibre's save-to-disk template: `{albumartist}/{year} - {album}/{disc}-{track} - {title}`, with a default per profile. | M | |
+| E5 | **An editable naming pattern**, like calibre's save-to-disk template: `{albumartist}/{year} - {album}/{disc}-{track} - {title}`, with a default per profile. | M | **Done** (2026-10-31): the album orders are now patterns, and songs that only change name are moved on the card, not copied again. One default for both firmwares: the stock firmware browses by tags, so folder names don't hurt it. |
 
 **Tests for E1:** each player's format list (FLAC everywhere, AAC on stock only, ALAC on
 neither); `target()` copies AAC for stock and converts it for RECHO; saved settings without a

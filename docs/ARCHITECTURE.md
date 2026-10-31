@@ -39,7 +39,7 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    Result: `Index` = clusters, suggestions, and `artists → albums → track indices`.
 3. **Plan** (`card/plan.rs`): `Options` (the player, `card/device.rs`; album order, what to do with formats it can't play,
    …) + `Custom` (what the user chose: whole artists and single albums, `Chosen`; editions,
-   names, order) → list of
+   names, order) → list of paths made by the naming pattern (`card/pattern.rs`):
    `PlanItem { track, rel path, skip reason, target }`, FAT-safe and collision-free
    (case-insensitive). `target` says how the song becomes a card file: copied, or made by
    ffmpeg as FLAC or MP3 320 (`card::target`).
@@ -82,10 +82,11 @@ src/
 │   ├── testcard.rs    the test card: a folder of samples per format, a cover, accented titles, a playlist
 │   ├── label.rs       the card's label (.neatlibrary): which card setup a card belongs to
 │   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
+│   ├── pattern.rs     the naming pattern ({albumartist}/[{year} - ]{album}/…) songs' card paths come from
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
 │   ├── journal.rs     undo journal for reorganising in place
 │   ├── adopt.rs       a card's (or folder's) music: survey, take over (move into place, undo), copy into the library
-│   ├── write.rs       saved writes (WriteProfile), compare-with-card, write
+│   ├── write.rs       saved writes (WriteProfile), compare-with-card, write (renamed songs move on the card)
 │   ├── volumes.rs     mounted drives, free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
 ├── audio/             playing music
@@ -180,9 +181,9 @@ Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-o
 
 ## Tests
 
-`cargo test` runs 53 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 55 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
-editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, layout plans, copy/move/undo,
+editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash. They use temporary folders and fake audio files,

@@ -13,7 +13,8 @@ use super::icons::Icon;
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
 use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
-use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, album_folder, card_size, target};
+use crate::card::pattern::{Field, Pattern, default_for};
+use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -64,6 +65,9 @@ pub fn pending_text(app: &App) -> Option<String> {
     }
     if s.repeats > 0 {
         parts.push(format!("{} on the card twice to take off", plural(s.repeats, "song")));
+    }
+    if s.renamed > 0 {
+        parts.push(format!("{} to rename on the card", plural(s.renamed, "song")));
     }
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
@@ -311,6 +315,17 @@ fn label_note(app: &mut App, ui: &mut Ui) {
     }
 }
 
+/// A song from the library named by `pattern`: the first album with a year and numbered
+/// tracks, as "Artist / 1997 - Album / 02 - Song.flac".
+fn pattern_example(index: &crate::library::grouping::Index, tracks: &[crate::library::Track], w: &crate::card::WriteProfile, pattern: &Pattern) -> Option<String> {
+    let (artist, album) = index.artists.iter().flat_map(|a| a.albums.iter().map(move |al| (a, al))).find(|(_, al)| al.year.is_some() && al.tracks.len() > 1 && al.tracks.iter().all(|&i| tracks[i].track.is_some()))?;
+    let ck = &index.clusters[artist.cluster].key;
+    let t = &tracks[*album.tracks.get(1)?];
+    let name = w.custom.artist_names.get(ck).unwrap_or(&artist.name);
+    let rel = song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext);
+    Some(rel.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join(" / "))
+}
+
 fn ago(t: u64) -> String {
     let s = crate::card::now().saturating_sub(t);
     match s {
@@ -488,6 +503,9 @@ fn comparison(app: &mut App, ui: &mut Ui) {
     if let Some((_, p)) = &app.write_preview {
         let converting = if p.to_convert > 0 { format!(", {} of them converted or cut", p.to_convert) } else { String::new() };
         let mut parts = vec![format!("{} to copy ({}{converting})", p.to_copy, text::bytes(p.copy_bytes)), format!("{} already there", p.unchanged)];
+        if p.renamed > 0 {
+            parts.push(format!("{} to rename there", p.renamed));
+        }
         if !p.to_remove.is_empty() {
             parts.push(format!("{} to remove", p.to_remove.len()));
         }
@@ -680,11 +698,52 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     ui.add_space(8.0);
     widgets::setting(ui, "Album folders", |ui| {
         ui.horizontal(|ui| {
-            changed |= ui.radio_value(&mut w.options.album_order, AlbumOrder::Year, "1997 - Album").changed();
-            changed |= ui.radio_value(&mut w.options.album_order, AlbumOrder::Title, "Album").changed();
-            changed |= ui.radio_value(&mut w.options.album_order, AlbumOrder::Custom, "01 - Album").changed();
+            for (order, label) in [(AlbumOrder::Year, "1997 - Album"), (AlbumOrder::Title, "Album"), (AlbumOrder::Custom, "01 - Album")] {
+                // Each is a pattern of names; choosing one sets it back to that.
+                if ui.radio(w.options.pattern.is_none() && w.options.album_order == order, label).clicked() {
+                    w.options.album_order = order;
+                    w.options.pattern = None;
+                    app.pattern_draft = None;
+                    changed = true;
+                }
+            }
         });
         widgets::help(ui, "By year (oldest first), by title, or numbered in your own order: use the arrows in the list above.");
+    });
+    widgets::setting(ui, "Names on the card", |ui| {
+        let mut text = app.pattern_draft.clone().unwrap_or_else(|| w.options.pattern_text().to_string());
+        let r = ui.add(egui::TextEdit::singleline(&mut text).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY));
+        let parsed = Pattern::parse(&text);
+        if r.changed() {
+            if parsed.is_ok() {
+                let own = text.trim() != default_for(w.options.album_order);
+                w.options.pattern = own.then(|| text.trim().to_string());
+                changed = true;
+            }
+            app.pattern_draft = Some(text.clone());
+        }
+        match &parsed {
+            Err(why) => {
+                ui.label(RichText::new(format!("{why}; the names stay as they were")).size(13.0).color(ink.accent));
+            }
+            Ok(p) => {
+                if let Some(e) = pattern_example(&app.index, &app.tracks, w, p) {
+                    widgets::help(ui, format!("e.g. {e}"));
+                }
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            muted(ui, "fields:");
+            for f in Field::ALL {
+                ui.label(RichText::new(format!("{{{}}}", f.name())).monospace().size(12.5).color(ink.text)).on_hover_text(f.about());
+            }
+        });
+        widgets::help(ui, "/ makes a folder. A [part] is left out when a field in it is empty. Songs already on the card are renamed there at the next sync, not copied again.");
+        if w.options.pattern.is_some() && widgets::icon_link(ui, Icon::Back, "back to the album folders above").clicked() {
+            w.options.pattern = None;
+            app.pattern_draft = None;
+            changed = true;
+        }
     });
     widgets::setting(ui, "Other folders", |ui| {
         egui::Grid::new("folders").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
@@ -839,7 +898,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     ui.add_space(4.0);
     let w = app.write();
     let needle = app.card_filter.to_lowercase();
-    let custom_order = w.options.album_order == AlbumOrder::Custom;
+    let pattern = w.options.pattern();
+    let custom_order = pattern.uses(Field::Position);
     for (ai, artist) in app.index.artists.iter().enumerate() {
         let ck = &app.index.clusters[artist.cluster].key;
         if !needle.is_empty()
@@ -882,7 +942,12 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         for (n, al) in ordered.iter().enumerate() {
             let id = &order_ids[n];
             let title = w.custom.album_name(ck, al);
-            let folder = album_folder(al, title, positions[n], &w.options);
+            // Where the album's first song goes: its folders, as the pattern makes them.
+            let folder = al.tracks.first().map(|&i| {
+                let t = &app.tracks[i];
+                let rel = song_path(&pattern, t, al, &card_name, title, positions[n], &w.options, t.ext.as_str());
+                rel.parent().map(|d| d.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join(" / ")).unwrap_or_default()
+            });
             let mut on = w.custom.includes(ck, al, &artist.albums);
             let on_card = on;
             let bi = artist.albums.iter().position(|a| std::ptr::eq(a, *al)).unwrap_or_default();
@@ -933,8 +998,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     if al.title.is_some() {
                         rename_widget(ui, &app.card_renaming, false, id, title.unwrap_or(al.title.as_deref().unwrap_or_default()), &mut edits);
                     }
-                    let artist_dir = crate::library::names::sanitize_component(&card_name, 80);
-                    let path = format!("{artist_dir} / {folder}");
+                    let path = folder.clone().unwrap_or_default();
                     // Whatever space is left between the album and the links, and no more.
                     ui.add(egui::Label::new(RichText::new(text::shorten(&path, 50)).size(12.5).color(ink.muted)).truncate()).on_hover_text(path);
                 });

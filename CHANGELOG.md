@@ -492,3 +492,20 @@ Calibre's device view, for music: the library is where you choose what goes on t
   card tab says whose it is, with **switch to** it or **use it for this setup** (relabels the
   card). A card labelled by a setup that isn't on this Mac can be synced: only the setup's own
   files are ever removed.
+
+### 37. Names on the card as a pattern (2026-10-31)
+- The card tab's **Names on the card** takes a pattern, as calibre's save-to-disk template does:
+  `{albumartist}/[{year} - ]{album}/[[{disc}-]{track} - ][{trackartist} - ]{title}`. `/` makes a
+  folder; a `[part]` is left out when a field in it is empty. Fields: albumartist, album, year,
+  position (your own album order), disc, track, trackartist (on compilations and loose songs),
+  title. An example from the library and the folder names in the list follow as you type; a
+  broken pattern says what's wrong and changes nothing.
+- The three album-folder choices are patterns too, and name everything exactly as before
+  (checked on the whole library: 20,832 paths, identical), so cards already written keep their
+  names.
+- Songs already on the card under another name (a new pattern, a renamed artist or album,
+  another order) are moved there at the next Sync instead of copied again. A converted song is
+  matched by what it was made from; a plain copy by its size and its first and last 64 KB. The
+  comparison and the sync line count them as renames.
+- The test folder no longer leaves macOS "._" files beside its samples on FAT cards, where a
+  player would list them as songs that don't play.

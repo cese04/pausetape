@@ -125,6 +125,11 @@ impl Shooter {
             if std::env::var("NEATLIBRARY_SHOT_DEVICE").is_ok_and(|d| d == "stock") {
                 app.write_mut().options.device = crate::card::Device::EchoMiniStock;
             }
+            // NEATLIBRARY_SHOT_PATTERN=<pattern>: name the card's songs by it.
+            if let Ok(p) = std::env::var("NEATLIBRARY_SHOT_PATTERN") {
+                app.write_mut().options.pattern = Some(p);
+                app.refresh_on_card();
+            }
             // NEATLIBRARY_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
             if std::env::var_os("NEATLIBRARY_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();

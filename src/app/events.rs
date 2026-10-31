@@ -85,8 +85,14 @@ impl App {
                         ));
                     } else {
                         self.notice(format!(
-                            "“{name}”: {} copied · {} unchanged · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
-                            out.copied, out.unchanged, out.removed, out.skipped, out.tagged, out.cleaned,
+                            "“{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
+                            out.copied,
+                            out.unchanged,
+                            if out.renamed > 0 { format!(" · {} renamed", out.renamed) } else { String::new() },
+                            out.removed,
+                            out.skipped,
+                            out.tagged,
+                            out.cleaned,
                         ));
                     }
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {

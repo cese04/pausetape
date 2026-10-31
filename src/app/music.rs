@@ -80,8 +80,13 @@ impl App {
                 by_rel.insert(p.rel.to_string_lossy().to_lowercase(), p.track);
             }
         }
-        let on_card: HashMap<usize, u64> = w.manifest.iter().filter_map(|m| by_rel.get(&m.rel.to_string_lossy().to_lowercase()).map(|&t| (t, m.size))).collect();
-        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), ..Default::default() };
+        let mut on_card: HashMap<usize, u64> = w.manifest.iter().filter_map(|m| by_rel.get(&m.rel.to_string_lossy().to_lowercase()).map(|&t| (t, m.size))).collect();
+        // Songs on the card under names the write no longer gives them: Sync moves them.
+        let renamed = card::renamed(w, &self.tracks, &plan);
+        for &(i, j) in &renamed {
+            on_card.entry(plan[j].track).or_insert(w.manifest[i].size);
+        }
+        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), renamed: renamed.len(), ..Default::default() };
         s.planned_bytes = planned.values().map(|p| card::card_size(&self.tracks[p.track], p.target)).sum();
         let ids: Vec<PathBuf> = self.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&self.tracks).collect();

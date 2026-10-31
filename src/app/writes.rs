@@ -64,6 +64,7 @@ impl App {
         self.refresh_on_card();
         self.refresh_label();
         self.card_renaming = None;
+        self.pattern_draft = None;
     }
 
     /// Put an album on the active write's card, or take it off. Like everything chosen, it

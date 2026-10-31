@@ -2,13 +2,15 @@
 //!
 //! RECHO (the Echo Mini firmware this began with) sorts entries by name, so ordering is encoded in names: albums get a year prefix
 //! ("1997 - OK Computer") or a custom position ("02 - OK Computer"), and tracks a zero-padded
-//! number ("1-03 - Title.flac" on multi-disc sets).
+//! number ("1-03 - Title.flac" on multi-disc sets). Names come from a pattern (`card::pattern`):
+//! the album order's, or the user's own.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use super::pattern::{Field, Pattern, default_for};
 use super::{Device, Player, Results};
 use crate::library::Track;
 use crate::library::grouping::{AlbumNode, Index};
@@ -168,11 +170,22 @@ pub struct Options {
     pub write_tags: bool,
     pub clean_mac_files: bool,
     pub singles_folder: String,
+    /// The user's naming pattern; `None` names as `album_order`'s pattern does.
+    pub pattern: Option<String>,
 }
 
 impl Options {
     pub fn player(&self) -> Player {
         Player { device: self.device, tested: self.tested.get(&self.device).map(super::Tested::from_results).unwrap_or_default() }
+    }
+
+    /// The pattern names on the card come from: the user's, if it's valid, else the album order's.
+    pub fn pattern(&self) -> Pattern {
+        self.pattern.as_deref().and_then(|p| Pattern::parse(p).ok()).unwrap_or_else(|| Pattern::parse(default_for(self.album_order)).expect("built-in patterns parse"))
+    }
+
+    pub fn pattern_text(&self) -> &str {
+        self.pattern.as_deref().unwrap_or(default_for(self.album_order))
     }
 
     pub fn rules(&self) -> Rules {
@@ -192,6 +205,7 @@ impl Default for Options {
             write_tags: true,
             clean_mac_files: true,
             singles_folder: "Singles".into(),
+            pattern: None,
         }
     }
 }
@@ -360,46 +374,33 @@ pub struct PlanItem {
     pub target: Target,
 }
 
-/// `position` is the album's 0-based place among the artist's titled albums.
-pub fn album_folder(album: &AlbumNode, title: Option<&str>, position: usize, opts: &Options) -> String {
-    let Some(t) = title.or(album.title.as_deref()) else {
-        return sanitize_component(&opts.singles_folder, 100);
-    };
-    // Different albums with the same name need different folders: by year, unless the year
-    // prefix already does it.
-    let same_name = album.variant.as_ref().filter(|v| !(opts.album_order == AlbumOrder::Year && album.year.map(|y| y.to_string()).as_ref() == Some(v)));
-    let with_variant;
-    let t = match same_name {
-        Some(v) => {
-            with_variant = format!("{t} ({v})");
-            with_variant.as_str()
-        }
-        None => t,
-    };
-    let name = match (opts.album_order, album.year) {
-        (AlbumOrder::Year, Some(y)) => format!("{y} - {t}"),
-        (AlbumOrder::Custom, _) => format!("{:02} - {t}", position + 1),
-        _ => t.to_string(),
-    };
-    sanitize_component(&name, 100)
-}
-
-pub fn file_name(t: &Track, album: &AlbumNode, ext: &str) -> String {
-    let mut name = String::new();
-    if let Some(n) = t.track {
-        if album.multi_disc {
-            name.push_str(&format!("{}-{n:02} - ", t.disc.unwrap_or(1)));
-        } else {
-            name.push_str(&format!("{n:02} - "));
-        }
-    }
-    if album.various || album.title.is_none() {
-        if let Some(a) = &t.artist {
-            name.push_str(&format!("{a} - "));
-        }
-    }
-    name.push_str(&t.display_title());
-    format!("{}.{ext}", sanitize_component(&name, 120))
+/// Where a song goes on the card, by `pattern`. `artist` is the artist's folder name (as renamed
+/// for the write), `title` the album's if renamed, `position` the album's 0-based place among the
+/// artist's titled albums.
+#[allow(clippy::too_many_arguments)]
+pub fn song_path(pattern: &Pattern, t: &Track, album: &AlbumNode, artist: &str, title: Option<&str>, position: usize, opts: &Options, ext: &str) -> PathBuf {
+    let titled = album.title.is_some();
+    pattern.render(
+        |f| match f {
+            Field::AlbumArtist => Some(sanitize_component(artist, 80)),
+            Field::Album => Some(match title.or(album.title.as_deref()) {
+                // Different albums with the same name need different folders: by year, unless the
+                // year in the name already does it.
+                Some(t) => match &album.variant {
+                    Some(v) if !(pattern.uses(Field::Year) && album.year.map(|y| y.to_string()).as_ref() == Some(v)) => format!("{t} ({v})"),
+                    _ => t.to_string(),
+                },
+                None => opts.singles_folder.clone(),
+            }),
+            Field::Year => album.year.filter(|_| titled).map(|y| y.to_string()),
+            Field::Position => titled.then(|| format!("{:02}", position + 1)),
+            Field::Disc => album.multi_disc.then(|| t.disc.unwrap_or(1).to_string()),
+            Field::Track => t.track.map(|n| format!("{n:02}")),
+            Field::TrackArtist => (album.various || !titled).then(|| t.artist.clone()).flatten(),
+            Field::Title => Some(t.display_title()),
+        },
+        ext,
+    )
 }
 
 /// The plan for reorganising the music folder in place. Songs inside an album file stay with
@@ -412,16 +413,17 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
     let mut plan = Vec::with_capacity(tracks.len());
     // FAT/exFAT are case-insensitive: two names differing only in case collide.
     let mut taken: HashSet<String> = HashSet::new();
+    let pattern = opts.pattern();
     for artist in &index.artists {
         let ck = &index.clusters[artist.cluster].key;
-        let artist_dir = sanitize_component(custom.artist_names.get(ck).unwrap_or(&artist.name), 80);
+        let artist_name = custom.artist_names.get(ck).unwrap_or(&artist.name);
         let ordered = custom.ordered_albums(ck, &artist.albums);
         let positions = custom.positions(ck, &ordered);
         for (album, position) in ordered.into_iter().zip(positions) {
             if !custom.includes(ck, album, &artist.albums) {
                 continue;
             }
-            let album_dir = album_folder(album, custom.album_name(ck, album), position, opts);
+            let title = custom.album_name(ck, album);
             // Songs stored twice go last, so the copy that stays gets the plain name.
             let once = album.tracks.iter().copied().filter(|&i| !album.is_repeat(i));
             for i in once.chain(album.repeats.iter().map(|&(c, _)| c)) {
@@ -432,8 +434,8 @@ pub fn build_plan(tracks: &[Track], index: &Index, opts: &Options, custom: &Cust
                     Err(why) => (Target::Copy, Some(why)),
                 };
                 let ext = target.ext(t);
-                let base = PathBuf::from(&artist_dir).join(&album_dir);
-                let mut rel = base.join(file_name(t, album, ext));
+                let mut rel = song_path(&pattern, t, album, artist_name, title, position, opts, ext);
+                let base = rel.parent().map(PathBuf::from).unwrap_or_default();
                 let stem = rel.file_stem().unwrap().to_string_lossy().into_owned();
                 let mut n = 2;
                 while !taken.insert(rel.to_string_lossy().to_lowercase()) {

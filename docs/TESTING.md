@@ -235,6 +235,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     card belongs to the first and offers **switch to** and **use it for this setup**; Sync is gone.
     Eject the card, switch back to the second setup, plug the card in: within a few seconds the
     app switches to the first setup and says so.
+20d. Card tab › **Names on the card**: type `{albumartist} - {album} [({year})]/{track} {title}`.
+    The example under it and the folder names in the list follow as you type; a broken pattern
+    (`{album}/[{year}`) says what's wrong and changes nothing. The sync line says how many songs
+    will be renamed on the card. **Sync**: they're moved, not copied (quick), and the old folders
+    are gone. **back to the album folders above** and Sync again moves them back.
 
 ### F. Playlists
 21. Create a playlist, add tracks with the **+** at the end of a track row, reorder, include
