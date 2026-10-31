@@ -106,6 +106,7 @@ impl App {
                 }
                 Msg::TookOver(name, mut out) => {
                     self.busy = None;
+                    self.take_over_open = false;
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.name == name) {
                         // The moved files are now this write's, as if it had copied them.
                         let mut have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
@@ -155,16 +156,28 @@ impl App {
                         self.busy = None;
                     }
                     if self.write().name == name {
+                        // A card with music the app didn't put there, before any write: explain
+                        // the take-over once, on its own.
+                        let w = &mut self.saved.writes[self.saved.active_write];
+                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered {
+                            w.take_over_offered = true;
+                            self.take_over_open = true;
+                        }
                         self.write_preview = Some((name, *p));
                     }
                 }
-                Msg::Trashed(moved, errors) => {
+                Msg::Trashed(moved, what, errors) => {
                     self.busy = None;
                     let note = match errors.first() {
                         None => String::new(),
                         Some(e) => format!(" · {} left alone, e.g. {e}", errors.len()),
                     };
-                    self.notice(format!("{} moved to the Trash{note}", plural_files(moved)));
+                    let moved = match (moved, what) {
+                        (1, w) => format!("1 {w}"),
+                        (n, "album copy") => format!("{n} album copies"),
+                        (n, _) => plural_files(n),
+                    };
+                    self.notice(format!("{moved} moved to the Trash{note}"));
                     self.scan();
                 }
                 Msg::TagsSaved(ok, errors) => {

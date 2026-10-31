@@ -64,6 +64,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     });
     folders::pickers(app, ui);
     tag_editor::dialog(app, ui);
+    card::take_over_dialog(app, ui);
 }
 
 /// The tab bar: the app's name, the tabs, and what's running in the background.

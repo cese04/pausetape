@@ -13,7 +13,7 @@ use super::names::{artist_key, clean_album, clean_artist_folder, container_folde
 use super::track::Track;
 
 /// Everything scanned. Opus, APE, WavPack and WMA have no Rust decoder: listed, organised, not playable.
-const AUDIO: &[&str] = &[
+pub const AUDIO: &[&str] = &[
     "flac", "mp3", "wav", "m4a", "m4b", "mp4", "aac", "alac", "aiff", "aif", "aifc", "ogg", "oga", "caf", "mka", "mp2", "opus", "ape", "wv", "wma",
 ];
 

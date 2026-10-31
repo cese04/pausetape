@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 12] = [
+const TABS: [(Tab, &str); 13] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
@@ -22,6 +22,7 @@ const TABS: [(Tab, &str); 12] = [
     (Tab::Library, "covers"),
     (Tab::Artists, "artists"),
     (Tab::Card, "card"),
+    (Tab::Card, "takeover"),
     (Tab::Playlists, "playlists"),
     (Tab::Settings, "settings"),
 ];
@@ -124,7 +125,9 @@ impl Shooter {
             // much room, to show what the card tab offers when the choice doesn't fit.
             if let Some(gb) = std::env::var("NEATLIBRARY_SHOT_ROOM").ok().and_then(|v| v.parse::<f64>().ok()) {
                 let card = std::env::temp_dir().join("neatlibrary-shot-card");
-                let _ = std::fs::create_dir_all(&card);
+                // Something copied by hand, for the take-over.
+                let _ = std::fs::create_dir_all(card.join("Hand Copied"));
+                let _ = std::fs::write(card.join("Hand Copied/01 - Song.mp3"), b"not really a song");
                 app.write_mut().dest = Some(card);
                 app.room_while_writing = Some((gb * 1e9) as u64);
             }
@@ -144,6 +147,7 @@ impl Shooter {
             };
             let filter = std::env::var("NEATLIBRARY_SHOT_FILTER").unwrap_or_default();
             app.saved.album_table = TABS[n].1 == "albums";
+            app.take_over_open = TABS[n].1 == "takeover";
             app.filter = if TABS[n].1 == "covers" { "cover:no".into() } else { filter };
             if TABS[n].1 == "albums" {
                 app.selected_albums = app.album_rows(&app.query()).iter().skip(2).take(2).map(|r| r.id.clone()).collect();

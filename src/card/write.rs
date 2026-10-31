@@ -33,6 +33,8 @@ pub struct WriteProfile {
     pub manifest: Vec<Written>,
     /// Unix seconds of the last completed write.
     pub last_written: Option<u64>,
+    /// The take-over dialog was shown on its own once for this card; later it opens on request.
+    pub take_over_offered: bool,
 }
 
 impl Default for WriteProfile {
@@ -47,6 +49,7 @@ impl Default for WriteProfile {
             prune: true,
             manifest: Vec::new(),
             last_written: None,
+            take_over_offered: false,
         }
     }
 }

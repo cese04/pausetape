@@ -26,6 +26,8 @@ pub(super) enum Action {
     Select(usize),
     SelectRun(Vec<usize>),
     ClearSelection,
+    /// Move album copies another copy covers to the Trash (artist, album).
+    TrashCopies(Vec<(usize, usize)>),
     /// Find covers for these albums (artist, album).
     FindCovers(Vec<(usize, usize)>),
     /// Albums on the card or off it.
@@ -67,6 +69,7 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                 app.select_anchor = None;
             }
             Action::FindCovers(albums) => app.find_covers(albums),
+            Action::TrashCopies(albums) => app.trash_copies(albums),
             Action::CardAlbums(albums, on) => app.card_albums(&albums, on),
             Action::SortAlbums(by) => app.sort_albums(by),
             Action::ToggleAlbum(id) => {

@@ -113,8 +113,8 @@ enum Msg {
     ImportedFromCard(Box<card::adopt::Imported>),
     /// Card paths no longer the write's, files put back, errors.
     UndidTakeOver(String, Result<(Vec<PathBuf>, usize, Vec<String>), String>),
-    /// Songs stored twice: extra copies moved to the Trash, and what went wrong.
-    Trashed(usize, Vec<String>),
+    /// Songs stored twice or album copies moved to the Trash: how many, of what, and what went wrong.
+    Trashed(usize, &'static str, Vec<String>),
     /// (track index, new size, new mtime) for files whose tags were written.
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
     /// Loudness of a track, by track id.
@@ -227,6 +227,8 @@ pub struct App {
     /// Albums chosen in the table (by `AlbumNode::id`), and the last one clicked.
     pub selected_albums: BTreeSet<String>,
     pub album_anchor: Option<String>,
+    /// The dialog for taking over music already on the card is open.
+    pub take_over_open: bool,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
     tx: Sender<Msg>,
@@ -313,6 +315,7 @@ impl App {
             album_sort: (SortBy::Artist, false),
             selected_albums: BTreeSet::new(),
             album_anchor: None,
+            take_over_open: false,
             busy: None,
             notices: Vec::new(),
             tx,

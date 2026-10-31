@@ -12,6 +12,6 @@ mod scan;
 mod tags;
 mod track;
 
-pub use scan::{ScanStats, mtime_of, scan};
+pub use scan::{AUDIO, ScanStats, mtime_of, scan};
 pub use tags::{carry_cover, write_tags};
 pub use track::{Track, non_recho_summary};

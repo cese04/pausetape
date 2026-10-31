@@ -451,104 +451,164 @@ fn comparison(app: &mut App, ui: &mut Ui) {
     }
 }
 
-/// Music already on the card that this write didn't put there: offer to check it against the
-/// library, then to move the copies of library songs into place instead of copying them again.
+/// Music already on the card that this write didn't put there: one line here, and the
+/// dialog that goes through it.
 fn take_over(app: &mut App, ui: &mut Ui) {
-    let ink = ink(ui);
-    let Some((name, p)) = &app.write_preview else { return };
+    let Some((_, p)) = &app.write_preview else { return };
     let (foreign, foreign_bytes, can_undo) = (p.foreign, p.foreign_bytes, p.can_undo_take_over);
-    // Counts and sizes, copied out so the buttons below can change the app.
-    let surveyed = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| {
-        let c = |l: &[(PathBuf, u64)]| (l.len(), Survey::bytes(l));
-        ((s.used.len(), s.used_bytes()), c(&s.spare), c(&s.versions), c(&s.unknown), c(&s.other))
-    });
-    let clutter = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| s.clutter()).unwrap_or_default();
     if foreign == 0 && !can_undo {
         return;
     }
-    ui.add_space(6.0);
-    theme::panel_frame(ui).show(ui, |ui| {
-        ui.set_max_width(760.0);
-        match surveyed {
-            None if foreign > 0 => {
-                ui.label(format!(
-                    "The card also has {} that this write didn't put there ({}). Songs you copied by hand can be moved into this layout instead of being copied again.",
-                    plural(foreign, "file"),
-                    text::bytes(foreign_bytes)
-                ));
-                ui.add_space(4.0);
-                if app.busy.is_none() && widgets::button_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
-                    app.survey_card();
-                }
-            }
-            None => {}
-            Some(((used, used_bytes), (spare, spare_bytes), (versions, versions_bytes), (unknown, unknown_bytes), (other, other_bytes))) => {
-                let what = if used == 1 { "is an exact copy of a song" } else { "are exact copies of songs" };
-                ui.label(RichText::new(format!("{} on the card {what} this write needs ({}).", plural(used, "song"), text::bytes(used_bytes))).color(ink.text));
-                muted(ui, "They're moved into place (renamed on the card, instant) instead of copied again.");
-                if spare > 0 {
-                    let what = if spare == 1 { "is a copy of a library song" } else { "are copies of library songs" };
-                    muted(ui, format!("{} {what} this write leaves out or converts ({}).", plural(spare, "file"), text::bytes(spare_bytes)));
-                }
-                if versions > 0 {
-                    let what = if versions == 1 { "is another version of a song" } else { "are other versions of songs" };
-                    muted(ui, format!(
-                        "{} {what} in your library ({}): an MP3 where your library has FLAC, different tags… This write puts your library's version on the card.",
-                        plural(versions, "file"),
-                        text::bytes(versions_bytes)
-                    ));
-                }
-                if unknown > 0 {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
-                            .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder first.");
-                        // Room on the music folder's drive, so the copy can't fill it up.
-                        let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
-                        let fits = room.is_none_or(|free| free > unknown_bytes + 1_000_000_000);
-                        if app.busy.is_none() && fits {
-                            let hint = format!(
-                                "Copies them, with their covers, into “{}” in your music folder, keeping the card's folder names; the card isn't changed. Then the library is rescanned, and checking the card again lets a take-over move them into place too.",
-                                IMPORT_FOLDER
-                            );
-                            if link(ui, "copy them into your music folder").on_hover_text(hint).clicked() {
-                                app.import_from_card();
-                            }
-                        } else if !fits {
-                            ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(12.5).color(ink.accent));
-                        }
-                    });
-                }
-                if other > 0 {
-                    muted(ui, format!("{} of other kinds: covers, logs, playlists, other devices' data… ({}).", plural(other, "file"), text::bytes(other_bytes)));
-                }
-                ui.add_space(4.0);
-                let gather = format!("move everything else into one folder, “{}” (nothing is deleted)", gather_folder());
-                ui.checkbox(&mut app.gather_on_take_over, gather)
-                    .on_hover_text("Keeps the player's top level to this write's artists. Delete the folder yourself once you're happy; or untick to leave those files where they are.");
-                if !clutter.is_empty() {
-                    let (n, bytes): (usize, u64) = clutter.iter().fold((0, 0), |(a, b), (_, n, s)| (a + n, b + s));
-                    let kinds: Vec<String> = clutter.iter().map(|(k, n, s)| format!("{k}: {} ({})", plural(*n, "file"), text::bytes(*s))).collect();
-                    ui.checkbox(&mut app.delete_clutter_on_take_over, format!("delete clutter: {} ({}) of iTunes data, system files and rip logs; can't be undone", plural(n, "file"), text::bytes(bytes)))
-                        .on_hover_text(format!(
-                            "{}\n\nThe Echo Mini can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
-                            kinds.join("\n")
-                        ));
-                }
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    if app.busy.is_none() && used + spare + versions + unknown + other > 0 && widgets::primary_with(ui, Icon::Card, "Take over the card").on_hover_text("only moves files on the card; undo puts everything back").clicked() {
-                        app.take_over_card();
-                    }
-                    if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
-                        app.card_survey = None;
-                    }
-                });
+    ui.horizontal_wrapped(|ui| {
+        if foreign > 0 {
+            muted(ui, format!("The card also has {} this write didn't put there ({}).", plural(foreign, "file"), text::bytes(foreign_bytes)));
+            if widgets::icon_link(ui, Icon::Card, "go through them").on_hover_text("songs you copied by hand can be moved into this layout instead of copied again").clicked() {
+                app.take_over_open = true;
             }
         }
         if can_undo && app.busy.is_none() && widgets::icon_link(ui, Icon::Back, "undo taking over the card").on_hover_text("move the files back to where they were").clicked() {
             app.undo_take_over();
         }
     });
+}
+
+/// Taking over a card's own music, step by step: check it against the library, then move the
+/// copies of library songs into place.
+pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
+    if !app.take_over_open {
+        return;
+    }
+    // The comparison it rests on went stale (options changed, another write chosen).
+    if app.write_preview.is_none() && app.busy.is_none() {
+        app.take_over_open = false;
+        return;
+    }
+    let ink = ink(ui);
+    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let r = egui::Modal::new(egui::Id::unique("take over")).frame(frame).show(ui.ctx(), |ui| {
+        ui.set_width(640.0f32.min(ui.ctx().content_rect().width() - 80.0));
+        ui.horizontal(|ui| {
+            let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+            super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
+            ui.label(RichText::new("Music already on the card").size(18.0).color(ink.text));
+        });
+        ui.add_space(10.0);
+        if let Some(b) = &app.busy {
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new());
+                muted(ui, format!("{}…", b.label));
+            });
+            return;
+        }
+        take_over_steps(app, ui);
+    });
+    if r.should_close() {
+        app.take_over_open = false;
+    }
+}
+
+fn take_over_steps(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    let Some((name, p)) = &app.write_preview else { return };
+    let (foreign, foreign_bytes) = (p.foreign, p.foreign_bytes);
+    // Counts and sizes, copied out so the buttons below can change the app.
+    let surveyed = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| {
+        let c = |l: &[(PathBuf, u64)]| (l.len(), Survey::bytes(l));
+        ((s.used.len(), s.used_bytes()), c(&s.spare), c(&s.versions), c(&s.unknown), c(&s.other))
+    });
+    let clutter = app.card_survey.as_ref().filter(|(n, _)| n == name).map(|(_, s)| s.clutter()).unwrap_or_default();
+    match surveyed {
+        None if foreign > 0 => {
+            ui.label(RichText::new(format!("The card has {} that this write didn't put there ({}): music copied by hand, perhaps.", plural(foreign, "file"), text::bytes(foreign_bytes))).color(ink.text));
+            ui.add_space(8.0);
+            for (n, step) in [
+                "Check them against your library. This reads a little of each file and changes nothing.",
+                "See what they are: exact copies of songs this write needs, other versions, music your library doesn't have, and other files.",
+                "Take over the card: the copies are moved into this write's layout (renamed on the card, instantly) instead of copied again. Nothing else is deleted unless you say so, and undo puts everything back.",
+            ]
+            .iter()
+            .enumerate()
+            {
+                ui.horizontal_top(|ui| {
+                    ui.label(RichText::new(format!("{}.", n + 1)).color(ink.muted));
+                    ui.add(egui::Label::new(RichText::new(*step).color(if n == 0 { ink.text } else { ink.muted })).wrap());
+                });
+            }
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                if app.busy.is_none() && widgets::primary_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
+                    app.survey_card();
+                }
+                if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
+                    app.take_over_open = false;
+                }
+            });
+        }
+        None => {}
+        Some(((used, used_bytes), (spare, spare_bytes), (versions, versions_bytes), (unknown, unknown_bytes), (other, other_bytes))) => {
+            let what = if used == 1 { "is an exact copy of a song" } else { "are exact copies of songs" };
+            ui.label(RichText::new(format!("{} on the card {what} this write needs ({}).", plural(used, "song"), text::bytes(used_bytes))).color(ink.text));
+            muted(ui, "They're moved into place (renamed on the card, instant) instead of copied again.");
+            if spare > 0 {
+                let what = if spare == 1 { "is a copy of a library song" } else { "are copies of library songs" };
+                muted(ui, format!("{} {what} this write leaves out or converts ({}).", plural(spare, "file"), text::bytes(spare_bytes)));
+            }
+            if versions > 0 {
+                let what = if versions == 1 { "is another version of a song" } else { "are other versions of songs" };
+                muted(ui, format!(
+                    "{} {what} in your library ({}): an MP3 where your library has FLAC, different tags… This write puts your library's version on the card.",
+                    plural(versions, "file"),
+                    text::bytes(versions_bytes)
+                ));
+            }
+            if unknown > 0 {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
+                        .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder first.");
+                    // Room on the music folder's drive, so the copy can't fill it up.
+                    let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
+                    let fits = room.is_none_or(|free| free > unknown_bytes + 1_000_000_000);
+                    if app.busy.is_none() && fits {
+                        let hint = format!(
+                            "Copies them, with their covers, into “{}” in your music folder, keeping the card's folder names; the card isn't changed. Then the library is rescanned, and checking the card again lets a take-over move them into place too.",
+                            IMPORT_FOLDER
+                        );
+                        if link(ui, "copy them into your music folder").on_hover_text(hint).clicked() {
+                            app.import_from_card();
+                        }
+                    } else if !fits {
+                        ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(12.5).color(ink.accent));
+                    }
+                });
+            }
+            if other > 0 {
+                muted(ui, format!("{} of other kinds: covers, logs, playlists, other devices' data… ({}).", plural(other, "file"), text::bytes(other_bytes)));
+            }
+            ui.add_space(4.0);
+            let gather = format!("move everything else into one folder, “{}” (nothing is deleted)", gather_folder());
+            ui.checkbox(&mut app.gather_on_take_over, gather)
+                .on_hover_text("Keeps the player's top level to this write's artists. Delete the folder yourself once you're happy; or untick to leave those files where they are.");
+            if !clutter.is_empty() {
+                let (n, bytes): (usize, u64) = clutter.iter().fold((0, 0), |(a, b), (_, n, s)| (a + n, b + s));
+                let kinds: Vec<String> = clutter.iter().map(|(k, n, s)| format!("{k}: {} ({})", plural(*n, "file"), text::bytes(*s))).collect();
+                ui.checkbox(&mut app.delete_clutter_on_take_over, format!("delete clutter: {} ({}) of iTunes data, system files and rip logs; can't be undone", plural(n, "file"), text::bytes(bytes)))
+                    .on_hover_text(format!(
+                        "{}\n\nThe Echo Mini can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
+                        kinds.join("\n")
+                    ));
+            }
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if app.busy.is_none() && used + spare + versions + unknown + other > 0 && widgets::primary_with(ui, Icon::Card, "Take over the card").on_hover_text("only moves files on the card; undo puts everything back").clicked() {
+                    app.take_over_card();
+                }
+                if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
+                    app.card_survey = None;
+                    app.take_over_open = false;
+                }
+            });
+        }
+    }
 }
 
 fn layout_options(app: &mut App, ui: &mut Ui) {

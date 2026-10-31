@@ -265,6 +265,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.add_space(8.0);
                 ui.label(RichText::new("Showing only albums with songs stored twice, or a copy that another copy covers in the same or higher quality.").color(ink.text));
             });
+            let spare = app.index.superseded();
+            if !spare.is_empty() {
+                ui.add_space(6.0);
+                let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
+                let hint = "Each copy goes only while the copy that covers it is still there: its folder, or only its songs if the folder holds other music. You can put them back from the Trash.";
+                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("move all {} covered copies to the Trash ({})", spare.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                    actions.push(Action::TrashCopies(spare));
+                }
+            }
             let repeats = app.index.repeats();
             if !repeats.is_empty() {
                 ui.add_space(6.0);
@@ -436,7 +445,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         });
                         album_folders(ui, &app.tracks, &al.tracks, &source_root);
                         if let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()) {
-                            superseded_note(ui, &app.tracks, &al.tracks, s);
+                            superseded_note(ui, &app.tracks, &al.tracks, s, app.busy.is_none(), || actions.push(Action::TrashCopies(vec![(ai, bi)])));
                         }
                         if !al.repeats.is_empty() {
                             repeats_note(ui, app, al, &mut actions);
@@ -567,18 +576,18 @@ fn az_rail(ui: &mut Ui, present: &std::collections::BTreeSet<char>, height: f32)
 
 /// A copy whose songs another edition has in the same or higher quality: say so, and what
 /// removing it would free. Whole copies are left for the user to delete.
-fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::library::grouping::Superseded) {
+fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::library::grouping::Superseded, can_trash: bool, trash: impl FnOnce()) {
     let ink = ink(ui);
     let bytes: u64 = idxs.iter().map(|&i| tracks[i].size).sum();
     let how = if s.higher { format!("in higher quality ({})", s.format) } else { format!("in the same quality ({})", s.format) };
     ui.horizontal_wrapped(|ui| {
         ui.add_space(52.0);
         ui.label(RichText::new(format!("Edition {} has all these songs {how}; this copy could go ({}).", s.rank + 1, text::bytes(bytes))).size(12.5).italics().color(ink.text))
-            .on_hover_text(format!(
-                "Edition {}: {}.\nTo remove this copy, open its folder and delete it yourself. Until then, the card gets only one edition anyway.",
-                s.rank + 1,
-                s.label
-            ));
+            .on_hover_text(format!("Edition {}: {}.\nUntil this copy goes, the card gets only one edition anyway.", s.rank + 1, s.label));
+        let hint = "Moves this copy's folder to the Trash (or only its songs, if the folder holds other music), as long as the copy that covers it is still there. You can put it back from the Trash.";
+        if can_trash && widgets::icon_link(ui, Icon::Trash, "move it to the Trash").on_hover_text(hint).clicked() {
+            trash();
+        }
     });
 }
 

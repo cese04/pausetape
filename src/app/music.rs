@@ -187,7 +187,56 @@ impl App {
                 let _ = tx.send(Msg::WriteProgress(n + 1, files.len()));
                 ctx.request_repaint();
             }
-            let _ = tx.send(Msg::Trashed(moved, errors));
+            let _ = tx.send(Msg::Trashed(moved, "file", errors));
+        });
+    }
+
+    /// Move album copies that another copy covers (`Edition::superseded`) to the Trash: each
+    /// copy's folder when it holds nothing else musical, else just its audio files (with their
+    /// CUE sheets). Only while the copy that covers it is still there.
+    pub fn trash_copies(&mut self, albums: Vec<(usize, usize)>) {
+        if albums.is_empty() || self.busy.is_some() {
+            return;
+        }
+        // (files of the copy, files of the copy that covers it)
+        let mut copies: Vec<(Vec<PathBuf>, Vec<PathBuf>)> = Vec::new();
+        for (ai, bi) in albums {
+            let a = &self.index.artists[ai];
+            let ck = &self.index.clusters[a.cluster].key;
+            let al = &a.albums[bi];
+            let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()) else { continue };
+            let Some(better) = a.albums.iter().find(|o| o.base_id(ck) == al.base_id(ck) && o.edition.as_ref().is_some_and(|e| e.rank == s.rank)) else { continue };
+            let files = |idxs: &[usize]| {
+                let mut f: Vec<PathBuf> = idxs.iter().flat_map(|&i| std::iter::once(self.tracks[i].path.clone()).chain(self.tracks[i].cue.as_ref().map(|c| c.sheet.clone()))).collect();
+                f.sort();
+                f.dedup();
+                f
+            };
+            copies.push((files(&al.tracks), files(&better.tracks)));
+        }
+        let total = copies.len();
+        let (busy, stop) = Busy::stoppable("moving copies to the Trash", total);
+        self.busy = Some(busy);
+        self.spawn(move |tx| {
+            let (mut moved, mut errors) = (0, Vec::new());
+            for (n, (files, keep)) in copies.iter().enumerate() {
+                let failed = errors.len();
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                if let Some(gone) = keep.iter().find(|k| !k.exists()) {
+                    errors.push(format!("{}: the copy that covers it is missing {}, so it stays", files[0].display(), gone.display()));
+                    continue;
+                }
+                for t in trash_targets(files) {
+                    if let Err(e) = crate::platform::trash(&t) {
+                        errors.push(format!("{}: {e}", t.display()));
+                    }
+                }
+                moved += (errors.len() == failed) as usize;
+                let _ = tx.send(Msg::WriteProgress(n + 1, total));
+            }
+            let _ = tx.send(Msg::Trashed(moved, "album copy", errors));
         });
     }
 
@@ -335,5 +384,50 @@ impl App {
             self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
         }
         self.rebuild();
+    }
+}
+
+/// What to move to the Trash to remove an album copy made of `files`: each folder of it whole
+/// when everything musical in it (and no subfolder) is the copy's, else just its files there.
+fn trash_targets(files: &[PathBuf]) -> Vec<PathBuf> {
+    let mut dirs: Vec<&std::path::Path> = files.iter().filter_map(|f| f.parent()).collect();
+    dirs.sort();
+    dirs.dedup();
+    let mut out = Vec::new();
+    for dir in dirs {
+        let own = |e: &std::fs::DirEntry| {
+            let p = e.path();
+            let audio = p.extension().is_some_and(|x| crate::library::AUDIO.contains(&x.to_string_lossy().to_lowercase().as_str()));
+            !p.is_dir() && (!audio || files.contains(&p))
+        };
+        if std::fs::read_dir(dir).is_ok_and(|rd| rd.flatten().all(|e| own(&e))) {
+            out.push(dir.to_path_buf());
+        } else {
+            out.extend(files.iter().filter(|f| f.parent() == Some(dir)).cloned());
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_covered_copy_goes_with_its_folder_unless_it_shares_it() {
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-trash-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (own, shared) = (root.join("Album (MP3)"), root.join("Mixed"));
+        for d in [&own, &shared] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        for f in [own.join("01.mp3"), own.join("02.mp3"), own.join("cover.jpg"), shared.join("01.mp3"), shared.join("other album.flac")] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        let files = vec![own.join("01.mp3"), own.join("02.mp3"), shared.join("01.mp3")];
+        assert_eq!(trash_targets(&files), vec![own.clone(), shared.join("01.mp3")], "the folder that's all its own goes whole, cover and all");
+        std::fs::create_dir_all(own.join("Scans")).unwrap();
+        assert_eq!(trash_targets(&files[..2]), vec![own.join("01.mp3"), own.join("02.mp3")], "a subfolder could hold anything: only the songs go");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
