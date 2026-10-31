@@ -55,6 +55,10 @@ pub fn write(dest: &Path, tracks: &[Track], mut progress: impl FnMut(usize, usiz
         out.push((s, made.map_err(|e| format!("{e:#}"))));
         progress(n + 1, total);
     }
+    // macOS leaves "._" companions on FAT cards, named like the samples: a player lists them as
+    // songs that don't play.
+    super::clean_mac_files(&folder);
+    remove_companions(dest);
     out
 }
 
@@ -75,7 +79,15 @@ pub fn remove(dest: &Path) -> Result<()> {
     if list.exists() {
         std::fs::remove_file(&list).with_context(|| format!("removing {}", list.display()))?;
     }
+    remove_companions(dest);
     Ok(())
+}
+
+/// The "._" companions macOS gives the test folder and playlist on a FAT card.
+fn remove_companions(dest: &Path) {
+    for name in [TEST_FOLDER, TEST_PLAYLIST] {
+        let _ = std::fs::remove_file(dest.join(format!("._{name}")));
+    }
 }
 
 fn sample(folder: &Path, s: Sample, n: usize, tracks: &[Track]) -> Result<()> {
