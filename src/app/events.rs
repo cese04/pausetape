@@ -273,8 +273,10 @@ impl App {
                     self.artist_hits.insert(cluster_key, Some(result));
                 }
                 Reply::Album { album_id, result } => {
+                    // Only for a lookup still waiting: one from before a rescan was dropped with it.
+                    let Some(Lookup::Pending(ids)) = self.lookups.get(&album_id) else { continue };
                     let l = match result {
-                        Ok((label, changes)) => Lookup::Ready { label, changes },
+                        Ok((label, changes)) => Lookup::Ready { label, changes: super::music::in_library(changes, ids, &self.tracks) },
                         Err(e) => Lookup::Failed(e),
                     };
                     self.lookups.insert(album_id, l);

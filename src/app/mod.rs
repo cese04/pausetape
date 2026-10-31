@@ -101,7 +101,8 @@ pub enum Tab {
 }
 
 pub enum Lookup {
-    Pending,
+    /// Asked; the ids of the songs sent, in the order the reply refers to them by.
+    Pending(Vec<PathBuf>),
     Ready { label: String, changes: Vec<FieldChange> },
     Failed(String),
 }

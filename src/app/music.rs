@@ -309,21 +309,24 @@ impl App {
         let al: &AlbumNode = &a.albums[album];
         let id = al.id(&self.index.clusters[a.cluster].key);
         let tracks = self.local_tracks(&al.tracks);
+        let ids = al.tracks.iter().map(|&i| self.tracks[i].id()).collect();
         let job = match &al.title {
             Some(title) => Job::Album { album_id: id.clone(), artist: a.name.clone(), album: title.clone(), tracks },
             None => Job::Loose { album_id: id.clone(), tracks },
         };
-        self.lookups.insert(id, Lookup::Pending);
+        self.lookups.insert(id, Lookup::Pending(ids));
         self.mb().send(job);
     }
 
-    /// Songs as MusicBrainz lookups compare them.
+    /// Songs as MusicBrainz lookups compare them, numbered by their place in `idxs`: a rescan can
+    /// renumber the library before the reply comes back (see `Msg` handling of `Reply::Album`).
     pub(super) fn local_tracks(&self, idxs: &[usize]) -> Vec<LocalTrack> {
         idxs.iter()
-            .map(|&i| {
+            .enumerate()
+            .map(|(n, &i)| {
                 let t = &self.tracks[i];
                 LocalTrack {
-                    idx: i,
+                    idx: n,
                     title: t.display_title(),
                     artist: t.artist.clone().unwrap_or_default(),
                     album_artist: t.album_artist.clone().unwrap_or_default(),
@@ -392,6 +395,19 @@ impl App {
     }
 }
 
+/// Suggestions for the songs of a request (`ids`, by place) as suggestions for the library's songs
+/// now, found by id. Songs no longer in the library lose theirs.
+pub(super) fn in_library(changes: Vec<FieldChange>, ids: &[PathBuf], tracks: &[Track]) -> Vec<FieldChange> {
+    let now: HashMap<PathBuf, usize> = tracks.iter().enumerate().map(|(i, t)| (t.id(), i)).collect();
+    changes
+        .into_iter()
+        .filter_map(|mut c| {
+            c.track = *ids.get(c.track).and_then(|id| now.get(id))?;
+            Some(c)
+        })
+        .collect()
+}
+
 /// What to move to the Trash to remove an album copy made of `files`: each folder of it whole
 /// when everything musical in it (and no subfolder) is the copy's, else just its files there.
 fn trash_targets(files: &[PathBuf]) -> Vec<PathBuf> {
@@ -417,6 +433,17 @@ fn trash_targets(files: &[PathBuf]) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn suggestions_follow_their_songs_through_a_rescan() {
+        let song = |p: &str| Track { path: p.into(), ..Default::default() };
+        let change = |track: usize, new: &str| FieldChange { track, field: Field::Title, old: String::new(), new: new.into(), accept: true };
+        // Asked about a.flac and b.flac; meanwhile a rescan put other songs first and lost a.flac.
+        let ids = vec![PathBuf::from("a.flac"), PathBuf::from("b.flac")];
+        let now = vec![song("new.flac"), song("other.flac"), song("b.flac")];
+        let got = in_library(vec![change(0, "A"), change(1, "B")], &ids, &now);
+        assert_eq!(got.iter().map(|c| (c.track, c.new.as_str())).collect::<Vec<_>>(), vec![(2, "B")]);
+    }
 
     #[test]
     fn a_covered_copy_goes_with_its_folder_unless_it_shares_it() {

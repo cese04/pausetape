@@ -50,6 +50,7 @@ impl Field {
 
 #[derive(Clone, Debug)]
 pub struct FieldChange {
+    /// The song: its place in the request (`LocalTrack::idx`); in the app, its place in the library.
     pub track: usize,
     pub field: Field,
     pub old: String,
@@ -59,6 +60,7 @@ pub struct FieldChange {
 
 #[derive(Clone, Debug)]
 pub struct LocalTrack {
+    /// The song's place in the request; suggestions name songs by it.
     pub idx: usize,
     pub title: String,
     pub artist: String,

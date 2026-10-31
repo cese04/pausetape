@@ -673,7 +673,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
     let ink = ink(ui);
     ui.indent(id, |ui| {
         match l {
-            Lookup::Pending => {
+            Lookup::Pending(_) => {
                 muted(ui, "asking MusicBrainz…");
             }
             Lookup::Failed(e) => {
