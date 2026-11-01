@@ -370,6 +370,7 @@ mod tests {
             assert_eq!((tracks.len(), s.unreadable, s.removed, s.unreachable), (1, 1, 0, false));
             assert_eq!(db.counts(), (3, 1));
         }
+        drop(db);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -378,12 +379,16 @@ mod tests {
         let root = std::env::temp_dir().join(format!("pausetape-test-moved-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
-        let (old, new) = (root.join("Old Name"), root.join("New Name"));
-        let t = Track { path: "/music/a.flac".into(), cover: Some(old.join("covers/1.jpg")), dirty: true, ..Default::default() };
+        let (old, new, music) = (root.join("Old Name"), root.join("New Name"), root.join("music"));
+        // Paths as the platform writes them (with backslashes on Windows), as the app's always are.
+        let song = music.join("a.flac");
+        let t = Track { path: song.clone(), cover: Some(old.join("covers").join("1.jpg")), dirty: true, ..Default::default() };
         db.save_edits([&t]).unwrap();
         db.data_folder_moved(&old, &new).unwrap();
-        let edits = db.edits_under(Path::new("/music")).unwrap();
-        assert_eq!(edits["/music/a.flac"].track.cover.as_deref(), Some(new.join("covers/1.jpg").as_path()));
+        let edits = db.edits_under(&music).unwrap();
+        assert_eq!(edits[song.to_string_lossy().as_ref()].track.cover.as_deref(), Some(new.join("covers").join("1.jpg").as_path()));
+        // Windows can't remove a database that's still open.
+        drop(db);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -397,8 +402,10 @@ mod tests {
         db.save_artist_info("flyinglotus", &info, 1_700_000_000).unwrap();
         // Kept across a reopening, and by itself: forgetting stored tags leaves it.
         db.clear().unwrap();
+        drop(db);
         let db = Db::open(&root.join("library.sqlite3")).unwrap();
         assert_eq!(db.artist_info("flyinglotus").unwrap(), Some((info, 1_700_000_000)));
+        drop(db);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -457,6 +464,7 @@ mod tests {
         // Stored tags forgotten: it's read through again.
         db.clear().unwrap();
         assert!(load(&music, &mut db).is_none());
+        drop(db);
         std::fs::remove_dir_all(root).unwrap();
     }
 
