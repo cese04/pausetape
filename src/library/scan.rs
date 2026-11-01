@@ -126,6 +126,8 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
         }
     }
 
+    let sheets: Vec<(PathBuf, Vec<u8>)> = sheets.into_iter().filter_map(|p| std::fs::read(&p).ok().map(|data| (p, data))).collect();
+
     // An empty mount point where the drive should be (or the drive gone mid-walk): change nothing.
     if raw.is_empty() && known > 0 {
         stats.unreachable = true;
@@ -164,9 +166,9 @@ pub fn load(root: &Path, db: &mut Db) -> Option<(Vec<Track>, ScanStats)> {
 
 /// What every scan does after finding the files: songs from album files, names from folders,
 /// the user's unsaved corrections.
-fn finish(root: &Path, raw: Vec<Track>, sheets: &[PathBuf], edits: &HashMap<String, Cached>, db: Option<&mut Db>, mut stats: ScanStats) -> (Vec<Track>, ScanStats) {
+fn finish(root: &Path, raw: Vec<Track>, sheets: &[(PathBuf, Vec<u8>)], edits: &HashMap<String, Cached>, db: Option<&mut Db>, mut stats: ScanStats) -> (Vec<Track>, ScanStats) {
     // Albums stored as one file plus a CUE sheet become one track per song. Like folder-name
-    // inference, this runs every scan: sheets are small, and an edited sheet takes effect at once.
+    // inference, this runs every time (sheets are small): an edited sheet counts from a rescan.
     let raw = cue::expand(raw, sheets);
 
     // Folder-name inference depends on `root`, so it runs every scan rather than being cached.

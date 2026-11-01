@@ -594,3 +594,6 @@ Calibre's device view, for music: the library is where you choose what goes on t
   re-read into the database at once. Songs added or changed by other programs show after a
   rescan. A folder the database doesn't know yet, or after "forget stored tags", is read
   through as before.
+- CUE sheets are kept in the database with their contents, so opening reads nothing from the
+  music folder: reading the 113 sheets from a USB drive took 1.4–2 s of the opening. Sheets
+  stored before are read once more, then kept.

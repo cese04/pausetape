@@ -29,7 +29,7 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    per song (`library/cue.rs`), and folder-name inference ("Artist/Album/03 - Title") fills
    gaps (it depends on which folder is the root). Saved corrections are re-applied.
    Result: `Vec<Track>`. The app opens with `scan::load` instead, which does the same from the
-   database alone (stored tracks and CUE sheets, no folder walked): 0.2 s rather than 27 s for
+   database alone (stored tracks and CUE sheets with their contents; nothing in the folder is read): 0.2 s rather than 27 s for
    7,100 songs on a USB drive. The folder is walked when it's new to the database, on
    **rescan**, and after the app's own work on its files (tidy, take-over, Trash, undo, adding
    music); saved tags are re-read into the database file by file.

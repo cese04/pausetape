@@ -182,8 +182,9 @@ pub fn resolve<'a>(name: &str, candidates: &'a [PathBuf]) -> Option<&'a PathBuf>
 /// Replace album files described by a CUE sheet with one track per song. Only files the sheet
 /// splits into two or more tracks are cut; a file holding one song (a per-track rip, or the
 /// last side of an LP) keeps its own tags, with the sheet filling only what they leave out.
-/// Each file is claimed by the first sheet (by path) that resolves it.
-pub fn expand(tracks: Vec<Track>, sheets: &[PathBuf]) -> Vec<Track> {
+/// Each file is claimed by the first sheet (by path) that resolves it. Sheets come with their
+/// contents, read during a scan or stored in the library database.
+pub fn expand(tracks: Vec<Track>, sheets: &[(PathBuf, Vec<u8>)]) -> Vec<Track> {
     let mut by_dir: HashMap<&Path, Vec<PathBuf>> = HashMap::new();
     for t in &tracks {
         if let Some(dir) = t.path.parent() {
@@ -192,12 +193,11 @@ pub fn expand(tracks: Vec<Track>, sheets: &[PathBuf]) -> Vec<Track> {
     }
     let mut songs: HashMap<PathBuf, Vec<Track>> = HashMap::new();
     let mut fill: Vec<(PathBuf, Track)> = Vec::new();
-    let mut sheets: Vec<&PathBuf> = sheets.iter().collect();
-    sheets.sort();
-    for path in sheets {
+    let mut sheets: Vec<&(PathBuf, Vec<u8>)> = sheets.iter().collect();
+    sheets.sort_by(|a, b| a.0.cmp(&b.0));
+    for (path, bytes) in sheets {
         let Some(candidates) = path.parent().and_then(|d| by_dir.get(d)) else { continue };
-        let Ok(bytes) = std::fs::read(path) else { continue };
-        let sheet = parse(&decode(&bytes));
+        let sheet = parse(&decode(bytes));
         for f in &sheet.files {
             let Some(audio) = resolve(&f.name, candidates) else { continue };
             if songs.contains_key(audio) || fill.iter().any(|(p, _)| p == audio) {
@@ -354,7 +354,7 @@ mod tests {
             ..Default::default()
         };
         let other = Track { path: dir.join("bonus.flac"), ..Default::default() };
-        let out = expand(vec![image, other], &[sheet.clone()]);
+        let out = expand(vec![image, other], &[(sheet.clone(), IMAGE.into())]);
         assert_eq!(out.len(), 4);
         let titles: Vec<Option<&str>> = out.iter().map(|t| t.title.as_deref()).collect();
         assert_eq!(titles, [Some("Disorder"), Some("Day Of The Lords"), Some("Candidate"), None]);
@@ -375,9 +375,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let sheet = dir.join("Octavarium.cue");
-        std::fs::write(&sheet, "PERFORMER \"Dream Theater\"\nTITLE \"Octavarium\"\nFILE \"Side 4.flac\" WAVE\n TRACK 08 AUDIO\n  TITLE \"Octavarium\"\n  INDEX 01 00:00:00\n").unwrap();
+        let text = "PERFORMER \"Dream Theater\"\nTITLE \"Octavarium\"\nFILE \"Side 4.flac\" WAVE\n TRACK 08 AUDIO\n  TITLE \"Octavarium\"\n  INDEX 01 00:00:00\n";
+        std::fs::write(&sheet, text).unwrap();
         let side = Track { path: dir.join("Side 4.flac"), ext: "flac".into(), year: Some(2005), ..Default::default() };
-        let out = expand(vec![side], &[sheet]);
+        let out = expand(vec![side], &[(sheet, text.into())]);
         assert_eq!(out.len(), 1);
         assert_eq!((out[0].title.as_deref(), out[0].track, out[0].artist.as_deref(), out[0].year), (Some("Octavarium"), Some(8), Some("Dream Theater"), Some(2005)));
         assert!(out[0].cue.is_none(), "a whole file is not cut");

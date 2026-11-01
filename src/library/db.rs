@@ -4,7 +4,8 @@
 //! One SQLite file serves every music folder; rows are keyed by absolute path (corrections by
 //! track id, which adds "#03" for a song inside an album file). A cached row is trusted only
 //! while the file's size and modification time match what was recorded. A folder read through
-//! is recorded with its CUE sheets, so the app can open with its library as it was, unread.
+//! is recorded with its CUE sheets (contents too), so the app can open with its library as it
+//! was without touching the folder.
 
 use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -75,8 +76,15 @@ impl Db {
                  root    TEXT PRIMARY KEY,
                  scanned INTEGER NOT NULL -- seconds since 1970 when it was last read through
              );
-             CREATE TABLE IF NOT EXISTS sheets (path TEXT PRIMARY KEY);",
+             CREATE TABLE IF NOT EXISTS sheets (
+                 path TEXT PRIMARY KEY,
+                 data BLOB                -- the sheet's bytes; empty in rows from before they were kept
+             );",
         )?;
+        let has_data: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sheets') WHERE name = 'data'")?.exists([])?;
+        if !has_data {
+            conn.execute_batch("ALTER TABLE sheets ADD COLUMN data BLOB;")?;
+        }
         let version: Option<i64> = conn.query_row("SELECT value FROM meta WHERE key = 'schema'", [], |r| r.get(0)).ok();
         if version.is_some_and(|v| v != SCHEMA_VERSION) {
             // Older layout: the cache is disposable, so start over rather than migrate. The
@@ -144,28 +152,40 @@ impl Db {
 
     /// `root` has just been read through and held these CUE sheets. With `complete` false (a
     /// folder in it couldn't be read), sheets known from before are kept too.
-    pub fn record_scan(&mut self, root: &Path, sheets: &[PathBuf], complete: bool, at: u64) -> Result<()> {
+    pub fn record_scan(&mut self, root: &Path, sheets: &[(PathBuf, Vec<u8>)], complete: bool, at: u64) -> Result<()> {
         let tx = self.conn.transaction()?;
         if complete {
             let (low, high) = prefix_range(root);
             tx.execute("DELETE FROM sheets WHERE path >= ?1 AND path < ?2", params![low, high])?;
         }
-        {
-            let mut put = tx.prepare("INSERT OR IGNORE INTO sheets (path) VALUES (?1)")?;
-            for s in sheets {
-                put.execute(params![s.to_string_lossy()])?;
-            }
-        }
+        put_sheets(&tx, sheets)?;
         tx.execute("INSERT OR REPLACE INTO folders (root, scanned) VALUES (?1, ?2)", params![root.to_string_lossy(), at as i64])?;
         tx.commit()?;
         Ok(())
     }
 
-    pub fn sheets_under(&self, root: &Path) -> Result<Vec<PathBuf>> {
+    /// The CUE sheets inside `root` with their contents. A row stored before contents were kept
+    /// is read from its file once, and kept from then on.
+    pub fn sheets_under(&mut self, root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>> {
         let (low, high) = prefix_range(root);
-        let mut stmt = self.conn.prepare("SELECT path FROM sheets WHERE path >= ?1 AND path < ?2")?;
-        let rows = stmt.query_map(params![low, high], |r| r.get::<_, String>(0))?;
-        Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?.into_iter().map(PathBuf::from).collect())
+        let mut stmt = self.conn.prepare("SELECT path, data FROM sheets WHERE path >= ?1 AND path < ?2")?;
+        let rows = stmt.query_map(params![low, high], |r| Ok((PathBuf::from(r.get::<_, String>(0)?), r.get::<_, Option<Vec<u8>>>(1)?)))?;
+        let (mut sheets, mut unread) = (Vec::new(), Vec::new());
+        for row in rows {
+            match row? {
+                (path, Some(data)) => sheets.push((path, data)),
+                (path, None) => unread.push(path),
+            }
+        }
+        drop(stmt);
+        let read: Vec<(PathBuf, Vec<u8>)> = unread.into_iter().filter_map(|p| std::fs::read(&p).ok().map(|data| (p, data))).collect();
+        if !read.is_empty() {
+            let tx = self.conn.transaction()?;
+            put_sheets(&tx, &read)?;
+            tx.commit()?;
+        }
+        sheets.extend(read);
+        Ok(sheets)
     }
 
     pub fn edits_under(&self, root: &Path) -> Result<HashMap<String, Cached>> {
@@ -221,6 +241,14 @@ impl Db {
         let n = |table: &str| self.conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get::<_, i64>(0)).unwrap_or(0) as usize;
         (n("tracks"), n("edits"))
     }
+}
+
+fn put_sheets(tx: &rusqlite::Transaction, sheets: &[(PathBuf, Vec<u8>)]) -> Result<()> {
+    let mut put = tx.prepare("INSERT OR REPLACE INTO sheets (path, data) VALUES (?1, ?2)")?;
+    for (path, data) in sheets {
+        put.execute(params![path.to_string_lossy(), data])?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -334,8 +362,10 @@ mod tests {
         let (scanned, _) = scan(&music, Some(&mut db), false, |_| {});
         assert_eq!(scanned.len(), 3, "two songs from the album file, and the single");
 
-        // Opened from the database: the same songs, corrections included; files added since
-        // by another program wait for a rescan.
+        // Opened from the database: the same songs, corrections included, without the sheet
+        // being read again; files added since by another program wait for a rescan.
+        let cue = album.join("Animals.cue");
+        std::fs::rename(&cue, album.join("Animals.cue.away")).unwrap();
         let mut dogs = scanned.iter().find(|t| t.display_title() == "Dogs").unwrap().clone();
         dogs.title = Some("Dogs (2018 Remix)".into());
         dogs.dirty = true;
@@ -350,6 +380,12 @@ mod tests {
         };
         assert_eq!(ids(&opened), ids(&scanned));
         assert!(opened.iter().any(|t| t.dirty && t.title.as_deref() == Some("Dogs (2018 Remix)")));
+        std::fs::rename(album.join("Animals.cue.away"), &cue).unwrap();
+        // A sheet stored before its contents were kept is read once, then kept.
+        db.conn.execute("UPDATE sheets SET data = NULL", []).unwrap();
+        assert_eq!(load(&music, &mut db).unwrap().0.len(), 3);
+        let unread: i64 = db.conn.query_row("SELECT COUNT(*) FROM sheets WHERE data IS NULL", [], |r| r.get(0)).unwrap();
+        assert_eq!(unread, 0);
         let (rescanned, s) = scan(&music, Some(&mut db), false, |_| {});
         assert_eq!((rescanned.len(), s.stored), (4, None));
 
