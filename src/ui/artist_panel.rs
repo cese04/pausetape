@@ -7,7 +7,7 @@ use super::actions::Action;
 use super::icons::Icon;
 use super::text::plural;
 use super::theme::ink;
-use super::widgets::{icon_link, link, muted};
+use super::widgets::{chip, icon_link, muted, tag};
 use crate::app::{App, ArtistState};
 use crate::musicbrainz::{ArtistInfo, LinkUse};
 
@@ -45,22 +45,40 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
         Some(ArtistState::Found { info, .. }) => Some(info),
         _ => None,
     };
-    ui.indent(("artist panel", cluster), |ui| {
-        ui.spacing_mut().item_spacing.y = 3.0;
+    // A card of its own, so it reads apart from the albums under it.
+    let frame = egui::Frame::new()
+        .fill(ink.hover)
+        .stroke(egui::Stroke::new(1.0, ink.faint))
+        .corner_radius(8.0)
+        .inner_margin(egui::Margin::symmetric(16, 12))
+        .outer_margin(egui::Margin { left: 0, right: 0, top: 4, bottom: 6 });
+    frame.show(ui, |ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(6.0, 8.0);
         match state {
             Some(ArtistState::Found { info, .. }) => {
                 let facts = facts(info);
-                if !facts.is_empty() {
-                    ui.label(RichText::new(facts).size(13.5).color(ink.muted));
+                if !info.genres.is_empty() || !facts.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for g in info.genres.iter().take(5) {
+                            tag(ui, g);
+                        }
+                        if !facts.is_empty() {
+                            ui.add_space(4.0);
+                            ui.label(RichText::new(facts).size(13.5).color(ink.muted));
+                        }
+                    });
                 }
             }
             Some(ArtistState::Asking) => {
-                muted(ui, "asking MusicBrainz…");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new().size(12.0).color(ink.accent));
+                    muted(ui, "asking MusicBrainz…");
+                });
             }
             Some(ArtistState::Failed(e)) => {
                 ui.horizontal_wrapped(|ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
-                    if link(ui, "try again").clicked() {
+                    if icon_link(ui, Icon::Rescan, "try again").clicked() {
                         actions.push(Action::AskArtistInfo(cluster, None));
                     }
                 });
@@ -69,11 +87,11 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                 muted(ui, if hits.is_empty() { "MusicBrainz has no artist by this name." } else { "Which of these MusicBrainz artists is it?" });
                 for h in hits {
                     ui.horizontal(|ui| {
-                        ui.label(&h.name);
-                        muted(ui, &h.detail);
-                        if link(ui, "this one").clicked() {
+                        if icon_link(ui, Icon::Check, "this one").clicked() {
                             actions.push(Action::AskArtistInfo(cluster, Some(h.id.clone())));
                         }
+                        ui.label(&h.name);
+                        muted(ui, &h.detail);
                     });
                 }
             }
@@ -81,12 +99,13 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
         }
         // Where to go for more: what MusicBrainz knows, and a search where it knows nothing.
         let links = info.map(|i| i.links.as_slice()).unwrap_or_default();
-        for (kind, label) in [(LinkUse::Buy, "buy"), (LinkUse::Listen, "listen"), (LinkUse::Discover, "discover")] {
-            let mut row: Vec<(String, String)> = links.iter().filter(|l| l.kind == kind).map(|l| (l.site.clone(), l.url.clone())).collect();
+        for (kind, icon, label) in [(LinkUse::Buy, Icon::Buy, "buy"), (LinkUse::Listen, Icon::Listen, "listen"), (LinkUse::Discover, Icon::Discover, "discover")] {
+            // (site, url, a search rather than the artist's own page)
+            let mut row: Vec<(String, String, bool)> = links.iter().filter(|l| l.kind == kind).map(|l| (l.site.clone(), l.url.clone(), false)).collect();
             if kind == LinkUse::Buy {
                 for (site, url) in searches(&c.name) {
-                    if !row.iter().any(|(s, _)| *s == site) {
-                        row.push((format!("search {site}"), url));
+                    if !row.iter().any(|(s, ..)| *s == site) {
+                        row.push((site, url, true));
                     }
                 }
             }
@@ -94,12 +113,20 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                 continue;
             }
             ui.horizontal_wrapped(|ui| {
-                ui.allocate_ui_with_layout(egui::vec2(62.0, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    ui.set_min_width(62.0);
-                    ui.label(RichText::new(label).size(12.5).color(ink.muted));
+                ui.allocate_ui_with_layout(egui::vec2(96.0, 22.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_min_width(96.0);
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
+                    super::icons::paint(ui.painter(), rect, icon, ink.muted);
+                    ui.label(RichText::new(label.to_uppercase()).size(11.0).extra_letter_spacing(1.2).color(ink.muted));
                 });
-                for (site, url) in row {
-                    if link(ui, &site).on_hover_text(&url).clicked() {
+                for (site, url, search) in row {
+                    // Buying is what the panel is for: those links carry the accent.
+                    let (icon, colour, hint) = match (search, kind) {
+                        (true, _) => (Icon::Search, ink.muted, format!("Search {site} for “{}”", c.name)),
+                        (false, LinkUse::Buy) => (Icon::External, ink.accent, url.clone()),
+                        (false, _) => (Icon::External, ink.text, url.clone()),
+                    };
+                    if chip(ui, icon, &site, colour).on_hover_text(hint).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(&url));
                     }
                 }
@@ -155,7 +182,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
     });
 }
 
-/// "experimental hip hop · downtempo · US · since 1983"
+/// "US · since 1983", after the genres.
 fn facts(i: &ArtistInfo) -> String {
     let years = match (i.begin, i.end) {
         (Some(b), Some(e)) => format!("{b}–{e}"),
@@ -164,8 +191,7 @@ fn facts(i: &ArtistInfo) -> String {
         (None, Some(e)) => format!("until {e}"),
         (None, None) => String::new(),
     };
-    let genres = i.genres.iter().take(4).cloned();
-    [i.disambiguation.clone()].into_iter().chain(genres).chain([i.country.clone(), years]).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
+    [i.disambiguation.clone(), i.country.clone(), years].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
 }
 
 /// Searches for the stores in the buy row, for an artist MusicBrainz has no link to there.
@@ -200,7 +226,7 @@ mod tests {
     #[test]
     fn facts_in_a_line() {
         let i = ArtistInfo { genres: vec!["a".into(), "b".into()], country: "US".into(), begin: Some(1983), ..Default::default() };
-        assert_eq!(facts(&i), "a · b · US · since 1983");
+        assert_eq!(facts(&i), "US · since 1983", "the genres are shown apart");
         let ended = ArtistInfo { begin: Some(1976), end: Some(1980), ended: true, ..Default::default() };
         assert_eq!(facts(&ended), "1976–1980");
     }

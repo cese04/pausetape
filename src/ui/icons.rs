@@ -34,6 +34,15 @@ pub enum Icon {
     Check,
     /// A picture: covers.
     Image,
+    // The artist panel
+    /// A shopping bag: where to buy.
+    Buy,
+    /// Headphones: where to listen.
+    Listen,
+    /// A compass: where to find out more.
+    Discover,
+    /// An arrow out of a box: opens in the browser.
+    External,
 }
 
 /// Paint `icon` inside `rect` (meant to be square) in `color`.
@@ -171,6 +180,29 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             p.add(closed(&[(0.1, 0.18), (0.9, 0.18), (0.9, 0.82), (0.1, 0.82)]));
             p.add(line(&[(0.1, 0.72), (0.38, 0.44), (0.6, 0.66), (0.72, 0.54), (0.9, 0.72)]));
             p.circle_filled(at(0.68, 0.36), s * 0.07, color);
+        }
+        Icon::Buy => {
+            // A bag with a handle.
+            p.add(closed(&[(0.18, 0.36), (0.82, 0.36), (0.88, 0.9), (0.12, 0.9)]));
+            p.add(Shape::line(arc(0.5, 0.36, 0.17, PI, 2.0 * PI), stroke));
+        }
+        Icon::Listen => {
+            // A headband over two ear cups.
+            p.add(Shape::line(arc(0.5, 0.56, 0.36, PI, 2.0 * PI), stroke));
+            p.add(closed(&[(0.14, 0.56), (0.3, 0.56), (0.3, 0.86), (0.14, 0.86)]));
+            p.add(closed(&[(0.7, 0.56), (0.86, 0.56), (0.86, 0.86), (0.7, 0.86)]));
+        }
+        Icon::Discover => {
+            // A compass: a ring and its needle.
+            p.circle_stroke(at(0.5, 0.5), s * 0.42, stroke);
+            p.add(Shape::convex_polygon(vec![at(0.66, 0.34), at(0.56, 0.56), at(0.44, 0.44)], color, Stroke::NONE));
+            p.add(Shape::closed_line(vec![at(0.34, 0.66), at(0.44, 0.44), at(0.56, 0.56)], stroke));
+        }
+        Icon::External => {
+            p.add(line(&[(0.62, 0.14), (0.14, 0.14), (0.14, 0.86), (0.86, 0.86), (0.86, 0.38)]));
+            let pts = vec![at(0.44, 0.56), at(0.86, 0.14)];
+            p.add(Shape::line(pts.clone(), stroke));
+            p.add(head(&pts));
         }
     }
 }

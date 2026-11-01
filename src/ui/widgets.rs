@@ -79,6 +79,17 @@ pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) ->
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// A word that describes, not a control: a genre, in a small filled pill.
+pub fn tag(ui: &mut Ui, text: impl Into<String>) -> Response {
+    let ink = ink(ui);
+    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(12.5), Color32::PLACEHOLDER);
+    let pad = vec2(8.0, 2.0);
+    let (rect, resp) = ui.allocate_exact_size(galley.size() + pad * 2.0, Sense::hover());
+    ui.painter().rect_filled(rect, rect.height() / 2.0, ink.chip);
+    ui.painter().galley(rect.min + pad, galley, ink.text);
+    resp
+}
+
 /// A section heading: icon, small capitals, and a hairline to the edge.
 pub fn section(ui: &mut Ui, icon: Icon, title: &str) {
     let ink = ink(ui);

@@ -619,4 +619,8 @@ Calibre's device view, for music: the library is where you choose what goes on t
   with the others (a guest's "feat. …" is kept). *Use MusicBrainz's name* does the same.
 - **Settings › Artist decisions** lists each merge and keep-apart with its own undo.
 - The artists tab is gone: the library already lists every artist.
+- The panel is a card of its own: genres as small tags, then a row each for **buy** (a bag),
+  **listen** (headphones) and **discover** (a compass), each site a pill that opens in the
+  browser. Buying links carry the accent; searches standing in for a missing link are grey,
+  with a magnifier.
 
