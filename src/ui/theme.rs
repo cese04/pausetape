@@ -8,6 +8,8 @@ use std::sync::Arc;
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle, Theme, Ui, vec2};
 use serde::{Deserialize, Serialize};
 
+use super::layout::{ICON, ROW, S1, S2, S3, S5};
+
 pub struct Ink {
     pub bg: Color32,
     pub text: Color32,
@@ -168,8 +170,17 @@ pub fn install(ctx: &egui::Context) {
                 (TextStyle::Monospace, FontId::monospace(13.0)),
             ]
             .into();
-            style.spacing.item_spacing = vec2(10.0, 6.0);
-            style.spacing.button_padding = vec2(6.0, 2.0);
+            // The 8-point grid (`layout`): gaps of 8, controls a row of 24 tall, insets of 16.
+            let s = &mut style.spacing;
+            s.item_spacing = vec2(S1, S1);
+            s.button_padding = vec2(S1, 0.0);
+            s.interact_size = vec2(S5, ROW);
+            s.icon_width = ICON;
+            s.icon_width_inner = S1;
+            s.icon_spacing = S1;
+            s.indent = S2;
+            s.menu_margin = egui::Margin::same(S1 as i8);
+            s.window_margin = egui::Margin::same(S2 as i8);
             let v = &mut style.visuals;
             let ink = palette(theme == Theme::Dark, Accent::default());
             v.panel_fill = ink.bg;
@@ -202,11 +213,17 @@ pub fn install(ctx: &egui::Context) {
 /// A softly outlined panel used to group one step of a task.
 pub fn panel_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().fill(ink.hover).stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::same(18))
+    egui::Frame::new().fill(ink.hover).stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::same(S2 as i8))
+}
+
+/// A dialog over the app: the paper, with a grid's breadth of room inside.
+pub fn dialog_frame(ui: &Ui) -> egui::Frame {
+    let ink = ink(ui);
+    egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(S3 as i8))
 }
 
 /// Outlined in the warning colour: something the user should know before it surprises them.
 pub fn warning_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(14, 10))
+    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
 }

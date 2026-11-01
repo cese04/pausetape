@@ -13,6 +13,7 @@ use super::widgets::{StrikeIf, button, button_with, caps, icon_link, link, muted
 use super::ROW_H;
 use crate::app::{App, Tab};
 use crate::card::{AlbumOrder, SpaceInfo, Volume};
+use super::layout::{S1, S2, S3, row};
 
 /// The open folder dialog, if any.
 pub enum Picker {
@@ -26,19 +27,19 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
         ui.set_max_width(ui.available_width().min(680.0));
         muted(ui, "Two things to set up once: where your music is, and which SD card it goes to.");
-        ui.add_space(12.0);
+        ui.add_space(S2);
         source_step(app, ui);
-        ui.add_space(14.0);
+        ui.add_space(S2);
         card_step(app, ui);
-        ui.add_space(18.0);
+        ui.add_space(S3);
         if app.saved.source.is_some() && app.write().dest.is_some() {
-            ui.horizontal(|ui| {
+            row(ui, |ui| {
                 muted(ui, "All set. Next, choose what goes on the card.");
                 if primary_with(ui, Icon::Card, "Go to the card").clicked() {
                     app.tab = Tab::Card;
                 }
             });
-            ui.add_space(18.0);
+            ui.add_space(S3);
         }
         egui::CollapsingHeader::new(RichText::new("Advanced: reorganise the music folder itself").color(ink(ui).muted))
             .default_open(app.tidy_plan.is_some())
@@ -48,7 +49,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
 fn step_title(ui: &mut Ui, n: &str, title: &str) {
     let ink = ink(ui);
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         ui.label(RichText::new(n).size(22.0).color(ink.muted));
         ui.label(RichText::new(title).size(19.0).color(ink.text));
     });
@@ -63,7 +64,7 @@ fn source_step(app: &mut App, ui: &mut Ui) {
     panel_frame(ui).show(ui, |ui| {
         ui.set_width(ui.available_width());
         step_title(ui, "1", "Your music");
-        ui.add_space(6.0);
+        ui.add_space(S1);
         match app.saved.source.clone() {
             None => {
                 muted(ui, "The folder on this computer that holds your music. It can be messy; Pausetape only reads it.");
@@ -71,7 +72,7 @@ fn source_step(app: &mut App, ui: &mut Ui) {
             Some(src) => {
                 ui.label(RichText::new(folder_name(&src)).size(20.0).strong());
                 ui.add(egui::Label::new(RichText::new(src.display().to_string()).size(12.0).color(ink.muted)).truncate());
-                ui.add_space(4.0);
+                ui.add_space(S1);
                 if app.busy.as_ref().is_some_and(|b| b.label == "reading tags") {
                     muted(ui, "reading your music…");
                 } else {
@@ -81,8 +82,8 @@ fn source_step(app: &mut App, ui: &mut Ui) {
                 }
             }
         }
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        ui.add_space(S1);
+        row(ui, |ui| {
             let label = if app.saved.source.is_some() { "Change folder…" } else { "Choose folder…" };
             if button_with(ui, Icon::Folder, label).clicked() {
                 app.picker = Some(Picker::Source(Navigator::new(app.saved.source.as_deref())));
@@ -122,7 +123,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         if app.saved.writes.len() > 1 {
             muted(ui, format!("for the write “{write_name}”"));
         }
-        ui.add_space(6.0);
+        ui.add_space(S1);
         match &dest {
             None => {
                 muted(ui, "Put the Echo Mini's card in a reader (or connect the player as a drive), then choose it.");
@@ -154,7 +155,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                 }
             }
         }
-        ui.add_space(8.0);
+        ui.add_space(S1);
         let label = if dest.is_some() { "Change card…" } else { "Choose card…" };
         if button_with(ui, Icon::Card, label).clicked() {
             app.volumes = crate::card::volumes();
@@ -166,13 +167,12 @@ fn card_step(app: &mut App, ui: &mut Ui) {
 /// Dialogs for choosing the music folder or the card; drawn over whichever tab is open.
 pub fn pickers(app: &mut App, ui: &mut Ui) {
     let Some(mut picker) = app.picker.take() else { return };
-    let ink = ink(ui);
     let mut close = false;
     let mut chosen_source: Option<PathBuf> = None;
     let mut chosen_dest: Option<PathBuf> = None;
     let mut chosen_add: Option<PathBuf> = None;
     let mut refresh = false;
-    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let frame = super::theme::dialog_frame(ui);
     let modal = egui::Modal::new(egui::Id::unique("picker")).frame(frame).show(ui.ctx(), |ui| {
         // Fit small windows: the dialog never gets wider than the window allows.
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
@@ -180,10 +180,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
             Picker::Source(nav) => {
                 ui.label(RichText::new("Choose your music folder").size(20.0));
                 muted(ui, "Open folders until you're in the one that holds all your music, then use it.");
-                ui.add_space(10.0);
+                ui.add_space(S2);
                 nav.show(ui);
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
+                ui.add_space(S2);
+                row(ui, |ui| {
                     if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_source = Some(nav.dir().to_path_buf());
                     }
@@ -195,10 +195,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
             Picker::AddFrom(nav) => {
                 ui.label(RichText::new("Add music from a folder").size(20.0));
                 muted(ui, "Open the folder with the new music (Downloads, a friend's drive…). It's checked against your library first; nothing is copied until you say so, and the folder isn't changed.");
-                ui.add_space(10.0);
+                ui.add_space(S2);
                 nav.show(ui);
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
+                ui.add_space(S2);
+                row(ui, |ui| {
                     if primary_button(ui, format!("Check “{}”", nav.name())).clicked() {
                         chosen_add = Some(nav.dir().to_path_buf());
                     }
@@ -210,10 +210,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
             Picker::Card { browse: Some(nav), .. } => {
                 ui.label(RichText::new("Choose a folder on the card").size(20.0));
                 muted(ui, "Music will go inside this folder instead of at the top of the card.");
-                ui.add_space(10.0);
+                ui.add_space(S2);
                 nav.show(ui);
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
+                ui.add_space(S2);
+                row(ui, |ui| {
                     if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_dest = Some(nav.dir().to_path_buf());
                     }
@@ -224,7 +224,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
             }
             Picker::Card { browse, show_all } => {
                 ui.label(RichText::new("Choose the SD card").size(20.0));
-                ui.add_space(10.0);
+                ui.add_space(S2);
                 let (cards, others): (Vec<&Volume>, Vec<&Volume>) =
                     app.volumes.iter().partition(|v| v.info.and_then(|i| i.is_fat()).unwrap_or(true));
                 if cards.is_empty() {
@@ -234,7 +234,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 for v in list {
                     panel_frame(ui).show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
+                        row(ui, |ui| {
                             ui.vertical(|ui| {
                                 ui.label(RichText::new(&v.name).size(17.0).strong());
                                 if let Some(info) = &v.info {
@@ -250,10 +250,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                             });
                         });
                     });
-                    ui.add_space(6.0);
+                    ui.add_space(S1);
                 }
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                ui.add_space(S1);
+                row(ui, |ui| {
                     if button(ui, "Refresh").clicked() {
                         refresh = true;
                     }
@@ -268,7 +268,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                         *browse = Some(Navigator::new(Some(&start)));
                     }
                 });
-                ui.add_space(8.0);
+                ui.add_space(S1);
                 if button(ui, "Cancel").clicked() {
                     close = true;
                 }
@@ -314,7 +314,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
     }
     muted(ui, format!("{} of {} songs are already where this would put them.", app.in_place, app.tracks.len()));
     let mut changed = false;
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         caps(ui, "album folders");
         let t = &mut app.saved.tidy;
         changed |= ui.radio_value(&mut t.album_order, AlbumOrder::Year, "1997 - Album").changed();
@@ -324,7 +324,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
     if changed {
         app.tidy_plan = None;
     }
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         if button_with(ui, Icon::Compare, "Preview changes").clicked() {
             app.preview_tidy();
         }
@@ -345,11 +345,11 @@ fn tidy(app: &mut App, ui: &mut Ui) {
 /// Every planned path, folders muted and file names in ink; left-out files struck through.
 pub fn plan_list(ui: &mut Ui, plan: &[crate::card::PlanItem], max_height: f32) {
     let ink = ink(ui);
-    ScrollArea::vertical().id_salt("plan").max_height(max_height).auto_shrink([false, true]).show_rows(ui, ROW_H - 4.0, plan.len(), |ui, range| {
+    ScrollArea::vertical().id_salt("plan").max_height(max_height).auto_shrink([false, true]).show_rows(ui, ROW_H, plan.len(), |ui, range| {
         for p in &plan[range] {
             let rel = p.rel.to_string_lossy();
             let (dir, file) = rel.rsplit_once(std::path::MAIN_SEPARATOR).unwrap_or(("", &rel));
-            ui.horizontal(|ui| {
+            row(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.label(RichText::new(format!("{dir}/")).color(ink.muted).size(13.0));
                 ui.label(RichText::new(file).size(13.0).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
@@ -379,15 +379,15 @@ pub fn add_dialog(app: &mut App, ui: &mut Ui) {
     let bytes = app.adding_bytes();
     let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
     let fits = room.is_none_or(|free| free > bytes + 1_000_000_000);
-    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let frame = super::theme::dialog_frame(ui);
     let modal = egui::Modal::new(egui::Id::unique("add music")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
             crate::ui::icons::paint(ui.painter(), rect, Icon::Add, ink.text);
             ui.label(RichText::new(format!("Add music from “{name}”")).size(18.0).color(ink.text));
         });
-        ui.add_space(10.0);
+        ui.add_space(S2);
         if new + versions == 0 {
             ui.label(RichText::new(if have > 0 { "Your library already has every song in it." } else { "There's no music in it." }).color(ink.text));
         } else {
@@ -404,8 +404,8 @@ pub fn add_dialog(app: &mut App, ui: &mut Ui) {
         if !fits {
             ui.label(RichText::new("Not enough room on your music folder's drive for them.").color(ink.warn));
         }
-        ui.add_space(12.0);
-        ui.horizontal(|ui| {
+        ui.add_space(S2);
+        row(ui, |ui| {
             if new + versions > 0 && fits && app.busy.is_none() && primary_with(ui, Icon::Add, format!("Add them ({})", text::bytes(bytes))).clicked() {
                 add = true;
             }

@@ -651,3 +651,19 @@ Calibre's device view, for music: the library is where you choose what goes on t
   paused; the tape passes from the left reel to the right as the song goes on, and each reel
   turns faster the less tape it holds, as on a real deck.
 
+### 50. Everything on an 8-point grid (2026-11-01)
+- **Spacing:** every gap, padding and margin is a multiple of 8, from `ui/layout.rs` (`S1` 8,
+  `S2` 16, `S3` 24 … `S6` 48): `style.spacing` (items 8 apart, controls a row of 24 tall,
+  indents of 16), the frames (cards and panels 16 inside, dialogs 24, the page 40 at the
+  sides), and every space between parts (thirteen sizes before, from 2 to 52).
+- **Controls** have fixed heights on the grid, their contents centred in them: links, commands,
+  chips, tags and fields 24, buttons and tabs 32; icons beside words are 16, 8 from them.
+- **Rows** of controls and songs go left to right with everything centred on one line
+  (`layout::row`, an explicit `Layout::left_to_right(Align::Center)` one row tall); text
+  fields centre their words too. Settings keep their names level with the first control.
+- **Panels:** the tab bar and the player are the app's frame, tinted and ruled off; work under
+  way and the latest notice share one strip under the tabs; the library's A–Z rail is a panel
+  of its own at the right edge. In the library, search and the chips of what's worth a look
+  are on separate rows. The player's cover is exactly as tall as the title, sparkline and
+  buttons beside it.
+

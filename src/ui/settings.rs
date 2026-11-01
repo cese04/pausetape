@@ -6,13 +6,14 @@ use super::icons::Icon;
 use super::theme::{Accent, ink};
 use super::widgets::{self, help, icon_link, setting};
 use crate::app::{App, ThemePref};
+use super::layout::{S1, S2, row};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
         widgets::section(ui, Icon::Settings, "Appearance");
-        ui.add_space(8.0);
+        ui.add_space(S1);
         setting(ui, "Colours", |ui| {
-            ui.horizontal(|ui| {
+            row(ui, |ui| {
                 let mut changed = false;
                 changed |= ui.radio_value(&mut app.saved.theme, ThemePref::System, "like the system").changed();
                 changed |= ui.radio_value(&mut app.saved.theme, ThemePref::Light, "paper").changed();
@@ -23,8 +24,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
         });
         setting(ui, "Accent", |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 8.0;
+            row(ui, |ui| {
                 let dark = ui.visuals().dark_mode;
                 for accent in Accent::ALL {
                     if widgets::swatch(ui, accent.colour(dark), app.saved.accent == accent).on_hover_text(accent.name()).clicked() {
@@ -32,15 +32,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         app.apply_theme();
                     }
                 }
-                ui.add_space(4.0);
+                ui.add_space(S1);
                 ui.label(RichText::new(app.saved.accent.name()).color(ink(ui).muted));
             });
             help(ui, "Marks the open tab, the main button, progress and what's playing. Warnings stay red.");
         });
 
-        ui.add_space(10.0);
+        ui.add_space(S2);
         widgets::section(ui, Icon::Library, "Library");
-        ui.add_space(8.0);
+        ui.add_space(S1);
         setting(ui, "Library database", |ui| {
             match &app.db {
                 Some(db) => {
@@ -53,7 +53,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
             help(ui, "Rescans only open files that are new or changed since they were last read.");
             ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(12.0).color(ink(ui).muted)).truncate());
-            ui.horizontal(|ui| {
+            row(ui, |ui| {
                 if app.busy.is_none() && icon_link(ui, Icon::Rescan, "read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
                     app.read_all_again();
                 }
@@ -76,7 +76,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             };
             let mut undo = None;
             for (i, (a, b)) in p.merges.iter().enumerate() {
-                ui.horizontal(|ui| {
+                row(ui, |ui| {
                     ui.label(format!("“{}” and “{}”: the same artist", name(a), name(b)));
                     if icon_link(ui, Icon::Close, "undo").clicked() {
                         undo = Some(Undo::Merge(i));
@@ -84,7 +84,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 });
             }
             for (a, b) in &p.rejected {
-                ui.horizontal(|ui| {
+                row(ui, |ui| {
                     ui.label(format!("“{}” and “{}”: different artists", name(a), name(b)));
                     if icon_link(ui, Icon::Close, "undo").clicked() {
                         undo = Some(Undo::Reject(a.clone(), b.clone()));
@@ -92,7 +92,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 });
             }
             for (k, n) in &p.names {
-                ui.horizontal(|ui| {
+                row(ui, |ui| {
                     ui.label(format!("{k} shown as “{n}”"));
                     if icon_link(ui, Icon::Close, "undo").clicked() {
                         undo = Some(Undo::Name(k.clone()));
@@ -117,9 +117,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         });
 
-        ui.add_space(10.0);
+        ui.add_space(S2);
         widgets::section(ui, Icon::Play, "Playing and converting");
-        ui.add_space(8.0);
+        ui.add_space(S1);
         setting(ui, "ffmpeg", |ui| match crate::audio::ffmpeg() {
             Some(p) => {
                 if crate::audio::ffmpeg_is_bundled() {
@@ -145,11 +145,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         });
 
-        ui.add_space(10.0);
+        ui.add_space(S2);
         widgets::section(ui, Icon::Search, "MusicBrainz");
-        ui.add_space(8.0);
+        ui.add_space(S1);
         setting(ui, "Contact", |ui| {
-            ui.add(egui::TextEdit::singleline(&mut app.saved.mb_contact).hint_text("email or URL (optional)").desired_width(320.0));
+            ui.add(egui::TextEdit::singleline(&mut app.saved.mb_contact).align(egui::Align2::LEFT_CENTER).hint_text("email or URL (optional)").desired_width(320.0));
             help(ui, "MusicBrainz asks apps to say who's asking; this is sent with each lookup.");
         });
     });

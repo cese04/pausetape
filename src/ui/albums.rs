@@ -12,6 +12,7 @@ use super::theme::{self, ink};
 use super::widgets::{self, muted, truncated};
 use crate::app::{AlbumRow, App, SortBy};
 use crate::library::search::Query;
+use super::layout::{S1, S2, row, row_wrapped};
 
 /// Fixed columns: (heading, sort, width, right-aligned). Artist and album share what's left.
 const FIXED: [(&str, SortBy, f32, bool); 6] = [
@@ -32,7 +33,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     if !app.selected_albums.is_empty() {
         selection_bar(app, ui, &rows, actions);
     } else if !query.is_empty() && !rows.is_empty() {
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             muted(ui, format!("{} match", plural(rows.len(), "album")));
             if widgets::icon_link(ui, Icon::Check, "select them all").on_hover_text("to send them to the card, edit their tags or find their covers together").clicked() {
                 actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
@@ -76,7 +77,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     }
     ui.painter().hline(rect.left()..=rect.right(), rect.bottom(), Stroke::new(0.5, ink.faint));
     if rows.is_empty() {
-        ui.add_space(12.0);
+        ui.add_space(S2);
         muted(ui, "No albums match.");
         return;
     }
@@ -185,15 +186,15 @@ fn selection_bar(app: &App, ui: &mut Ui, rows: &[AlbumRow], actions: &mut Vec<Ac
     let songs = app.selected_album_songs(rows);
     let bytes: u64 = chosen.iter().map(|r| r.bytes).sum();
     let hidden = app.selected_albums.len() - chosen.len();
-    theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(14, 8)).show(ui, |ui| {
+    theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             let mut what = format!("{} selected · {} · {}", plural(chosen.len(), "album"), plural(songs.len(), "song"), text::bytes(bytes));
             if hidden > 0 {
                 what.push_str(&format!(" (and {hidden} the search hides)"));
             }
             ui.label(RichText::new(what).color(ink.text));
-            ui.add_space(8.0);
+            ui.add_space(S1);
             if widgets::icon_link(ui, Icon::Add, "send to card").on_hover_text("copied at the next Sync").clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), true));
             }
@@ -216,5 +217,5 @@ fn selection_bar(app: &App, ui: &mut Ui, rows: &[AlbumRow], actions: &mut Vec<Ac
         });
         widgets::help(ui, "Click an album to select it, ⌘-click to add or remove one, shift-click for a run; double-click plays it.");
     });
-    ui.add_space(6.0);
+    ui.add_space(S1);
 }

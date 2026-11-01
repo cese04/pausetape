@@ -10,6 +10,7 @@ use super::theme::ink;
 use super::widgets::{chip, icon_link, muted, tag};
 use crate::app::{App, ArtistState};
 use crate::musicbrainz::{ArtistInfo, LinkUse};
+use super::layout::{S1, S2, row, row_wrapped};
 
 /// Artists whose names look like `cluster`'s, each with a decision to make. Shown whether the
 /// artist is open or not: this is where the question comes up.
@@ -18,8 +19,8 @@ pub(super) fn look_alikes(app: &App, ui: &mut Ui, cluster: usize, actions: &mut 
     for s in app.index.suggestions.iter().filter(|s| s.a == cluster || s.b == cluster) {
         let other = &app.index.clusters[if s.a == cluster { s.b } else { s.a }];
         let songs: usize = other.variants.values().sum();
-        ui.horizontal(|ui| {
-            ui.add_space(4.0);
+        row(ui, |ui| {
+            ui.add_space(S1);
             ui.label(RichText::new("≈").color(ink.warn));
             muted(ui, format!("looks like “{}” ({})", other.name, plural(songs, "song")));
             if icon_link(ui, Icon::Check, "same artist").on_hover_text("One artist from now on, under the name most songs use.").clicked() {
@@ -50,33 +51,32 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
         .fill(ink.hover)
         .stroke(egui::Stroke::new(1.0, ink.faint))
         .corner_radius(8.0)
-        .inner_margin(egui::Margin::symmetric(16, 12))
-        .outer_margin(egui::Margin { left: 0, right: 0, top: 4, bottom: 6 });
+        .inner_margin(egui::Margin::same(S2 as i8))
+        .outer_margin(egui::Margin { left: 0, right: 0, top: S1 as i8, bottom: S1 as i8 });
     frame.show(ui, |ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(6.0, 8.0);
         match state {
             Some(ArtistState::Found { info, .. }) => {
                 let facts = facts(info);
                 if !info.genres.is_empty() || !facts.is_empty() {
-                    ui.horizontal_wrapped(|ui| {
+                    row_wrapped(ui, |ui| {
                         for g in info.genres.iter().take(5) {
                             tag(ui, g);
                         }
                         if !facts.is_empty() {
-                            ui.add_space(4.0);
+                            ui.add_space(S1);
                             ui.label(RichText::new(facts).size(13.5).color(ink.muted));
                         }
                     });
                 }
             }
             Some(ArtistState::Asking) => {
-                ui.horizontal(|ui| {
+                row(ui, |ui| {
                     super::cassette::spinner(ui, 12.0);
                     muted(ui, "asking MusicBrainz…");
                 });
             }
             Some(ArtistState::Failed(e)) => {
-                ui.horizontal_wrapped(|ui| {
+                row_wrapped(ui, |ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
                     if icon_link(ui, Icon::Rescan, "try again").clicked() {
                         actions.push(Action::AskArtistInfo(cluster, None));
@@ -86,7 +86,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
             Some(ArtistState::Choose(hits)) => {
                 muted(ui, if hits.is_empty() { "MusicBrainz has no artist by this name." } else { "Which of these MusicBrainz artists is it?" });
                 for h in hits {
-                    ui.horizontal(|ui| {
+                    row(ui, |ui| {
                         if icon_link(ui, Icon::Check, "this one").clicked() {
                             actions.push(Action::AskArtistInfo(cluster, Some(h.id.clone())));
                         }
@@ -112,7 +112,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
             if row.is_empty() {
                 continue;
             }
-            ui.horizontal_wrapped(|ui| {
+            row_wrapped(ui, |ui| {
                 ui.allocate_ui_with_layout(egui::vec2(96.0, 22.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     ui.set_min_width(96.0);
                     let (rect, _) = ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
@@ -132,12 +132,12 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                 }
             });
         }
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             if let Some((rc, buf)) = &app.renaming
                 && *rc == cluster
             {
                 let mut text = buf.clone();
-                let r = ui.text_edit_singleline(&mut text);
+                let r = ui.add(egui::TextEdit::singleline(&mut text).align(egui::Align2::LEFT_CENTER));
                 if text != *buf {
                     actions.push(Action::Renaming(cluster, text.clone()));
                 }

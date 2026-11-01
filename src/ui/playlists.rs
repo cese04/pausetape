@@ -14,6 +14,7 @@ use super::widgets::{self, caps, icon_button, icon_link, muted};
 use crate::app::App;
 use crate::card::playlist::Playlist;
 use crate::library::Track;
+use super::layout::{S1, S2, S3, row};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
@@ -25,7 +26,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if device.browses_by_tags() {
         ui.label(RichText::new(playlist_copies_warning(device)).size(13.0).color(ink.warn));
     }
-    ui.add_space(8.0);
+    ui.add_space(S1);
     // Playlists hold track ids: a song inside an album file has its own ("…/Album.flac#03").
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
     let by_path: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
@@ -41,17 +42,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     select = Some(i);
                 }
             }
-            ui.add_space(6.0);
+            ui.add_space(S1);
             if icon_link(ui, Icon::Add, "new playlist").clicked() {
                 app.saved.playlists.push(Playlist { name: format!("Playlist {}", app.saved.playlists.len() + 1), tracks: Vec::new() });
                 select = Some(app.saved.playlists.len() - 1);
             }
-            ui.add_space(12.0);
+            ui.add_space(S2);
             let total: u64 = app.saved.playlists.iter().map(|p| p.bytes(&by_path)).sum();
             muted(ui, format!("copies need {}", text::bytes(total)));
             ui.label(RichText::new("choose which playlists go on a card in the card tab").size(12.0).color(ink.muted));
         });
-        ui.add_space(24.0);
+        ui.add_space(S3);
         ui.vertical(|ui| {
             let Some(pi) = app.active_playlist.filter(|&i| i < app.saved.playlists.len()) else {
                 muted(ui, "Create a playlist, then use the + at the end of any track row in the library.");
@@ -59,8 +60,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             };
             let mut delete = false;
             let old_name = app.saved.playlists[pi].name.clone();
-            ui.horizontal(|ui| {
-                let r = ui.add(egui::TextEdit::singleline(&mut app.saved.playlists[pi].name).font(FontId::proportional(20.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(320.0));
+            row(ui, |ui| {
+                let r = ui.add(egui::TextEdit::singleline(&mut app.saved.playlists[pi].name).align(egui::Align2::LEFT_CENTER).font(FontId::proportional(20.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(320.0));
                 // Writes refer to playlists by name; follow the rename.
                 if r.changed() {
                     let new = app.saved.playlists[pi].name.clone();
@@ -82,11 +83,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             let pl = &mut app.saved.playlists[pi];
             let dur: Duration = pl.tracks.iter().filter_map(|p| by_path.get(p.as_path())).map(|t| t.duration).sum();
             muted(ui, format!("{} tracks · {} · {}", pl.tracks.len(), text::duration(dur), text::bytes(pl.bytes(&by_path))));
-            ui.add_space(6.0);
+            ui.add_space(S1);
             let mut op: Option<(usize, i32)> = None;
             ScrollArea::vertical().auto_shrink(false).max_height(ui.available_height() - 40.0).show(ui, |ui| {
                 for (n, path) in pl.tracks.iter().enumerate() {
-                    ui.horizontal(|ui| {
+                    row(ui, |ui| {
                         ui.add_sized([28.0, 18.0], egui::Label::new(RichText::new(format!("{}", n + 1)).color(ink.muted)));
                         match by_path.get(path.as_path()) {
                             Some(t) => {

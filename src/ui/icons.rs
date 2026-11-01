@@ -3,7 +3,7 @@
 
 use std::f32::consts::PI;
 
-use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, pos2, vec2};
+use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, vec2};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Icon {
@@ -207,7 +207,3 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
     }
 }
 
-/// The square an icon of `size` takes at the left of `rect`, centred vertically.
-pub fn slot(rect: Rect, size: f32) -> Rect {
-    Rect::from_min_size(pos2(rect.left(), rect.center().y - size / 2.0), vec2(size, size))
-}

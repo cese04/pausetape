@@ -8,6 +8,7 @@ mod card;
 mod cassette;
 pub mod folders;
 pub mod icons;
+pub mod layout;
 mod library;
 pub mod navigator;
 mod player;
@@ -27,29 +28,36 @@ use crate::app::{App, Tab};
 use theme::ink;
 use icons::Icon;
 use widgets::hairline_progress;
+use layout::{ICON, S1, S2, S3, S4, S5, margin, row};
 
 const MAX_W: f32 = 820.0;
 
-const ROW_H: f32 = 22.0;
+const ROW_H: f32 = layout::ROW;
 
+/// The panels, top to bottom: the tab bar; a strip for work under way and the latest notice;
+/// the open tab; the player. The tab bar and the player are the app's frame: tinted and ruled
+/// off, so they never read as content. Everything inside keeps to the page's side margin.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let pad = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin::symmetric(40, 18));
-    // The tab bar is tinted and ruled off, so the app's own frame never reads as content.
-    let bar = egui::Frame::new().fill(ink.bar).inner_margin(egui::Margin::symmetric(32, 10));
-    let r = egui::Panel::top("nav").frame(bar).show_separator_line(false).show(ui, |ui| header(app, ui));
+    let chrome = |x: f32, y: f32| egui::Frame::new().fill(ink.bar).inner_margin(margin(x, y));
+    let r = egui::Panel::top("nav").frame(chrome(S4, S1)).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.bottom(), Stroke::new(1.0, ink.faint));
-    if app.busy.is_some() {
-        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: 40, right: 40, top: 10, bottom: 0 });
-        egui::Panel::top("job").frame(frame).show_separator_line(false).show(ui, |ui| job(app, ui));
+    let notice_text = app.notices.last().cloned();
+    if app.busy.is_some() || notice_text.is_some() {
+        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S1 as i8, bottom: 0 });
+        egui::Panel::top("status").frame(frame).show_separator_line(false).show(ui, |ui| {
+            job(app, ui);
+            if let Some(n) = &notice_text {
+                notice(app, ui, n);
+            }
+        });
     }
-    if let Some(n) = app.notices.last().cloned() {
-        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: 40, right: 40, top: 10, bottom: 0 });
-        egui::Panel::top("notice").frame(frame).show_separator_line(false).show(ui, |ui| notice(app, ui, &n));
-    }
-    egui::Panel::bottom("player").frame(pad).show_separator_line(false).show(ui, |ui| player::show(app, ui));
-    egui::CentralPanel::default().frame(pad.inner_margin(egui::Margin { left: 40, right: 40, top: 16, bottom: 0 })).show(ui, |ui| {
+    let r = egui::Panel::bottom("player").frame(chrome(S5, S2)).show_separator_line(false).show(ui, |ui| player::show(app, ui));
+    let edge = r.response.rect;
+    ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
+    let page = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S2 as i8, bottom: S2 as i8 });
+    egui::CentralPanel::default().frame(page).show(ui, |ui| {
         // The library uses the whole width (its A–Z rail belongs at the window's edge); the other
         // tabs are forms and read better at a fixed measure.
         if app.tab != Tab::Library {
@@ -74,12 +82,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 /// The tab bar: the app's name, the tabs, and what's running in the background.
 fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         cassette::mark(ui, 18.0);
-        ui.add_space(2.0);
         ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
-        ui.add_space(18.0);
-        ui.spacing_mut().item_spacing.x = 4.0;
+        ui.add_space(S3);
         // In a narrow window only the open tab keeps its name; the others show their icon.
         let compact = ui.available_width() < 900.0;
         for (t, icon, name) in [
@@ -105,9 +111,9 @@ fn header(app: &mut App, ui: &mut Ui) {
 fn job(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let Some(b) = &app.busy else { return };
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 10.0;
-        cassette::spinner(ui, 14.0);
+    row(ui, |ui| {
+        ui.spacing_mut().item_spacing.x = S2;
+        cassette::spinner(ui, ICON);
         ui.label(RichText::new(&b.label).size(14.5).color(ink.text));
         let mut facts = match (b.done, b.total) {
             (_, 0) if b.done > 0 => b.done.to_string(),
@@ -137,10 +143,10 @@ fn job(app: &mut App, ui: &mut Ui) {
 /// The latest message from the app, until the next one or until closed.
 fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     let ink = ink(ui);
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-        icons::paint(ui.painter(), rect, Icon::Info, ink.muted);
-        ui.allocate_ui(egui::vec2(ui.available_width() - 40.0, 0.0), |ui| {
+    row(ui, |ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
+        icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
+        ui.allocate_ui(egui::vec2(ui.available_width() - S5, 0.0), |ui| {
             ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
         });
         if widgets::icon_button(ui, Icon::Close).on_hover_text("dismiss").clicked() {

@@ -115,7 +115,8 @@ src/
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
     ├── mod.rs         panels, tab bar, running job (time left, Stop), message line, tab dispatch
-    ├── theme.rs       palette, fonts, frames
+    ├── theme.rs       palette, fonts, frames; style.spacing on the grid
+    ├── layout.rs      the 8-point grid (S1–S6, row and control heights) and `row`: left-to-right rows, centred
     ├── icons.rs       drawn line icons (tabs and commands), no font needed
     ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
     ├── text.rs        durations, sizes, plurals, shortening, format notes and badges

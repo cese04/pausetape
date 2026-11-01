@@ -11,11 +11,14 @@ use super::theme::ink;
 use super::widgets::{Media, media_button, muted};
 use crate::app::App;
 use crate::audio::Status;
+use super::layout::{ROW, S1, S2, S4, S5, S6, row};
 
-/// Side of the cover square; matches the height of title + sparkline + buttons.
-const COVER: f32 = 116.0;
 /// Every transport button sits in a slot this tall, so different sizes share one centre line.
-const SLOT: f32 = 44.0;
+const SLOT: f32 = S6;
+/// The sparkline's height.
+const WAVE: f32 = S4;
+/// Side of the cover square: the title, the sparkline and the buttons beside it, with their gaps.
+const COVER: f32 = ROW + S1 + WAVE + S1 + SLOT;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
@@ -34,11 +37,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
     ui.horizontal_top(|ui| {
         cover_art(app, ui, ti);
-        ui.add_space(8.0);
+        ui.add_space(S1);
         ui.vertical(|ui| {
             title_row(app, ui, ti, &st, len);
             scrubber(app, ui, ti, &st, len);
-            ui.add_space(2.0);
             transport(app, ui, &st, len);
         });
     });
@@ -69,7 +71,7 @@ fn cover_art(app: &App, ui: &mut Ui, ti: usize) {
 fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     let ink = ink(ui);
     let t = &app.tracks[ti];
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         ui.label(RichText::new(t.display_title()).size(19.0).color(ink.text));
         let meta: Vec<String> = [t.artist.clone(), t.album.clone(), t.year.map(|y| y.to_string())].into_iter().flatten().collect();
         muted(ui, meta.join(" · "));
@@ -86,7 +88,7 @@ fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
 
 fn scrubber(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     let ink = ink(ui);
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click_and_drag());
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), WAVE), Sense::click_and_drag());
     let p = ui.painter_at(rect.expand(4.0));
     let frac = if len.is_zero() { 0.0 } else { (st.pos.as_secs_f32() / len.as_secs_f32()).clamp(0.0, 1.0) };
     let mid = rect.center().y;
@@ -125,23 +127,23 @@ fn scrubber(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
 }
 
 fn transport(app: &mut App, ui: &mut Ui, st: &Status, len: Duration) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 10.0;
-        if media_button(ui, Media::Previous, 32.0, SLOT, false).on_hover_text("previous (P)").clicked() {
+    row(ui, |ui| {
+        ui.spacing_mut().item_spacing.x = S2;
+        if media_button(ui, Media::Previous, S4, SLOT, false).on_hover_text("previous (P)").clicked() {
             app.prev();
         }
         let playing = !st.paused && st.path.is_some();
-        let toggle = media_button(ui, if playing { Media::Pause } else { Media::Play }, 42.0, SLOT, true).on_hover_text("play / pause (space)");
+        let toggle = media_button(ui, if playing { Media::Pause } else { Media::Play }, S5, SLOT, true).on_hover_text("play / pause (space)");
         if toggle.clicked() {
             // After the queue ended there is nothing loaded: start the current track again.
             if st.path.is_none() { app.play(app.queue.clone(), app.qpos) } else { app.audio.toggle() }
         }
-        if media_button(ui, Media::Next, 32.0, SLOT, false).on_hover_text("next (N)").clicked() {
+        if media_button(ui, Media::Next, S4, SLOT, false).on_hover_text("next (N)").clicked() {
             app.next();
         }
-        ui.add_space(12.0);
+        ui.add_space(S2);
         let played = if len.is_zero() { 0.0 } else { st.pos.as_secs_f32() / len.as_secs_f32() };
-        super::cassette::tape(ui, 32.0, playing, played);
+        super::cassette::tape(ui, S4, playing, played);
         muted(ui, format!("{} of {}", app.qpos + 1, app.queue.len()));
         cover_suggestion(app, ui);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -162,7 +164,7 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     let t = &app.tracks[ti];
     let Some(file) = app.cover.as_ref().filter(|(p, tex, _)| *p == t.path && tex.is_some()).and_then(|(_, _, f)| f.clone()) else { return };
     let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    ui.add_space(12.0);
+    ui.add_space(S2);
     if t.cover.is_some() {
         let when = if t.cue.is_some() { "in card copies when you next write" } else { "in card copies when you next write, and in the music files with \"write corrected tags\"" };
         muted(ui, "cover will be added to the songs' tags ·").on_hover_text(format!("{name}: {when}"));
@@ -214,7 +216,7 @@ fn keyboard(app: &mut App, ui: &Ui, st: &Status, len: Duration) {
 /// A hairline volume control.
 fn volume(ui: &mut Ui, v: &mut f32) -> bool {
     let ink = ink(ui);
-    let (rect, resp) = ui.allocate_exact_size(vec2(90.0, 14.0), Sense::click_and_drag());
+    let (rect, resp) = ui.allocate_exact_size(vec2(12.0 * S1, S2), Sense::click_and_drag());
     let y = rect.center().y;
     ui.painter().hline(rect.x_range(), y, Stroke::new(1.0, ink.faint));
     ui.painter().hline(rect.left()..=rect.left() + rect.width() * *v, y, Stroke::new(1.5, ink.muted));

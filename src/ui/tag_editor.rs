@@ -9,6 +9,7 @@ use super::text::plural;
 use super::theme::{self, ink};
 use super::widgets::{self, help};
 use crate::app::{App, Shared};
+use super::layout::{S1, S2, row, row_wrapped};
 
 const LABEL_W: f32 = 110.0;
 
@@ -18,11 +19,11 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
     if app.tag_edit.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         actions.push(Action::ClearSelection);
     }
-    theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(14, 8)).show(ui, |ui| {
+    theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             ui.label(RichText::new(format!("{} selected", plural(app.selected.len(), "song"))).color(ink.text));
-            ui.add_space(8.0);
+            ui.add_space(S1);
             let songs: Vec<usize> = app.selected.iter().copied().collect();
             if widgets::icon_link(ui, Icon::Rename, "edit their tags").clicked() {
                 actions.push(Action::EditTags(songs.clone()));
@@ -36,7 +37,7 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
             help(ui, "⌘-click adds or removes a song, shift-click a run of songs.");
         });
     });
-    ui.add_space(6.0);
+    ui.add_space(S1);
 }
 
 /// The tag editor, over whatever tab is open.
@@ -44,16 +45,16 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
     let Some(edit) = &mut app.tag_edit else { return };
     let ink = ink(ui);
     let (mut save, mut cancel) = (false, false);
-    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let frame = super::theme::dialog_frame(ui);
     egui::Modal::new(egui::Id::unique("tag editor")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Rename, ink.text);
             ui.label(RichText::new("Edit tags").size(18.0).color(ink.text));
             ui.label(RichText::new(plural(edit.tracks.len(), "song")).color(ink.muted));
         });
-        ui.add_space(12.0);
+        ui.add_space(S2);
         egui::Grid::new("shared tags").num_columns(2).min_col_width(LABEL_W).spacing([12.0, 8.0]).show(ui, |ui| {
             for (label, field, width) in [
                 ("Album", &mut edit.album, 400.0),
@@ -67,20 +68,20 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                 ui.end_row();
             }
         });
-        ui.add_space(12.0);
+        ui.add_space(S2);
         ui.label(RichText::new(if edit.tracks.len() == 1 { "Number and title" } else { "Numbers and titles" }).color(ink.muted));
-        ui.add_space(4.0);
+        ui.add_space(S1);
         egui::ScrollArea::vertical().max_height(280.0).auto_shrink([false, true]).show(ui, |ui| {
             for (k, (number, title)) in edit.songs.iter_mut().enumerate() {
                 let t = &app.tracks[edit.tracks[k]];
-                ui.horizontal(|ui| {
+                row(ui, |ui| {
                     ui.add(egui::TextEdit::singleline(number).desired_width(36.0).align(egui::Align2::RIGHT_CENTER));
-                    let r = ui.add(egui::TextEdit::singleline(title).hint_text(t.display_title()).desired_width(ui.available_width() - 8.0));
+                    let r = ui.add(egui::TextEdit::singleline(title).align(egui::Align2::LEFT_CENTER).hint_text(t.display_title()).desired_width(ui.available_width() - 8.0));
                     r.on_hover_text(t.id().display().to_string());
                 });
             }
         });
-        ui.add_space(10.0);
+        ui.add_space(S2);
         if let Some(p) = edit.problem() {
             ui.label(RichText::new(p).size(13.0).color(ink.warn));
         }
@@ -92,8 +93,8 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                 if cue { " (songs inside an album file never do)" } else { "" }
             ),
         );
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
+        ui.add_space(S2);
+        row(ui, |ui| {
             let can = edit.problem().is_none();
             if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text("or ⌘-Return").clicked() {
                 save = true;
@@ -123,5 +124,5 @@ fn shared_box(ui: &mut Ui, f: &mut Shared, width: f32) {
         (true, true) => "several",
         (true, false) => "several values · type one to set it for all",
     };
-    ui.add(egui::TextEdit::singleline(&mut f.text).desired_width(width).hint_text(hint));
+    ui.add(egui::TextEdit::singleline(&mut f.text).align(egui::Align2::LEFT_CENTER).desired_width(width).hint_text(hint));
 }

@@ -17,11 +17,12 @@ use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
 use crate::card::pattern::{Field, Pattern, default_for};
 use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
+use super::layout::{S1, S2, S3, row, row_wrapped};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
         writes_bar(app, ui);
-        ui.add_space(14.0);
+        ui.add_space(S2);
         let why = if app.saved.source.is_none() {
             "Choose your music folder in the folders tab first."
         } else if app.source_missing {
@@ -37,26 +38,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let sizes = Sizes::cached(app, ui);
     // Pinned while the rest scrolls: how full the card gets and what Sync changes, in view
     // while choosing music below.
-    theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(18, 12)).show(ui, |ui| {
+    theme::panel_frame(ui).inner_margin(egui::Margin::same(S2 as i8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         capacity(app, ui, &sizes);
-        ui.add_space(6.0);
+        ui.add_space(S1);
         sync_row(app, ui);
     });
-    ui.add_space(6.0);
+    ui.add_space(S1);
     ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-        ui.add_space(10.0);
+        ui.add_space(S2);
         writes_bar(app, ui);
-        ui.add_space(14.0);
+        ui.add_space(S2);
         problems(app, ui);
         comparison(app, ui);
-        ui.add_space(22.0);
+        ui.add_space(S3);
         selection(app, ui, &sizes);
-        ui.add_space(22.0);
+        ui.add_space(S3);
         playlists(app, ui);
-        ui.add_space(22.0);
+        ui.add_space(S3);
         layout_options(app, ui);
-        ui.add_space(16.0);
+        ui.add_space(S2);
     });
 }
 
@@ -111,7 +112,7 @@ fn sync_row(app: &mut App, ui: &mut Ui) {
         None => "the card has what you chose".into(),
     };
     let unavailable = ready.then(|| app.library_unavailable()).flatten();
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         if !ready {
             muted(ui, "choose a destination below to sync");
             return;
@@ -124,7 +125,7 @@ fn sync_row(app: &mut App, ui: &mut Ui) {
             ui.add(egui::Label::new(RichText::new(state).color(ink(ui).text)).wrap());
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.add_space(10.0);
+            ui.add_space(S2);
             if !connected {
                 muted(ui, "card not connected");
                 return;
@@ -152,13 +153,13 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
     let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable().is_none();
-    let frame = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(14, 8));
+    let frame = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
     frame.show(ui, |ui| {
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             let button_w = if can_sync { 100.0 } else { 0.0 };
             ui.allocate_ui(vec2(ui.available_width() - button_w, 0.0), |ui| {
                 ui.vertical(|ui| {
-                    ui.horizontal_wrapped(|ui| {
+                    row_wrapped(ui, |ui| {
                         let (rect, _) = ui.allocate_exact_size(vec2(15.0, 15.0), Sense::hover());
                         super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
                         ui.label(RichText::new(&name).color(ink.text));
@@ -212,7 +213,7 @@ fn problems(app: &mut App, ui: &mut Ui) {
                 }
             });
         }
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             if let Some(log) = &p.log
                 && widgets::icon_link(ui, Icon::Folder, "open the full list").on_hover_text(log.display().to_string()).clicked()
             {
@@ -224,20 +225,20 @@ fn problems(app: &mut App, ui: &mut Ui) {
     if dismiss {
         app.problems = None;
     }
-    ui.add_space(14.0);
+    ui.add_space(S2);
 }
 
 fn writes_bar(app: &mut App, ui: &mut Ui) {
     let mut select = None;
-    ui.horizontal_wrapped(|ui| {
+    row_wrapped(ui, |ui| {
         caps(ui, "writes");
         for (i, w) in app.saved.writes.iter().enumerate() {
             if widgets::tab(ui, &w.name, i == app.saved.active_write).clicked() {
                 select = Some(i);
             }
-            ui.add_space(4.0);
+            ui.add_space(S1);
         }
-        ui.add_space(12.0);
+        ui.add_space(S2);
         if widgets::icon_link(ui, Icon::Add, "new").on_hover_text("a fresh layout with everything selected").clicked() {
             app.new_write(false);
         }
@@ -252,10 +253,10 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         app.select_write(i);
     }
     let ink = ink(ui);
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         let w = &mut app.saved.writes[app.saved.active_write];
         let old = w.name.clone();
-        let r = ui.add(egui::TextEdit::singleline(&mut w.name).font(egui::FontId::proportional(22.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0));
+        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::proportional(22.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0));
         // Names identify writes for background replies; keep them unique and non-empty.
         if r.lost_focus() && (w.name.trim().is_empty() || app.saved.writes.iter().filter(|x| x.name == app.saved.writes[app.saved.active_write].name).count() > 1) {
             app.saved.writes[app.saved.active_write].name = old;
@@ -270,7 +271,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     widgets::help(ui, last);
     let shown = w.dest.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "not chosen".into());
     let has_dest = w.dest.is_some();
-    ui.horizontal(|ui| {
+    row(ui, |ui| {
         caps(ui, "destination");
         ui.add(egui::Label::new(shown).truncate());
         if widgets::icon_link(ui, Icon::Card, if has_dest { "change card" } else { "choose a card" }).clicked() {
@@ -281,7 +282,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     label_note(app, ui);
     // The player decides what's converted, what's warned about, and how much fits.
     let mut device = app.write().options.device;
-    ui.horizontal_wrapped(|ui| {
+    row_wrapped(ui, |ui| {
         caps(ui, "player");
         egui::ComboBox::from_id_salt("player").selected_text(device.name()).show_ui(ui, |ui| {
             for d in Device::ALL {
@@ -309,12 +310,12 @@ pub fn sync_confirm_dialog(app: &mut App, ui: &mut Ui) {
         return;
     }
     let ink = ink(ui);
-    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let frame = super::theme::dialog_frame(ui);
     let mut answer = None;
     let r = egui::Modal::new(egui::Id::unique("sync confirm")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(520.0f32.min(ui.ctx().content_rect().width() - 80.0));
         ui.label(RichText::new(format!("Take {removing} of {songs} songs off the card?")).size(18.0).color(ink.text));
-        ui.add_space(6.0);
+        ui.add_space(S1);
         widgets::help(
             ui,
             format!(
@@ -322,8 +323,8 @@ pub fn sync_confirm_dialog(app: &mut App, ui: &mut Ui) {
                 app.write().name
             ),
         );
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
+        ui.add_space(S2);
+        row(ui, |ui| {
             if widgets::primary_with(ui, Icon::Sync, "Take them off and sync").clicked() {
                 answer = Some(true);
             }
@@ -350,7 +351,7 @@ fn label_note(app: &mut App, ui: &mut Ui) {
     match app.owner_setup() {
         Some(i) => {
             ui.label(RichText::new(format!("This card belongs to “{}” (written {}), so “{this}” won't sync to it or take it over.", l.name, ago(l.written))).color(ink.warn));
-            ui.horizontal_wrapped(|ui| {
+            row_wrapped(ui, |ui| {
                 if widgets::icon_link(ui, Icon::Card, format!("switch to “{}”", l.name)).clicked() {
                     app.select_write(i);
                 }
@@ -472,7 +473,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     let w = app.write();
     let need = sizes.selected + sizes.playlists;
     let space = room(app);
-    ui.horizontal_wrapped(|ui| {
+    row_wrapped(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
         ui.label(RichText::new(&w.name).size(17.0).color(ink.text));
@@ -511,7 +512,7 @@ fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
     let enough = |saving: u64| if saving >= over { ", enough to fit" } else { "" };
     let mut set = None;
     if sizes.cd_saving > 0 {
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             muted(ui, format!("Write hi-res FLAC at CD quality: saves about {}{}.", text::bytes(sizes.cd_saving), enough(sizes.cd_saving)));
             if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
                 set = Some(false);
@@ -519,7 +520,7 @@ fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
         });
     }
     if sizes.mp3_saving > 0 {
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             muted(ui, format!("Write lossless songs as MP3 320: saves about {}{}.", text::bytes(sizes.mp3_saving), enough(sizes.mp3_saving)));
             if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("Hard to tell apart from the original on a portable player; your music folder keeps the lossless files, so this can be undone at any sync").clicked() {
                 set = Some(true);
@@ -553,8 +554,8 @@ fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
     let mut leave = None;
     for (ai, albums, bytes) in shown {
         let a = &app.index.artists[ai];
-        ui.horizontal(|ui| {
-            ui.add_space(16.0);
+        row(ui, |ui| {
+            ui.add_space(S2);
             widgets::fitted(ui, RichText::new(&a.name).color(ink.text), 280.0, Sense::hover()).on_hover_text(&a.name);
             muted(ui, format!("{} · {}", plural(albums, "album"), text::bytes(bytes)));
             if widgets::icon_link(ui, Icon::Remove, "leave out").on_hover_text("or untick some of their albums below").clicked() {
@@ -606,7 +607,7 @@ fn take_over(app: &mut App, ui: &mut Ui) {
     if foreign == 0 && !can_undo {
         return;
     }
-    ui.horizontal_wrapped(|ui| {
+    row_wrapped(ui, |ui| {
         if foreign > 0 {
             muted(ui, format!("The card also has {} this write didn't put there ({}).", plural(foreign, "file"), text::bytes(foreign_bytes)));
             if widgets::icon_link(ui, Icon::Card, "go through them").on_hover_text("songs you copied by hand can be moved into this layout instead of copied again").clicked() {
@@ -631,17 +632,17 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
         return;
     }
     let ink = ink(ui);
-    let frame = egui::Frame::popup(ui.style()).fill(ink.bg).inner_margin(egui::Margin::same(22));
+    let frame = super::theme::dialog_frame(ui);
     let r = egui::Modal::new(egui::Id::unique("take over")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(640.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
             ui.label(RichText::new("Music already on the card").size(18.0).color(ink.text));
         });
-        ui.add_space(10.0);
+        ui.add_space(S2);
         if let Some(b) = &app.busy {
-            ui.horizontal(|ui| {
+            row(ui, |ui| {
                 super::cassette::spinner(ui, 14.0);
                 muted(ui, format!("{}…", b.label));
             });
@@ -667,7 +668,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
     match surveyed {
         None if foreign > 0 => {
             ui.label(RichText::new(format!("The card has {} that this write didn't put there ({}): music copied by hand, perhaps.", plural(foreign, "file"), text::bytes(foreign_bytes))).color(ink.text));
-            ui.add_space(8.0);
+            ui.add_space(S1);
             for (n, step) in [
                 "Check them against your library. This reads a little of each file and changes nothing.",
                 "See what they are: exact copies of songs this write needs, other versions, music your library doesn't have, and other files.",
@@ -681,8 +682,8 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                     ui.add(egui::Label::new(RichText::new(*step).color(if n == 0 { ink.text } else { ink.muted })).wrap());
                 });
             }
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
+            ui.add_space(S2);
+            row(ui, |ui| {
                 if app.busy.is_none() && widgets::primary_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
                     app.survey_card();
                 }
@@ -709,7 +710,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 ));
             }
             if unknown > 0 {
-                ui.horizontal_wrapped(|ui| {
+                row_wrapped(ui, |ui| {
                     ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
                         .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder first.");
                     // Room on the music folder's drive, so the copy can't fill it up.
@@ -731,7 +732,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
             if other > 0 {
                 muted(ui, format!("{} of other kinds: covers, logs, playlists, other devices' data… ({}).", plural(other, "file"), text::bytes(other_bytes)));
             }
-            ui.add_space(4.0);
+            ui.add_space(S1);
             let gather = format!("move everything else into one folder, “{}” (nothing is deleted)", gather_folder());
             ui.checkbox(&mut app.gather_on_take_over, gather)
                 .on_hover_text("Keeps the player's top level to this write's artists. Delete the folder yourself once you're happy; or untick to leave those files where they are.");
@@ -744,8 +745,8 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                         kinds.join("\n")
                     ));
             }
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            ui.add_space(S1);
+            row(ui, |ui| {
                 if app.busy.is_none() && used + spare + versions + unknown + other > 0 && widgets::primary_with(ui, Icon::Card, "Take over the card").on_hover_text("only moves files on the card; undo puts everything back").clicked() {
                     app.take_over_card();
                 }
@@ -765,9 +766,9 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let w = &mut app.saved.writes[app.saved.active_write];
     widgets::section(ui, Icon::Settings, "Folders and options");
-    ui.add_space(8.0);
+    ui.add_space(S1);
     widgets::setting(ui, "Album folders", |ui| {
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             for (order, label) in [(AlbumOrder::Year, "1997 - Album"), (AlbumOrder::Title, "Album"), (AlbumOrder::Custom, "01 - Album")] {
                 // Each is a pattern of names; choosing one sets it back to that.
                 if ui.radio(w.options.pattern.is_none() && w.options.album_order == order, label).clicked() {
@@ -782,7 +783,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     });
     widgets::setting(ui, "Names on the card", |ui| {
         let mut text = app.pattern_draft.clone().unwrap_or_else(|| w.options.pattern_text().to_string());
-        let r = ui.add(egui::TextEdit::singleline(&mut text).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY));
+        let r = ui.add(egui::TextEdit::singleline(&mut text).align(egui::Align2::LEFT_CENTER).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY));
         let parsed = Pattern::parse(&text);
         if r.changed() {
             if parsed.is_ok() {
@@ -802,7 +803,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                 }
             }
         }
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             muted(ui, "fields:");
             for f in Field::ALL {
                 ui.label(RichText::new(format!("{{{}}}", f.name())).monospace().size(12.5).color(ink.text)).on_hover_text(f.about());
@@ -818,17 +819,16 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     widgets::setting(ui, "Other folders", |ui| {
         egui::Grid::new("folders").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             muted(ui, "songs without an album");
-            changed |= ui.add(egui::TextEdit::singleline(&mut w.options.singles_folder).desired_width(160.0)).changed();
+            changed |= ui.add(egui::TextEdit::singleline(&mut w.options.singles_folder).align(egui::Align2::LEFT_CENTER).desired_width(160.0)).changed();
             ui.end_row();
             muted(ui, "playlists");
-            changed |= ui.add(egui::TextEdit::singleline(&mut w.playlists_folder).desired_width(160.0)).changed();
+            changed |= ui.add(egui::TextEdit::singleline(&mut w.playlists_folder).align(egui::Align2::LEFT_CENTER).desired_width(160.0)).changed();
             ui.end_row();
         });
     });
     if let Some((n, formats)) = &unplayable {
         widgets::setting(ui, &format!("Formats {} can't play", device.short()), |ui| {
             ui.label(RichText::new(format!("{}: {formats}", plural(*n, "song"))).color(ink.text));
-            ui.add_space(2.0);
             changed |= ui
                 .radio_value(&mut w.options.unplayable, Unplayable::Convert, "convert them")
                 .on_hover_text("Takes a while the first time; later writes keep what's already on the card.")
@@ -853,8 +853,8 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                     let which = if rules.lossless_mp3 { "in stereo, as chosen under saving space" } else { "AAC, Dolby and other lossy ones, in stereo" };
                     made.push(format!("{} to MP3 320 ({which})", plural(mp3, "song")));
                 }
-                ui.horizontal(|ui| {
-                    ui.add_space(24.0);
+                row(ui, |ui| {
+                    ui.add_space(S3);
                     ui.vertical(|ui| {
                         for m in made {
                             widgets::help(ui, m);
@@ -918,7 +918,7 @@ fn playlists(app: &mut App, ui: &mut Ui) {
     let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
     let mut changed = false;
     let w = &mut app.saved.writes[app.saved.active_write];
-    ui.horizontal_wrapped(|ui| {
+    row_wrapped(ui, |ui| {
         for p in &app.saved.playlists {
             let mut on = w.playlists.contains(&p.name);
             let label = format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path)));
@@ -953,8 +953,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     let mut edits = Vec::new();
     widgets::section(ui, Icon::Library, "What goes on the card");
     widgets::help(ui, "Tick what goes on the card, here or in the library; Sync copies it. On the right, the folder names on the card; rename changes them for this write only.");
-    ui.add_space(4.0);
-    ui.horizontal(|ui| {
+    ui.add_space(S1);
+    row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
         widgets::search_field(ui, &mut app.card_filter, "filter", 200.0);
@@ -965,7 +965,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             edits.push(Edit::All(false));
         }
     });
-    ui.add_space(4.0);
+    ui.add_space(S1);
     let w = app.write();
     let needle = app.card_filter.to_lowercase();
     let pattern = w.options.pattern();
@@ -984,7 +984,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         let whole = w.custom.whole_artist(ck);
         let card_name = w.custom.artist_names.get(ck).cloned().unwrap_or_else(|| artist.name.clone());
         let open = app.card_expanded.contains(ck);
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             let mut on = all && any;
             let hint = if whole { "the whole artist goes on the card, albums added later too" } else { "tick to put the whole artist on the card, albums added later too" };
             if ui.add(egui::Checkbox::without_text(&mut on).indeterminate(any && !all)).on_hover_text(hint).changed() {
@@ -999,7 +999,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             muted(ui, text::bytes(sizes.artist.get(ck).copied().unwrap_or(0)));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 // Clear of the scrollbar.
-                ui.add_space(10.0);
+                ui.add_space(S2);
                 rename_widget(ui, &app.card_renaming, true, ck, &card_name, &mut edits);
             });
         });
@@ -1021,8 +1021,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             let mut on = w.custom.includes(ck, al, &artist.albums);
             let on_card = on;
             let bi = artist.albums.iter().position(|a| std::ptr::eq(a, *al)).unwrap_or_default();
-            ui.horizontal(|ui| {
-                ui.add_space(26.0);
+            row(ui, |ui| {
+                ui.add_space(S3);
                 let hint = if al.edition.is_some() { "One edition of this album goes on the card; ticking this one replaces the other." } else { "" };
                 let r = ui.add(egui::Checkbox::without_text(&mut on));
                 if (if hint.is_empty() { r } else { r.on_hover_text(hint) }).changed() {
@@ -1056,7 +1056,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     ui.label(RichText::new(format!("{} left out", left.len())).size(12.5).color(ink.warn)).on_hover_text(*why);
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_space(10.0);
+                    ui.add_space(S2);
                     if custom_order && al.title.is_some() {
                         if widgets::icon_button(ui, Icon::Down).on_hover_text("move down").clicked() {
                             edits.push(Edit::Move(ck.clone(), order_ids.clone(), n, 1));
@@ -1130,7 +1130,7 @@ fn rename_widget(ui: &mut Ui, renaming: &Option<(bool, String, String)>, is_arti
             if widgets::icon_link(ui, Icon::Check, "save").clicked() {
                 edits.push(Edit::Rename(is_artist, key.to_string(), text.clone()));
             }
-            let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(200.0));
+            let r = ui.add(egui::TextEdit::singleline(&mut text).align(egui::Align2::LEFT_CENTER).desired_width(200.0));
             if r.changed() {
                 edits.push(Edit::StartRename(is_artist, key.to_string(), text.clone()));
             }

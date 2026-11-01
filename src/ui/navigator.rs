@@ -10,6 +10,7 @@ use egui::{RichText, ScrollArea, Ui};
 use super::text;
 use super::theme::ink;
 use super::widgets::{self, caps, link, muted};
+use super::layout::{S1, row_wrapped};
 
 const AUDIO: &[&str] = &["flac", "mp3", "wav", "m4a", "aac", "ogg", "opus", "ape", "wv", "aiff", "aif", "wma"];
 /// Past this many subfolders, skip counting their audio files to keep browsing instant.
@@ -118,7 +119,7 @@ impl Navigator {
         }
         let mut go = None;
 
-        ui.horizontal_wrapped(|ui| {
+        row_wrapped(ui, |ui| {
             let mut places: Vec<(&str, PathBuf)> = Vec::new();
             if let Some(h) = std::env::home_dir() {
                 places.push(("Home", h.clone()));
@@ -137,11 +138,10 @@ impl Navigator {
                 go = Some(p);
             }
         });
-        ui.add_space(8.0);
+        ui.add_space(S1);
 
         // Breadcrumb: every ancestor is a link.
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
+        row_wrapped(ui, |ui| {
             caps(ui, "in");
             let ancestors: Vec<&Path> = self.dir.ancestors().collect();
             for (i, a) in ancestors.iter().rev().enumerate() {
@@ -167,7 +167,7 @@ impl Navigator {
         if let Some(e) = &l.error {
             ui.label(RichText::new(e).color(ink.warn).size(12.5));
         }
-        ui.add_space(4.0);
+        ui.add_space(S1);
         let row_h = 26.0;
         ScrollArea::vertical().id_salt("nav").max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
             let row = |ui: &mut Ui, label: String, count: Option<(usize, bool)>, folder: bool| -> bool {
