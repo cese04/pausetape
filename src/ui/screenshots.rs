@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 16] = [
+const TABS: [(Tab, &str); 15] = [
     (Tab::Folders, "folders"),
     (Tab::Folders, "picker"),
     (Tab::Folders, "cardpicker"),
@@ -20,7 +20,6 @@ const TABS: [(Tab, &str); 16] = [
     (Tab::Library, "job"),
     (Tab::Library, "albums"),
     (Tab::Library, "covers"),
-    (Tab::Artists, "artists"),
     (Tab::Card, "card"),
     (Tab::Card, "cardowner"),
     (Tab::Card, "syncconfirm"),
@@ -90,7 +89,7 @@ impl Shooter {
                 let (queue, cluster) = (a.albums[al].tracks.clone(), a.cluster);
                 app.play(queue, 1);
                 app.lookup_album(ai, al);
-                app.lookup_artist(cluster);
+                app.ask_artist_info(cluster, None);
             }
             let some: Vec<PathBuf> = app.tracks.iter().take(5).map(|t| t.id()).collect();
             app.saved.playlists = vec![Playlist { name: "Road Trip".into(), tracks: some }];

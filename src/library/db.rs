@@ -14,6 +14,7 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 
 use crate::library::Track;
+use crate::musicbrainz::ArtistInfo;
 
 /// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
 /// and bit depth; 4: embedded cover; 5: damaged files), so files get re-read.
@@ -75,6 +76,11 @@ impl Db {
              CREATE TABLE IF NOT EXISTS folders (
                  root    TEXT PRIMARY KEY,
                  scanned INTEGER NOT NULL -- seconds since 1970 when it was last read through
+             );
+             CREATE TABLE IF NOT EXISTS artists (
+                 key     TEXT PRIMARY KEY, -- the artist as the library groups it: \"flyinglotus\"
+                 info    TEXT NOT NULL,    -- ArtistInfo as JSON: the MusicBrainz entry, links
+                 fetched INTEGER NOT NULL  -- seconds since 1970
              );
              CREATE TABLE IF NOT EXISTS sheets (
                  path TEXT PRIMARY KEY,
@@ -186,6 +192,22 @@ impl Db {
         }
         sheets.extend(read);
         Ok(sheets)
+    }
+
+    /// What MusicBrainz said about the artist the library groups under `key`, and when.
+    pub fn artist_info(&self, key: &str) -> Result<Option<(ArtistInfo, u64)>> {
+        let row = self.conn.query_row("SELECT info, fetched FROM artists WHERE key = ?1", params![key], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)));
+        match row {
+            // A row that no longer deserialises is asked for again.
+            Ok((info, at)) => Ok(serde_json::from_str(&info).ok().map(|i| (i, at as u64))),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn save_artist_info(&mut self, key: &str, info: &ArtistInfo, at: u64) -> Result<()> {
+        self.conn.execute("INSERT OR REPLACE INTO artists (key, info, fetched) VALUES (?1, ?2, ?3)", params![key, serde_json::to_string(info)?, at as i64])?;
+        Ok(())
     }
 
     pub fn edits_under(&self, root: &Path) -> Result<HashMap<String, Cached>> {
@@ -340,6 +362,21 @@ mod tests {
             assert_eq!((tracks.len(), s.unreadable, s.removed, s.unreachable), (1, 1, 0, false));
             assert_eq!(db.counts(), (3, 1));
         }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn artist_info_is_kept() {
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-artists-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
+        assert!(db.artist_info("flyinglotus").unwrap().is_none());
+        let info = ArtistInfo { mbid: "fc7376fe".into(), name: "Flying Lotus".into(), genres: vec!["downtempo".into()], ..Default::default() };
+        db.save_artist_info("flyinglotus", &info, 1_700_000_000).unwrap();
+        // Kept across a reopening, and by itself: forgetting stored tags leaves it.
+        db.clear().unwrap();
+        let db = Db::open(&root.join("library.sqlite3")).unwrap();
+        assert_eq!(db.artist_info("flyinglotus").unwrap(), Some((info, 1_700_000_000)));
         std::fs::remove_dir_all(root).unwrap();
     }
 

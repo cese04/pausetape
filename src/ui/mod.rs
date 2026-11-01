@@ -3,7 +3,7 @@
 
 mod actions;
 mod albums;
-mod artists;
+mod artist_panel;
 mod card;
 pub mod folders;
 pub mod icons;
@@ -57,7 +57,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         match app.tab {
             Tab::Folders => folders::show(app, ui),
             Tab::Library => library::show(app, ui),
-            Tab::Artists => artists::show(app, ui),
             Tab::Card => card::show(app, ui),
             Tab::Playlists => playlists::show(app, ui),
             Tab::Settings => settings::show(app, ui),
@@ -83,7 +82,6 @@ fn header(app: &mut App, ui: &mut Ui) {
         for (t, icon, name) in [
             (Tab::Folders, Icon::Folder, "folders"),
             (Tab::Library, Icon::Library, "library"),
-            (Tab::Artists, Icon::Artists, "artists"),
             (Tab::Card, Icon::Card, "card"),
             (Tab::Playlists, Icon::Playlists, "playlists"),
             (Tab::Settings, Icon::Settings, "settings"),
@@ -94,6 +92,7 @@ fn header(app: &mut App, ui: &mut Ui) {
                 app.tab = t;
                 // The library tab always opens on the whole library.
                 app.duplicates_only = false;
+                app.look_alikes_only = false;
             }
         }
     });

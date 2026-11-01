@@ -220,9 +220,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             app.duplicates_only = false;
         }
         if !app.index.suggestions.is_empty()
-            && widgets::chip(ui, Icon::Artists, format!("{} possible duplicate artists", app.index.suggestions.len()), ink.text).on_hover_text("Artists whose names look alike. Decide in the artists tab.").clicked()
+            && widgets::chip(ui, Icon::Artists, format!("{} artists that look alike", app.index.suggestions.len()), ink.text)
+                .on_hover_text("Artists whose names look alike (“Jimi Hendrix” / “Jimmy Hendrix”). Click to show only them, and say which are the same.")
+                .clicked()
         {
-            app.tab = crate::app::Tab::Artists;
+            app.look_alikes_only = true;
+            app.duplicates_only = false;
         }
     });
     if let Some((n, formats)) = crate::library::unplayable_summary(&app.tracks, |t| device.plays(t)) {
@@ -282,6 +285,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if app.duplicates_only && duplicated.is_empty() && app.busy.is_none() {
         app.duplicates_only = false;
         app.notice("no duplicates left · showing the whole library");
+    }
+    if app.look_alikes_only && app.index.suggestions.is_empty() {
+        app.look_alikes_only = false;
+        app.notice("no look-alike artists left · showing the whole library");
+    }
+    if app.look_alikes_only {
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            app.look_alikes_only = false;
+        }
+        theme::panel_frame(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                if widgets::button_with(ui, Icon::Back, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                    app.look_alikes_only = false;
+                }
+                ui.add_space(8.0);
+                ui.label(RichText::new("Showing only artists whose names look like another's. Say under each whether they're the same artist.").color(ink.text));
+            });
+        });
+        ui.add_space(8.0);
     }
     if app.duplicates_only {
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -353,7 +376,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     } else {
                         (0..artist.albums.len()).filter(|&i| query.album_matches(&app.album_facts(ai, i))).collect()
                     };
-                    if matching.is_empty() {
+                    if matching.is_empty() || app.look_alikes_only && !app.index.suggestions.iter().any(|s| s.a == artist.cluster || s.b == artist.cluster) {
                         continue;
                     }
                     let open = app.expanded.contains(&akey) || app.duplicates_only || (!query.is_empty() && matching.len() < 6);
@@ -394,10 +417,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         })
                         .inner;
                     if r.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                        actions.push(Action::ToggleArtist(akey.clone()));
+                        actions.push(Action::ToggleArtist(akey.clone(), ai));
                     }
+                    super::artist_panel::look_alikes(app, ui, artist.cluster, &mut actions);
                     if !open {
                         continue;
+                    }
+                    // Opened by hand, not by a search or a filter: who they are, where to buy more.
+                    if app.expanded.contains(&akey) {
+                        super::artist_panel::show(app, ui, artist.cluster, &mut actions);
                     }
                     for &bi in &matching {
                         let al = &artist.albums[bi];

@@ -35,10 +35,10 @@ use crate::audio::{self, Audio};
 use crate::card::playlist::{self, Playlist};
 use crate::card::{self, Mode, Options, Outcome, PlanItem, Preview, Progress, Volume, WriteProfile};
 use crate::library::db::Db;
-use crate::library::grouping::{self, AlbumNode, ArtistPrefs, Index};
-use crate::library::names::artist_key;
+use crate::library::grouping::{self, AlbumNode, ArtistPrefs, Index, UNKNOWN, VARIOUS};
+use crate::library::names::{artist_key, primary_artist};
 use crate::library::{self, ScanStats, Track};
-use crate::musicbrainz::{self, ArtistHit, Field, FieldChange, Job, LocalTrack, Reply};
+use crate::musicbrainz::{self, ArtistFound, ArtistHit, ArtistInfo, Field, FieldChange, Job, LocalTrack, Reply};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ThemePref {
@@ -96,10 +96,19 @@ impl Default for Saved {
 pub enum Tab {
     Folders,
     Library,
-    Artists,
     Card,
     Playlists,
     Settings,
+}
+
+pub enum ArtistState {
+    /// Not in the library database: asked when the artist is opened, or with "look up".
+    Unasked,
+    Asking,
+    Found { info: ArtistInfo, fetched: u64 },
+    /// Several artists by that name, or none close: which one is it?
+    Choose(Vec<ArtistHit>),
+    Failed(String),
 }
 
 pub enum Lookup {
@@ -233,6 +242,8 @@ pub struct App {
     pub filter: String,
     /// The library shows only albums with a copy that another copy covers.
     pub duplicates_only: bool,
+    /// The library shows only artists whose names look like another's, to decide on.
+    pub look_alikes_only: bool,
     /// Expanded artists in the library, by artist key.
     pub expanded: HashSet<String>,
     /// Songs chosen in the library (⌘-click), for editing their tags together.
@@ -271,8 +282,8 @@ pub struct App {
     mb: Option<(String, musicbrainz::Client)>,
     mb_tx: Sender<Reply>,
     mb_rx: Receiver<Reply>,
-    /// MusicBrainz artist candidates per cluster key; `None` while pending.
-    pub artist_hits: HashMap<String, Option<Result<Vec<ArtistHit>, String>>>,
+    /// The artist panel's MusicBrainz entry, by cluster key.
+    pub artist_info: HashMap<String, ArtistState>,
     pub lookups: HashMap<String, Lookup>,
     /// Plan for tidying the source in place, once previewed.
     pub tidy_plan: Option<Vec<PlanItem>>,
@@ -356,6 +367,7 @@ impl App {
             tab: if first_run { Tab::Folders } else { Tab::Library },
             filter: String::new(),
             duplicates_only: false,
+            look_alikes_only: false,
             expanded: HashSet::new(),
             selected: BTreeSet::new(),
             select_anchor: None,
@@ -378,7 +390,7 @@ impl App {
             mb: None,
             mb_tx,
             mb_rx,
-            artist_hits: HashMap::new(),
+            artist_info: HashMap::new(),
             lookups: HashMap::new(),
             tidy_plan: None,
             in_place: 0,

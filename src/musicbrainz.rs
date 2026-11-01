@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use deunicode::deunicode;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::library::grouping::UNKNOWN;
@@ -74,19 +75,166 @@ pub struct LocalTrack {
 
 #[derive(Clone, Debug)]
 pub struct ArtistHit {
+    /// The MusicBrainz id.
+    pub id: String,
     pub name: String,
     pub detail: String,
     pub score: u32,
 }
 
+/// What the artist panel shows about an artist, from their MusicBrainz entry: who they are, and
+/// where to buy, hear or find out more of their music. Kept in the library database.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ArtistInfo {
+    pub mbid: String,
+    pub name: String,
+    pub disambiguation: String,
+    /// "US", "GB".
+    pub country: String,
+    /// The years they were active, as far as MusicBrainz knows.
+    pub begin: Option<u16>,
+    pub end: Option<u16>,
+    pub ended: bool,
+    /// Most voted first.
+    pub genres: Vec<String>,
+    /// In `SITES` order.
+    pub links: Vec<Link>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkUse {
+    Buy,
+    Listen,
+    Discover,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Link {
+    #[serde(rename = "use")]
+    pub kind: LinkUse,
+    pub site: String,
+    pub url: String,
+}
+
+/// The sites shown, in the order shown. Buying first, from where most reaches the artist
+/// (Bandcamp) and in lossless (Qobuz); records, new and used, on Discogs.
+const SITES: &[(LinkUse, &str)] = &[
+    (LinkUse::Buy, "Bandcamp"),
+    (LinkUse::Buy, "Qobuz"),
+    (LinkUse::Buy, "Apple Music"),
+    (LinkUse::Buy, "7digital"),
+    (LinkUse::Buy, "Beatport"),
+    (LinkUse::Buy, "Discogs"),
+    (LinkUse::Buy, "shop"),
+    (LinkUse::Listen, "Spotify"),
+    (LinkUse::Listen, "Apple Music"),
+    (LinkUse::Listen, "Tidal"),
+    (LinkUse::Listen, "Qobuz"),
+    (LinkUse::Listen, "Deezer"),
+    (LinkUse::Listen, "YouTube Music"),
+    (LinkUse::Listen, "SoundCloud"),
+    (LinkUse::Discover, "last.fm"),
+    (LinkUse::Discover, "Rate Your Music"),
+    (LinkUse::Discover, "Songkick"),
+    (LinkUse::Discover, "website"),
+];
+
+/// Where a MusicBrainz URL relation goes in the panel, if anywhere: social networks, film and
+/// library catalogues and the like are left out.
+fn link_site(relation: &str, url: &str) -> Option<(LinkUse, &'static str)> {
+    use LinkUse::*;
+    let host = url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or_default().to_lowercase();
+    let host = host.strip_prefix("www.").unwrap_or(&host);
+    let on = |site: &str| host == site || host.ends_with(&format!(".{site}"));
+    let buying = relation == "purchase for download";
+    Some(match relation {
+        "bandcamp" => (Buy, "Bandcamp"),
+        "discogs" => (Buy, "Discogs"),
+        "purchase for mail-order" => (Buy, "shop"),
+        "last.fm" => (Discover, "last.fm"),
+        "songkick" => (Discover, "Songkick"),
+        "official homepage" => (Discover, "website"),
+        "other databases" if on("rateyourmusic.com") => (Discover, "Rate Your Music"),
+        "purchase for download" | "streaming" | "free streaming" | "youtube music" | "soundcloud" => {
+            // Qobuz's store, and its player.
+            if on("open.qobuz.com") {
+                (Listen, "Qobuz")
+            } else if on("qobuz.com") {
+                (Buy, "Qobuz")
+            } else if on("apple.com") {
+                (if buying { Buy } else { Listen }, "Apple Music")
+            } else if buying && on("7digital.com") {
+                (Buy, "7digital")
+            } else if buying && on("beatport.com") {
+                (Buy, "Beatport")
+            } else if on("spotify.com") {
+                (Listen, "Spotify")
+            } else if on("tidal.com") {
+                (Listen, "Tidal")
+            } else if on("deezer.com") {
+                (Listen, "Deezer")
+            } else if on("music.youtube.com") {
+                (Listen, "YouTube Music")
+            } else if on("soundcloud.com") {
+                (Listen, "SoundCloud")
+            } else {
+                return None;
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// An artist entry looked up with `inc=url-rels+genres`.
+fn parse_artist(v: &Value) -> ArtistInfo {
+    let mut links: Vec<Link> = Vec::new();
+    for r in v["relations"].as_array().into_iter().flatten() {
+        let url = str_of(&r["url"]["resource"]);
+        if r["ended"].as_bool() == Some(true) || url.is_empty() {
+            continue;
+        }
+        if let Some((kind, site)) = link_site(&str_of(&r["type"]), &url)
+            && !links.iter().any(|l| l.kind == kind && l.site == site)
+        {
+            links.push(Link { kind, site: site.into(), url });
+        }
+    }
+    links.sort_by_key(|l| SITES.iter().position(|&(k, s)| k == l.kind && s == l.site));
+    let mut genres: Vec<(u64, String)> = v["genres"].as_array().into_iter().flatten().map(|g| (g["count"].as_u64().unwrap_or(0), str_of(&g["name"]))).collect();
+    genres.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    let span = &v["life-span"];
+    ArtistInfo {
+        mbid: str_of(&v["id"]),
+        name: str_of(&v["name"]),
+        disambiguation: str_of(&v["disambiguation"]),
+        country: str_of(&v["country"]),
+        begin: year_of(&span["begin"]),
+        end: year_of(&span["end"]),
+        ended: span["ended"].as_bool().unwrap_or(false),
+        genres: genres.into_iter().map(|(_, g)| g).collect(),
+        links,
+    }
+}
+
+/// An artist found, or the candidates to choose from when the name alone doesn't say which.
+pub enum ArtistFound {
+    Info(ArtistInfo),
+    Choose(Vec<ArtistHit>),
+}
+
 pub enum Job {
     Artist { cluster_key: String, name: String },
+    /// The panel's facts and links: for the entry `mbid`, or the one artist the name matches.
+    ArtistInfo { cluster_key: String, name: String, mbid: Option<String> },
     Album { album_id: String, artist: String, album: String, tracks: Vec<LocalTrack> },
     Loose { album_id: String, tracks: Vec<LocalTrack> },
 }
 
 pub enum Reply {
     Artist { cluster_key: String, result: Result<Vec<ArtistHit>, String> },
+    ArtistInfo { cluster_key: String, result: Result<ArtistFound, String> },
     Album { album_id: String, result: Result<(String, Vec<FieldChange>), String> },
 }
 
@@ -143,6 +291,9 @@ impl Worker {
                 Job::Artist { cluster_key, name } => {
                     Reply::Artist { cluster_key, result: self.artist(&name).map_err(|e| format!("{e:#}")) }
                 }
+                Job::ArtistInfo { cluster_key, name, mbid } => {
+                    Reply::ArtistInfo { cluster_key, result: self.artist_info(&name, mbid.as_deref()).map_err(|e| format!("{e:#}")) }
+                }
                 Job::Album { album_id, artist, album, tracks } => {
                     Reply::Album { album_id, result: self.album(&artist, &album, &tracks).map_err(|e| format!("{e:#}")) }
                 }
@@ -188,6 +339,7 @@ impl Worker {
             .into_iter()
             .flatten()
             .map(|a| ArtistHit {
+                id: str_of(&a["id"]),
                 name: str_of(&a["name"]),
                 detail: [str_of(&a["disambiguation"]), str_of(&a["country"]), str_of(&a["type"])]
                     .into_iter()
@@ -197,6 +349,24 @@ impl Worker {
                 score: a["score"].as_u64().unwrap_or(0) as u32,
             })
             .collect())
+    }
+
+    /// The entry `mbid`, or else the one artist going by `name`: several of that name (or none
+    /// close) are handed back to choose from.
+    fn artist_info(&mut self, name: &str, mbid: Option<&str>) -> Result<ArtistFound> {
+        let mbid = match mbid {
+            Some(id) => id.to_string(),
+            None => {
+                let hits = self.artist(name)?;
+                let same: Vec<&ArtistHit> = hits.iter().filter(|h| h.score >= 90 && artist_key(&h.name) == artist_key(name)).collect();
+                match same[..] {
+                    [one] => one.id.clone(),
+                    _ => return Ok(ArtistFound::Choose(hits)),
+                }
+            }
+        };
+        let v = self.get(&format!("artist/{mbid}"), &[("inc", "url-rels+genres")])?;
+        Ok(ArtistFound::Info(parse_artist(&v)))
     }
 
     /// Search for the release, check the best candidates against the local songs, and suggest
@@ -554,6 +724,45 @@ fn lucene(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn artist_links_sorted_into_buy_listen_discover() {
+        // Flying Lotus's entry, cut down: some of each kind, a repeat, an ended link, and links left out.
+        let rel = |kind: &str, url: &str| serde_json::json!({ "type": kind, "ended": false, "url": { "resource": url } });
+        let v = serde_json::json!({
+            "id": "fc7376fe-1a6f-4414-b4a7-83f50ed59c92", "name": "Flying Lotus", "country": "US",
+            "life-span": { "begin": "1983-10-07", "ended": false },
+            "genres": [{ "name": "downtempo", "count": 3 }, { "name": "experimental hip hop", "count": 9 }],
+            "relations": [
+                rel("free streaming", "https://open.spotify.com/artist/29XOeO6KIWxGthejQqn793"),
+                rel("social network", "https://twitter.com/flyinglotus"),
+                rel("purchase for download", "https://music.apple.com/us/artist/120737020"),
+                rel("streaming", "https://music.apple.com/gb/artist/120737020"),
+                rel("streaming", "https://music.apple.com/us/artist/120737020"),
+                rel("purchase for download", "https://www.qobuz.com/us-en/interpreter/flying-lotus/291266"),
+                rel("streaming", "https://open.qobuz.com/artist/291266"),
+                rel("bandcamp", "https://flyinglotus.bandcamp.com/"),
+                rel("youtube music", "https://music.youtube.com/channel/UCJvOvKwxPEL-4RtSvu_nWhQ"),
+                rel("youtube", "https://www.youtube.com/channel/UC6An_wEqusDnouBmzQtHheA"),
+                rel("discogs", "https://www.discogs.com/artist/365248"),
+                rel("other databases", "https://rateyourmusic.com/artist/flying-lotus"),
+                rel("other databases", "http://viaf.org/viaf/121197219"),
+                rel("last.fm", "https://www.last.fm/music/Flying+Lotus"),
+                rel("official homepage", "http://flying-lotus.com/"),
+                { "type": "myspace", "ended": true, "url": { "resource": "https://myspace.com/flyinglotus" } },
+            ]
+        });
+        let a = parse_artist(&v);
+        assert_eq!((a.name.as_str(), a.country.as_str(), a.begin, a.ended), ("Flying Lotus", "US", Some(1983), false));
+        assert_eq!(a.genres, ["experimental hip hop", "downtempo"]);
+        let row = |kind: LinkUse| a.links.iter().filter(|l| l.kind == kind).map(|l| l.site.as_str()).collect::<Vec<_>>();
+        assert_eq!(row(LinkUse::Buy), ["Bandcamp", "Qobuz", "Apple Music", "Discogs"]);
+        assert_eq!(row(LinkUse::Listen), ["Spotify", "Apple Music", "Qobuz", "YouTube Music"]);
+        assert!(a.links.iter().any(|l| l.kind == LinkUse::Buy && l.url.starts_with("https://www.qobuz.com/")), "Qobuz's store, not its player");
+        assert_eq!(row(LinkUse::Discover), ["last.fm", "Rate Your Music", "website"]);
+        // The first of a site's links is kept.
+        assert!(a.links.iter().any(|l| l.kind == LinkUse::Listen && l.url.contains("/gb/")));
+    }
 
     fn lt(idx: usize, title: &str, track: Option<u32>) -> LocalTrack {
         LocalTrack { idx, title: title.into(), artist: "radiohead".into(), album_artist: String::new(), album: "Ok Computer".into(), track, disc: None, year: None, seconds: 0.0 }

@@ -69,7 +69,8 @@ src/
 ├── main.rs            start-up, --version, --plan; APP_NAME / APP_ID
 ├── platform.rs        app data folder; open a folder in Finder/Explorer/file manager; the Trash;
 │                      console programs without a console window (Windows)
-├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive)
+├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive);
+│                      an artist's entry: genres, years, links sorted into buy / listen / discover
 ├── library/           reading and understanding the music folder
 │   ├── track.rs       Track; which formats play on RECHO / here / not at all
 │   ├── scan.rs        incremental scan (database reuse), tag reading, folder-name inference
@@ -77,7 +78,8 @@ src/
 │   ├── cue.rs         CUE sheets: parse, decode legacy encodings, album file → songs
 │   ├── dsd.rs         DSD files (.dsf, .dff): rate, length and tags from their own headers
 │   ├── tags.rs        writing corrected tags into files
-│   ├── db.rs          SQLite library database: cached tags, CUE sheets, when each folder was scanned, unsaved corrections
+│   ├── db.rs          SQLite library database: cached tags, CUE sheets, when each folder was scanned, unsaved corrections,
+│                      what MusicBrainz said about each artist (by the key the library groups it under)
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
 │   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
 │   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
@@ -118,7 +120,8 @@ src/
     ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
     ├── text.rs        durations, sizes, plurals, shortening, format notes and badges
     ├── actions.rs     clicks collected while drawing, applied afterwards
-    ├── library.rs  artists.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab
+    ├── library.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab
+    ├── artist_panel.rs under an open artist: look-alike names, MusicBrainz facts and links, renaming
     ├── player.rs      player bar
     ├── navigator.rs   in-app folder browser for the pickers
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
@@ -191,14 +194,14 @@ window on Windows),
 
 ## Tests
 
-`cargo test` runs 69 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 74 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash, undo never replacing a file,
 song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
-tag of a file, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another. They use temporary folders and fake audio files,
+tag of a file, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another, artist links sorted for the panel, artist entries kept, renaming an artist in its tags, search links. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),

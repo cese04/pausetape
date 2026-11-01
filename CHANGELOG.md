@@ -604,3 +604,19 @@ Calibre's device view, for music: the library is where you choose what goes on t
   and channels never change, so rodio never looked again; it now says how much is left of each
   chunk, as rodio's own decoders do. Chunks are cut on whole frames.
 
+### 46. The artists tab gives way to an artist panel in the library (2026-10-31)
+- **Opening an artist** in the library shows, from MusicBrainz, their genres, country and years,
+  and links to **buy** (Bandcamp first, then Qobuz, Apple Music, Discogs, the artist's shop),
+  **listen** (Spotify, Apple Music, Tidal, Qobuz, Deezer, YouTube Music, SoundCloud) and
+  **discover** (last.fm, Rate Your Music, Songkick, their website). Where MusicBrainz has no
+  Bandcamp, Qobuz or Discogs link, a search there stands in. Asked once, when the artist is
+  first opened, and kept in the library database (`artists` table, by the key the library
+  groups the artist under); **refresh** asks again, **not this artist?** chooses another
+  MusicBrainz artist of that name, and several of one name are offered to choose from.
+- **Look-alike names** ("Jimi Hendrix" / "Jimmy Hendrix") show under the artist, with *same
+  artist* / *different artists*; the chip at the top shows only those artists.
+- **Rename** changes the artist and album artist in the songs' tags, as corrections written
+  with the others (a guest's "feat. …" is kept). *Use MusicBrainz's name* does the same.
+- **Settings › Artist decisions** lists each merge and keep-apart with its own undo.
+- The artists tab is gone: the library already lists every artist.
+

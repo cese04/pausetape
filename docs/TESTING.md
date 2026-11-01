@@ -146,8 +146,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     own length.
 
 ### D. Artists and MusicBrainz
-13. Artists tab: a misspelled artist appears under *possible duplicates*; **same artist**
-    merges them.
+13. Library: a misspelled artist shows "≈ looks like …" under its name (the chip *artists that
+    look alike* shows only those); **same artist** merges them, and Settings › Artist decisions
+    can undo it. Open an artist: after a moment its genres, country and years show, with links
+    to buy (Bandcamp, Qobuz, …), listen and discover; each opens in the browser. **rename**
+    changes the artist in its songs' tags, as corrections.
 14. Library › an album › **look up**: MusicBrainz suggestions appear; **apply selected** marks
     tracks as edited. Quit and reopen: the edits are still there (library database).
 14a. If the same album is in two folders: the library shows "edition 1 of 2" and "2 of 2" with

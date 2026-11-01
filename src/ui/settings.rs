@@ -66,10 +66,53 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
         setting(ui, "Artist decisions", |ui| {
             let p = &app.saved.prefs;
-            ui.label(format!("{} merged · {} kept apart · {} renamed", p.merges.len(), p.rejected.len(), p.names.len()));
-            help(ui, "What you decided in the artists tab about names that look alike.");
-            if icon_link(ui, Icon::Trash, "forget them all").clicked() {
-                app.saved.prefs = Default::default();
+            if p.merges.is_empty() && p.rejected.is_empty() && p.names.is_empty() {
+                ui.label("none yet");
+            }
+            // An artist key as the tags spell it, or as the key itself once no song does.
+            let name = |key: &str| {
+                let spelt = app.index.clusters.iter().flat_map(|c| c.variants.keys()).find(|v| crate::library::names::artist_key(v) == key);
+                spelt.cloned().unwrap_or_else(|| key.to_string())
+            };
+            let mut undo = None;
+            for (i, (a, b)) in p.merges.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("“{}” and “{}”: the same artist", name(a), name(b)));
+                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                        undo = Some(Undo::Merge(i));
+                    }
+                });
+            }
+            for (a, b) in &p.rejected {
+                ui.horizontal(|ui| {
+                    ui.label(format!("“{}” and “{}”: different artists", name(a), name(b)));
+                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                        undo = Some(Undo::Reject(a.clone(), b.clone()));
+                    }
+                });
+            }
+            for (k, n) in &p.names {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{k} shown as “{n}”"));
+                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                        undo = Some(Undo::Name(k.clone()));
+                    }
+                });
+            }
+            help(ui, "What you said in the library about artists whose names look alike. Renaming an artist changes its songs' tags instead, like any correction.");
+            if let Some(u) = undo {
+                let p = &mut app.saved.prefs;
+                match u {
+                    Undo::Merge(i) => {
+                        p.merges.remove(i);
+                    }
+                    Undo::Reject(a, b) => {
+                        p.rejected.remove(&(a, b));
+                    }
+                    Undo::Name(k) => {
+                        p.names.remove(&k);
+                    }
+                }
                 app.rebuild();
             }
         });
@@ -110,4 +153,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             help(ui, "MusicBrainz asks apps to say who's asking; this is sent with each lookup.");
         });
     });
+}
+
+/// One artist decision to take back.
+enum Undo {
+    Merge(usize),
+    Reject(String, String),
+    Name(String),
 }

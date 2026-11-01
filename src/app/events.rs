@@ -283,7 +283,21 @@ impl App {
         while let Ok(reply) = self.mb_rx.try_recv() {
             match reply {
                 Reply::Artist { cluster_key, result } => {
-                    self.artist_hits.insert(cluster_key, Some(result));
+                    self.artist_info.insert(cluster_key, result.map_or_else(ArtistState::Failed, ArtistState::Choose));
+                }
+                Reply::ArtistInfo { cluster_key, result } => {
+                    let state = match result {
+                        Ok(ArtistFound::Info(info)) => {
+                            let fetched = crate::card::now();
+                            if let Some(db) = &mut self.db {
+                                let _ = db.save_artist_info(&cluster_key, &info, fetched);
+                            }
+                            ArtistState::Found { info, fetched }
+                        }
+                        Ok(ArtistFound::Choose(hits)) => ArtistState::Choose(hits),
+                        Err(e) => ArtistState::Failed(e),
+                    };
+                    self.artist_info.insert(cluster_key, state);
                 }
                 Reply::Album { album_id, result } => {
                     // Only for a lookup still waiting: one from before a rescan was dropped with it.

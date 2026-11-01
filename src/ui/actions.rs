@@ -5,15 +5,23 @@ use crate::app::App;
 
 pub(super) enum Action {
     Play(Vec<usize>, usize),
-    ToggleArtist(String),
+    /// Open an artist or close it; opening one asks MusicBrainz about it (artist index).
+    ToggleArtist(String, usize),
     LookupAlbum(usize, usize),
     ApplyLookup(String),
     Dismiss(String),
     Add(usize),
     Merge(usize, usize),
     Reject(usize, usize),
-    LookupArtist(usize),
-    Name(usize, String),
+    /// The artist panel: what the library database holds; ask MusicBrainz (about an entry);
+    /// the MusicBrainz artists going by its name.
+    ArtistFromDb(usize),
+    AskArtistInfo(usize, Option<String>),
+    ChooseArtist(usize),
+    /// Renaming an artist in its songs' tags: the text being typed, then the name.
+    Renaming(usize, String),
+    Rename(usize, String),
+    StopRenaming,
     /// Artist and album by index: on the card or off it, at the next Sync.
     CardAlbum(usize, usize, bool),
     /// The whole artist on the card or off it.
@@ -44,9 +52,12 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
     for a in actions {
         match a {
             Action::Play(q, i) => app.play(q, i),
-            Action::ToggleArtist(k) => {
+            Action::ToggleArtist(k, a) => {
                 if !app.expanded.remove(&k) {
                     app.expanded.insert(k);
+                    if let Some(c) = app.index.artists.get(a).map(|a| a.cluster) {
+                        app.want_artist_info(c);
+                    }
                 }
             }
             Action::LookupAlbum(a, b) => app.lookup_album(a, b),
@@ -57,7 +68,11 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::Add(t) => app.add_to_playlist(t),
             Action::Merge(a, b) => app.merge(a, b),
             Action::Reject(a, b) => app.reject(a, b),
-            Action::LookupArtist(c) => app.lookup_artist(c),
+            Action::ArtistFromDb(c) => app.artist_from_db(c),
+            Action::AskArtistInfo(c, mbid) => app.ask_artist_info(c, mbid),
+            Action::ChooseArtist(c) => app.choose_artist(c),
+            Action::Renaming(c, text) => app.renaming = Some((c, text)),
+            Action::StopRenaming => app.renaming = None,
             Action::CardAlbum(a, b, on) => app.card_album(a, b, on),
             Action::CardArtist(a, on) => app.card_artist(a, on),
             Action::TrashRepeats(pairs) => app.trash_repeats(pairs),
@@ -90,9 +105,9 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                 app.selected_albums.clear();
                 app.album_anchor = None;
             }
-            Action::Name(c, n) => {
-                app.set_cluster_name(c, n);
+            Action::Rename(c, n) => {
                 app.renaming = None;
+                app.rename_artist(c, n);
             }
         }
     }

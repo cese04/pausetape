@@ -281,23 +281,38 @@ impl App {
         self.rebuild();
     }
 
-    /// Name a cluster. Any other cluster that already goes by that name joins it, which is how
-    /// a MusicBrainz name ("Guns N' Roses") pulls in variants the key couldn't ("Guns and Roses").
-    pub fn set_cluster_name(&mut self, c: usize, name: String) {
+    /// Rename artist `c` in the songs' tags: wherever their artist or album artist is one of the
+    /// names it goes by ("Flyng Lotus feat. Thundercat" keeps its guest). The changes are
+    /// corrections like any other, written into the files and card copies when tags are saved.
+    pub fn rename_artist(&mut self, c: usize, name: String) {
         let name = name.trim().to_string();
-        if name.is_empty() {
+        let cl = &self.index.clusters[c];
+        if name.is_empty() || name == cl.name || [VARIOUS, UNKNOWN].iter().any(|n| artist_key(n) == cl.key) {
             return;
         }
-        let me = self.index.clusters[c].key.clone();
-        for k in &self.index.clusters[c].keys {
-            self.saved.prefs.names.insert(k.clone(), name.clone());
+        let (old_key, keys) = (cl.key.clone(), cl.keys.clone());
+        let names: HashSet<String> = cl.variants.keys().cloned().collect();
+        let songs: Vec<usize> = self.index.artists.iter().filter(|a| a.cluster == c).flat_map(|a| a.albums.iter().flat_map(|al| al.tracks.iter().copied())).collect();
+        let touched = rename_in_tags(&mut self.tracks, &songs, &names, &name);
+        // A name given in the app before renames went into the tags would hide the new one.
+        for k in &keys {
+            self.saved.prefs.names.remove(k);
         }
-        let target = artist_key(&name);
-        for (i, other) in self.index.clusters.iter().enumerate() {
-            if i != c && (other.keys.contains(&target) || other.name == name) {
-                self.saved.prefs.merges.push((me.clone(), other.key.clone()));
+        if let Some(db) = &mut self.db
+            && let Err(e) = db.save_edits(touched.iter().map(|&i| &self.tracks[i]))
+        {
+            self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
+        }
+        // What MusicBrainz said follows the artist to its new name.
+        let new_key = artist_key(&name);
+        if let Some(ArtistState::Found { info, fetched }) = self.artist_info.get(&old_key) {
+            let (info, fetched) = (info.clone(), *fetched);
+            if let Some(db) = &mut self.db {
+                let _ = db.save_artist_info(&new_key, &info, fetched);
             }
+            self.artist_info.insert(new_key, ArtistState::Found { info, fetched });
         }
+        self.notice(format!("renamed “{name}” in the tags of {}; written into the files when you write corrected tags", plural_files(touched.len())));
         self.rebuild();
     }
 
@@ -321,10 +336,38 @@ impl App {
         &self.mb.as_ref().unwrap().1
     }
 
-    pub fn lookup_artist(&mut self, c: usize) {
+    /// The artist panel's facts and links for artist `c`: from the library database if they were
+    /// asked for before, else from MusicBrainz.
+    pub fn want_artist_info(&mut self, c: usize) {
+        self.artist_from_db(c);
+        if matches!(self.artist_info.get(&self.index.clusters[c].key), Some(ArtistState::Unasked)) {
+            self.ask_artist_info(c, None);
+        }
+    }
+
+    /// What the library database holds about artist `c`, without asking MusicBrainz.
+    pub fn artist_from_db(&mut self, c: usize) {
+        let key = self.index.clusters[c].key.clone();
+        if !self.artist_info.contains_key(&key) {
+            let stored = self.db.as_ref().and_then(|db| db.artist_info(&key).ok().flatten());
+            self.artist_info.insert(key, stored.map_or(ArtistState::Unasked, |(info, fetched)| ArtistState::Found { info, fetched }));
+        }
+    }
+
+    /// Ask MusicBrainz about artist `c`: the entry `mbid` (one chosen, or the same again), or
+    /// the one artist its name matches.
+    pub fn ask_artist_info(&mut self, c: usize, mbid: Option<String>) {
+        let cl = &self.index.clusters[c];
+        let job = Job::ArtistInfo { cluster_key: cl.key.clone(), name: cl.name.clone(), mbid };
+        self.artist_info.insert(cl.key.clone(), ArtistState::Asking);
+        self.mb().send(job);
+    }
+
+    /// The MusicBrainz artists going by artist `c`'s name, to choose another from.
+    pub fn choose_artist(&mut self, c: usize) {
         let cl = &self.index.clusters[c];
         let job = Job::Artist { cluster_key: cl.key.clone(), name: cl.name.clone() };
-        self.artist_hits.insert(cl.key.clone(), None);
+        self.artist_info.insert(cl.key.clone(), ArtistState::Asking);
         self.mb().send(job);
     }
 
@@ -419,6 +462,32 @@ impl App {
     }
 }
 
+/// Put `name` in place of any of `names` at the start of the songs' artist and album artist,
+/// keeping what follows ("feat. …", other artists of a multi-value tag). The songs changed.
+fn rename_in_tags(tracks: &mut [Track], songs: &[usize], names: &HashSet<String>, name: &str) -> Vec<usize> {
+    let renamed = |field: &str| {
+        let primary = primary_artist(field);
+        let at = field.find(primary.as_str())?;
+        (names.contains(&primary) && primary != name).then(|| format!("{name}{}", &field[at + primary.len()..]))
+    };
+    let mut touched = Vec::new();
+    for &i in songs {
+        let t = &mut tracks[i];
+        let mut changed = false;
+        for field in [&mut t.album_artist, &mut t.artist] {
+            if let Some(new) = field.as_deref().and_then(renamed) {
+                *field = Some(new);
+                changed = true;
+            }
+        }
+        if changed {
+            t.dirty = true;
+            touched.push(i);
+        }
+    }
+    touched
+}
+
 /// Scan `root`, saying so in the stats if the database couldn't be opened.
 fn read_folder(root: &std::path::Path, db: &mut anyhow::Result<Db>, force: bool, tx: &Sender<Msg>, ctx: &egui::Context) -> (Vec<Track>, library::ScanStats) {
     let (tracks, mut stats) = library::scan(root, db.as_mut().ok(), force, |n| {
@@ -469,6 +538,38 @@ fn trash_targets(files: &[PathBuf]) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renaming_an_artist_changes_its_tags() {
+        let song = |album_artist: Option<&str>, artist: &str, album: &str| Track {
+            path: format!("{album}/{artist}.flac").into(),
+            album_artist: album_artist.map(String::from),
+            artist: Some(artist.into()),
+            album: Some(album.into()),
+            ..Default::default()
+        };
+        let mut tracks = vec![
+            song(Some("Flyng Lotus"), "Flyng Lotus", "Cosmogramma"),
+            song(Some("Flyng Lotus"), "Flyng Lotus feat. Thundercat", "Cosmogramma"),
+            song(None, "Flyng Lotus; Erykah Badu", "Until the Quiet Comes"),
+            song(None, "Thundercat", "Drunk"),
+        ];
+        let names: HashSet<String> = ["Flyng Lotus".to_string()].into();
+        let touched = rename_in_tags(&mut tracks, &[0, 1, 2, 3], &names, "Flying Lotus");
+        assert_eq!(touched, [0, 1, 2], "the guest's own album stays as it is");
+        let fields: Vec<(Option<&str>, Option<&str>)> = tracks.iter().map(|t| (t.album_artist.as_deref(), t.artist.as_deref())).collect();
+        assert_eq!(fields, [
+            (Some("Flying Lotus"), Some("Flying Lotus")),
+            (Some("Flying Lotus"), Some("Flying Lotus feat. Thundercat")),
+            (None, Some("Flying Lotus; Erykah Badu")),
+            (None, Some("Thundercat")),
+        ]);
+        assert!(tracks[..3].iter().all(|t| t.dirty) && !tracks[3].dirty);
+        // The library groups them under the new name, without any decision kept for it.
+        let index = grouping::build(&tracks, &ArtistPrefs::default());
+        let names: Vec<&str> = index.artists.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Flying Lotus", "Thundercat"]);
+    }
 
     #[test]
     fn suggestions_follow_their_songs_through_a_rescan() {

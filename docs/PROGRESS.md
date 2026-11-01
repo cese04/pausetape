@@ -232,8 +232,8 @@ Smaller items, ordered by value.
 
 ### Artists and tags
 
-- **Undo per decision.** Artist merges, rejections and names can only be reset all at once in
-  Settings; each should be individually reversible from the artists tab. *S*
+- ~~**Undo per decision.**~~ *Done 2026-10-31:* each one has its undo in Settings › Artist
+  decisions.
 - **Edit a tag by hand** (click a title or year to correct it) in addition to MusicBrainz
   suggestions. *M*
 

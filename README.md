@@ -27,6 +27,9 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 - **Fixes artist names.** "The Beatles" / "Beatles, The", "AC/DC" / "ACDC", "Beyoncé" /
   "Beyonce" merge automatically; likely typos are suggested for you to confirm.
 - **Suggests tags from MusicBrainz**, applied only when you accept them.
+- **Leads to more of an artist's music.** Open an artist for their genres and years and links
+  to buy it (Bandcamp, Qobuz, Discogs…), hear it first (Spotify, Tidal…) and find what's
+  related (last.fm, Rate Your Music), from MusicBrainz.
 - **Writes to the card the way you want it.** Saved *writes* choose which artists, albums and
   playlists go on a card, what they're called there and in what order. Rewrites copy only what
   changed and remove only files they put there themselves.
