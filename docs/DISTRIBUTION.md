@@ -25,7 +25,7 @@
 | Bundled ffmpeg (`scripts/build-ffmpeg-macos.sh`) | FFmpeg 9.0.2, LGPL only, decoders/demuxers this app needs plus FLAC and MP3 (LAME) encoding for the card, universal, **8.9 MB**, links only system libraries. Converted a *Love (Dolby Atmos)* E-AC-3 track in 1 s. |
 | App finds its own ffmpeg first | `Pausetape --version` → `ffmpeg: bundled (…/Contents/MacOS/ffmpeg)` |
 | Info.plist | Version, category, minimum macOS, and the permission messages for SD cards, Documents, Downloads, Desktop, network drives |
-| Icon | `assets/icon/icon-1024.png`, redrawn by `scripts/make-icon.py [letter]` |
+| Icon | `assets/icon/icon-1024.png`: a cassette with the name written by hand on its label, drawn by `scripts/make-icon.py` |
 | Licences in the app | `Contents/Resources/Licenses`: MIT, FFmpeg LGPL + build details, list of Rust crates and licences |
 | Signing | Ad-hoc; `codesign --verify --strict` passes; Gatekeeper "rejected" as expected without Developer ID |
 | DMG | App + Applications shortcut + "Read me first.txt" with the one-time approval steps |
@@ -38,9 +38,10 @@ show the warning).
 **FFmpeg 9.0.2 has no Dolby AC-4 decoder**, so AC-4 files (rare; some newer streaming
 releases) still won't play. E-AC-3, AC-3 and TrueHD do.
 
-**Renaming the app:** `APP_NAME` in `src/main.rs`; `APP_NAME` and `BUNDLE_ID` at the top of
-`scripts/package-macos.sh`; the icon letter (`scripts/make-icon.py X`); README/docs. Keep
-`APP_ID` in `src/main.rs` unless you also move users' settings folder.
+**Renaming the app:** `APP_NAME` and `APP_ID` in `src/main.rs`, with the name being left in
+`FORMER_NAME` (its settings folder then moves over on the first start, and what it left on
+cards is still recognised); `APP_NAME` and `BUNDLE_ID` at the top of
+`scripts/package-macos.sh`; the name on the icon's label (`scripts/make-icon.py`); README/docs.
 
 ## Goal
 

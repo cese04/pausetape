@@ -71,7 +71,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
             }
             Some(ArtistState::Asking) => {
                 ui.horizontal(|ui| {
-                    ui.add(egui::Spinner::new().size(12.0).color(ink.accent));
+                    super::cassette::spinner(ui, 12.0);
                     muted(ui, "asking MusicBrainz…");
                 });
             }

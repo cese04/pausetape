@@ -39,7 +39,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             title_row(app, ui, ti, &st, len);
             scrubber(app, ui, ti, &st, len);
             ui.add_space(2.0);
-            transport(app, ui, &st);
+            transport(app, ui, &st, len);
         });
     });
     keyboard(app, ui, &st, len);
@@ -124,7 +124,7 @@ fn scrubber(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     }
 }
 
-fn transport(app: &mut App, ui: &mut Ui, st: &Status) {
+fn transport(app: &mut App, ui: &mut Ui, st: &Status, len: Duration) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         if media_button(ui, Media::Previous, 32.0, SLOT, false).on_hover_text("previous (P)").clicked() {
@@ -140,6 +140,8 @@ fn transport(app: &mut App, ui: &mut Ui, st: &Status) {
             app.next();
         }
         ui.add_space(12.0);
+        let played = if len.is_zero() { 0.0 } else { st.pos.as_secs_f32() / len.as_secs_f32() };
+        super::cassette::tape(ui, 32.0, playing, played);
         muted(ui, format!("{} of {}", app.qpos + 1, app.queue.len()));
         cover_suggestion(app, ui);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

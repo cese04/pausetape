@@ -122,6 +122,7 @@ src/
     ├── actions.rs     clicks collected while drawing, applied afterwards
     ├── library.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab
     ├── artist_panel.rs under an open artist: look-alike names, MusicBrainz facts and links, renaming
+    ├── cassette.rs    the cassette: the mark beside the name, reels turning for work under way, the player's tape
     ├── player.rs      player bar
     ├── navigator.rs   in-app folder browser for the pickers
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs

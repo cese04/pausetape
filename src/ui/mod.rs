@@ -5,6 +5,7 @@ mod actions;
 mod albums;
 mod artist_panel;
 mod card;
+mod cassette;
 pub mod folders;
 pub mod icons;
 mod library;
@@ -74,6 +75,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     ui.horizontal(|ui| {
+        cassette::mark(ui, 18.0);
+        ui.add_space(2.0);
         ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
         ui.add_space(18.0);
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -104,7 +107,7 @@ fn job(app: &mut App, ui: &mut Ui) {
     let Some(b) = &app.busy else { return };
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
-        ui.add(egui::Spinner::new().size(14.0).color(ink.accent));
+        cassette::spinner(ui, 14.0);
         ui.label(RichText::new(&b.label).size(14.5).color(ink.text));
         let mut facts = match (b.done, b.total) {
             (_, 0) if b.done > 0 => b.done.to_string(),

@@ -1,5 +1,7 @@
 # Pausetape
 
+<p align="center"><img src="assets/icon/icon-1024.png" width="160" alt="Pausetape: a cassette, its label written by hand"></p>
+
 *Like the tapes once made from the radio, pause button at the ready: your own selection, for the
 road.*
 

@@ -640,3 +640,14 @@ Calibre's device view, for music: the library is where you choose what goes on t
   else.
 - Test switches are now `PAUSETAPE_*`.
 
+### 49. A cassette for an icon, and reels in the app (2026-11-01)
+- **The icon** is a cassette seen from the front on the app's paper, "Pausetape" written by hand
+  across its label (Caveat Bold) over a band of the brick accent, side A just begun in its
+  window. `scripts/make-icon.py` draws it (Pillow; the font is fetched, not shipped).
+- **Beside the app's name**, the same cassette in outline.
+- **Work under way** (a card write, a MusicBrainz question, the test card) shows two reels
+  turning instead of a spinner.
+- **The player** has a little cassette whose reels turn while the song plays and stop when it's
+  paused; the tape passes from the left reel to the right as the song goes on, and each reel
+  turns faster the less tape it holds, as on a real deck.
+

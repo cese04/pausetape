@@ -35,7 +35,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         ui.add_space(8.0);
         if let Some(b) = &app.busy {
             ui.horizontal(|ui| {
-                ui.add(egui::Spinner::new());
+                super::cassette::spinner(ui, 14.0);
                 muted(ui, format!("{}…", b.label));
             });
         } else {
