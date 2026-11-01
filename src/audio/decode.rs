@@ -214,14 +214,11 @@ fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
     if crate::library::dsd::is_dsd(&ext) {
         cmd.args(["-ar", &crate::library::dsd::PCM_RATE.to_string()]);
     }
-    let status = cmd
-        .args(["-f", "wav"])
-        .arg(&tmp)
-        .status()
-        .map_err(|e| format!("running ffmpeg: {e}"))?;
-    if !status.success() {
+    // Its errors are kept for the player to show, not left on the terminal the app came from.
+    let run = cmd.args(["-f", "wav"]).arg(&tmp).output().map_err(|e| format!("running ffmpeg: {e}"))?;
+    if !run.status.success() {
         let _ = std::fs::remove_file(&tmp);
-        return Err(format!("ffmpeg couldn't convert {}", path.display()));
+        return Err(ffmpeg_error(&run.stderr));
     }
     std::fs::rename(&tmp, &out).map_err(|e| e.to_string())?;
 
@@ -248,6 +245,15 @@ fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
     Ok(out)
 }
 
+/// What went wrong, from ffmpeg's error output: its first line, the cause (the ones after follow
+/// from it), without the "[in#0 @ 0x…]" it starts with. The caller names the file.
+fn ffmpeg_error(stderr: &[u8]) -> String {
+    let text = String::from_utf8_lossy(stderr);
+    let first = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default();
+    let first = first.strip_prefix('[').and_then(|l| l.split_once("] ")).map_or(first, |(_, cause)| cause);
+    if first.is_empty() { "ffmpeg couldn't convert it".into() } else { format!("ffmpeg couldn't convert it: {first}") }
+}
+
 /// RMS loudness in 100 ms windows, normalised to 0..=1. Decodes the whole file (or song), so
 /// call it off the UI thread.
 pub fn envelope(path: &Path, span: Option<Span>) -> Option<Vec<f32>> {
@@ -269,6 +275,15 @@ pub fn envelope(path: &Path, span: Option<Span>) -> Option<Vec<f32>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ffmpeg_errors_name_the_cause() {
+        let damaged = b"[in#0 @ 0x7ce2c18000] Error opening input: Invalid data found when processing input\nError opening input file bad.ape.\nError opening input files: Invalid data found when processing input\n";
+        assert_eq!(super::ffmpeg_error(damaged), "ffmpeg couldn't convert it: Error opening input: Invalid data found when processing input");
+        let cut_short = b"[in#0 @ 0x7828c20000] No frames in the file!\n[in#0 @ 0x7828c18000] Error opening input: Invalid argument\n";
+        assert_eq!(super::ffmpeg_error(cut_short), "ffmpeg couldn't convert it: No frames in the file!");
+        assert_eq!(super::ffmpeg_error(b""), "ffmpeg couldn't convert it");
+    }
+
     /// `NEATLIBRARY_SECTION=<album.flac>:<start frames>:<end frames>:<reference.raw>` with the
     /// reference being that section cut by ffmpeg as 16-bit stereo PCM; checks that playback of
     /// a CUE song yields exactly those samples.

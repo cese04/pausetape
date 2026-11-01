@@ -2,7 +2,7 @@
 
 A read through the whole code base (about 15,000 lines) after part E of [NEXT](NEXT.md), looking
 for bugs, and for what will behave differently on Windows and Linux. Each finding says when it
-was fixed; all but R26 are (2026-10-31).
+was fixed; all are (2026-10-31).
 
 Related: [TESTING](TESTING.md) (the Windows and Linux test guide; §3 lists what testers will
 see) · [DISTRIBUTION §1](DISTRIBUTION.md#1-code-changes-needed-first) (portability fixes known
@@ -38,7 +38,7 @@ reading the code; each says what would happen and where.
 | [R22](#r22) | Low | A song folder named like the playlists folder confuses Sync (**fixed**) | All |
 | [R23](#r23) | Low | The card's `.neatlibrary` label shows in Explorer (**fixed**) | Windows |
 | [R24](#r24) | Low | The card tab recomputes sizes on every frame (**fixed**) | All |
-| [R26](#r26) | Low | ffmpeg's errors during playback go to the terminal, not the app | All |
+| [R26](#r26) | Low | ffmpeg's errors during playback go to the terminal, not the app (**fixed**) | All |
 
 R1 and R2 lost data in a situation that's easy to get into (an external music drive, as here);
 both are fixed (2026-10-31).
@@ -375,6 +375,11 @@ wherever the app was started from. With `cargo run`, that's the terminal: playin
 files (R8) prints "Error opening input: Invalid data found when processing input" there, twice a
 song (the player and the waveform each try). *Fix:* capture ffmpeg's output, as card conversions
 already do, and put its last line in the error the player shows.
+
+**Fixed 2026-10-31.** ffmpeg's error output is captured, and its first line, the cause, goes in
+the error the player shows ("skipped 1 file NeatLibrary can't play (last: … ffmpeg couldn't
+convert it: Error opening input: Invalid data found when processing input)"). Nothing reaches
+the terminal any more.
 
 ---
 

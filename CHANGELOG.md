@@ -561,7 +561,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   progress bars, the playhead and what's playing. Warnings stay brick red whatever the accent.
   Every preset reads at 4.5:1 or more in both themes.
 
-### 43. The rest of the review: R10–R24 (2026-10-31)
+### 43. The rest of the review: R10–R26 (2026-10-31)
 - **Playback:** if the audio output disappears with nothing to take over (a USB DAC unplugged,
   Bluetooth headphones gone), the app opens the system's output again and carries on with the
   song where it was. Nothing is printed on quitting any more. A rescan no longer empties the
@@ -578,6 +578,8 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - **Card:** a song folder named like the app's own (the playlists folder, the format test) gets
   a `_` added. The card tab no longer works out every song's size on every frame.
 - The playback conversion cache is capped at 1 GB instead of six files (up to ~4 GB).
+- When ffmpeg can't convert a song to play it, the skipped-song notice says why, and nothing
+  is printed to the terminal any more (R26).
 - **Windows** (type-checked here, not yet run there): cards are found by drive letter, so a
   plugged-in card brings up its setup, with free space and filesystem; ffmpeg runs without
   console windows; the card's label file is hidden; and "Move to the Trash" leaves files on USB
