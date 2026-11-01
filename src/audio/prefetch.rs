@@ -10,7 +10,7 @@ use crossbeam_channel::{Receiver, Sender, bounded, select};
 use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 
-/// Samples per chunk handed over (all channels).
+/// Samples per chunk handed over (all channels), rounded down to whole frames.
 const CHUNK: usize = 4096;
 /// How far ahead the decoder runs.
 const AHEAD: Duration = Duration::from_secs(8);
@@ -28,6 +28,8 @@ enum Cmd {
 pub struct Prefetch {
     chunks: Receiver<Chunk>,
     cmds: Sender<Cmd>,
+    /// The chunk being played. Never empty until the end, so the output always knows how many
+    /// samples are left before the next song may change the rate or channels.
     current: std::vec::IntoIter<Sample>,
     /// Chunks from before the last seek are dropped.
     generation: u64,
@@ -41,7 +43,8 @@ impl Prefetch {
     pub fn new<S: Source + Send + 'static>(mut inner: S) -> Self {
         let (channels, rate, total) = (inner.channels(), inner.sample_rate(), inner.total_duration());
         let per_sec = rate.get() as usize * channels.get() as usize;
-        let (chunk_tx, chunks) = bounded::<Chunk>((per_sec * AHEAD.as_secs() as usize / CHUNK).max(2));
+        let chunk_len = (CHUNK / channels.get() as usize).max(1) * channels.get() as usize;
+        let (chunk_tx, chunks) = bounded::<Chunk>((per_sec * AHEAD.as_secs() as usize / chunk_len).max(2));
         let (cmds, cmd_rx) = bounded::<Cmd>(1);
         thread::spawn(move || {
             let mut generation = 0;
@@ -55,8 +58,8 @@ impl Prefetch {
                     }
                     continue;
                 }
-                let samples: Vec<Sample> = inner.by_ref().take(CHUNK).collect();
-                finished = samples.len() < CHUNK;
+                let samples: Vec<Sample> = inner.by_ref().take(chunk_len).collect();
+                finished = samples.len() < chunk_len;
                 // The end is marked by an empty chunk.
                 let end = (finished && !samples.is_empty()).then(|| Chunk { generation, samples: Vec::new() });
                 for chunk in std::iter::once(Chunk { generation, samples }).chain(end) {
@@ -76,7 +79,22 @@ impl Prefetch {
                 }
             }
         });
-        Prefetch { chunks, cmds, current: Vec::new().into_iter(), generation: 0, ended: false, channels, rate, total }
+        let mut p = Prefetch { chunks, cmds, current: Vec::new().into_iter(), generation: 0, ended: false, channels, rate, total };
+        p.fill();
+        p
+    }
+
+    /// Take the next chunk of the current seek, waiting for it if need be.
+    fn fill(&mut self) {
+        loop {
+            match self.chunks.recv() {
+                Ok(chunk) if chunk.generation != self.generation => continue,
+                Ok(chunk) if !chunk.samples.is_empty() => self.current = chunk.samples.into_iter(),
+                // An empty chunk marks the end; a decoder thread that's gone, too.
+                _ => self.ended = true,
+            }
+            return;
+        }
     }
 }
 
@@ -97,30 +115,21 @@ impl Iterator for Prefetch {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Sample> {
-        loop {
-            if let Some(s) = self.current.next() {
-                return Some(s);
-            }
-            if self.ended {
-                return None;
-            }
+        let s = self.current.next()?;
+        if self.current.len() == 0 && !self.ended {
             // Waits only when the decoder has fallen behind, which is when it would have anyway.
-            let chunk = self.chunks.recv().ok()?;
-            if chunk.generation != self.generation {
-                continue;
-            }
-            if chunk.samples.is_empty() {
-                self.ended = true;
-                return None;
-            }
-            self.current = chunk.samples.into_iter();
+            self.fill();
         }
+        Some(s)
     }
 }
 
 impl Source for Prefetch {
+    /// What's left of the chunk, then `Some(0)` at the end. `None` ("this never changes") would
+    /// keep the output at this song's rate and channels for the songs after it: a 96 kHz song
+    /// after a 44.1 kHz one played at under half speed.
     fn current_span_len(&self) -> Option<usize> {
-        None
+        Some(self.current.len())
     }
 
     fn channels(&self) -> ChannelCount {
@@ -142,6 +151,7 @@ impl Source for Prefetch {
         self.cmds.send(Cmd::Seek { to, generation, done }).map_err(|_| gone())?;
         result.recv().map_err(|_| gone())??;
         (self.generation, self.current, self.ended) = (generation, Vec::new().into_iter(), false);
+        self.fill();
         Ok(())
     }
 }
@@ -175,6 +185,24 @@ mod tests {
         // Back from the end, too.
         p.try_seek(Duration::from_secs(19)).unwrap();
         assert_eq!(p.count(), 8_000 * 2);
+    }
+
+    #[test]
+    fn the_next_song_plays_at_its_own_rate() {
+        // As the player does: one song after another, at another rate, out of an 8 kHz output.
+        let rate = NonZero::new(8_000).unwrap();
+        let (mixer, mut out) = rodio::mixer::mixer(NonZero::new(2).unwrap(), rate);
+        let player = rodio::Player::connect_new(&mixer);
+        let (first, _) = tone(1);
+        let faster = SamplesBuffer::new(NonZero::new(2).unwrap(), NonZero::new(16_000).unwrap(), vec![0.5; 16_000 * 2 * 3]);
+        player.append(Prefetch::new(first));
+        player.append(Prefetch::new(faster));
+        // The first song, then a second of the next: at its own rate, a second into it.
+        for _ in 0..8_000 * 2 * 2 {
+            out.next();
+        }
+        let pos = player.get_pos().as_secs_f64();
+        assert!((0.95..1.05).contains(&pos), "a second of output played {pos:.2} s of the next song");
     }
 
     /// A source that holds a sender, so a test can tell when it's dropped.

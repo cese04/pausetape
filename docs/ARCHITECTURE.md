@@ -191,14 +191,14 @@ window on Windows),
 
 ## Tests
 
-`cargo test` runs 68 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 69 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash, undo never replacing a file,
 song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
-tag of a file, ffmpeg's errors, opening the library as last scanned. They use temporary folders and fake audio files,
+tag of a file, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),

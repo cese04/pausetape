@@ -597,3 +597,10 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - CUE sheets are kept in the database with their contents, so opening reads nothing from the
   music folder: reading the 113 sheets from a USB drive took 1.4–2 s of the opening. Sheets
   stored before are read once more, then kept.
+
+### 45. Songs after one at another rate play at their own speed (2026-10-31)
+- A 96 kHz song played after a 44.1 kHz one came out at under half speed (and lower in pitch):
+  the output kept the first song's rate. The decoder-ahead buffer (`Prefetch`) said its rate
+  and channels never change, so rodio never looked again; it now says how much is left of each
+  chunk, as rodio's own decoders do. Chunks are cut on whole frames.
+
