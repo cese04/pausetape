@@ -22,7 +22,8 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 ## What it does
 
 - **Reads your music where it is.** Any folder, tidy or not. Tags first, folder names as a
-  fallback; a library database makes rescans near-instant.
+  fallback. The library opens at once from its database; the folder is read again when you
+  ask (or change it), and then only new or changed files are opened.
 - **Fixes artist names.** "The Beatles" / "Beatles, The", "AC/DC" / "ACDC", "Beyoncé" /
   "Beyonce" merge automatically; likely typos are suggested for you to confirm.
 - **Suggests tags from MusicBrainz**, applied only when you accept them.

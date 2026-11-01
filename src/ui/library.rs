@@ -143,7 +143,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if widgets::icon_link(ui, Icon::Folder, "change folder").clicked() {
             app.picker = Some(crate::ui::folders::Picker::Source(crate::ui::navigator::Navigator::new(app.saved.source.as_deref())));
         }
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text("pick up files added or changed since").clicked() {
+        let since = app.library_read.map(|t| format!(" (read {})", text::ago(t))).unwrap_or_default();
+        if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text(format!("pick up files added, changed or removed by other programs since the folder was last read{since}")).clicked() {
             app.scan();
         }
         if app.source_missing {

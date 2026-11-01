@@ -13,6 +13,6 @@ mod scan;
 mod tags;
 mod track;
 
-pub use scan::{AUDIO, ScanStats, mtime_of, scan};
+pub use scan::{AUDIO, ScanStats, load, mtime_of, read_file, scan};
 pub use tags::{carry_cover, write_tags};
 pub use track::{Track, unplayable_summary};

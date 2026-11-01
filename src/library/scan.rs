@@ -1,13 +1,13 @@
 //! Scanning a music folder into `Track`s, reusing the library database for unchanged files.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use lofty::prelude::*;
 use walkdir::WalkDir;
 
 use super::cue;
-use super::db::Db;
+use super::db::{Cached, Db};
 use super::mp4::{MP4_EXTS, mp4_audio_codec};
 use super::names::{artist_key, clean_album, clean_artist_folder, container_folder, disc_folder, parse_file_stem, split_artist_album, split_known_artist};
 use super::track::Track;
@@ -35,6 +35,9 @@ pub struct ScanStats {
     pub unreachable: bool,
     /// Folders inside it that couldn't be read. Songs the database knows there are kept.
     pub unreadable: usize,
+    /// Taken from the database alone (`load`): the folder as it was read through at this time
+    /// (seconds since 1970), unread since.
+    pub stored: Option<u64>,
 }
 
 pub fn mtime_of(meta: &std::fs::Metadata) -> u64 {
@@ -133,14 +136,38 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
     let gone: Vec<String> = if stats.unreadable == 0 { cached.into_keys().collect() } else { Vec::new() };
     stats.removed = gone.len();
     if let Some(db) = db.as_deref_mut()
-        && let Err(e) = db.update(&fresh, &gone)
+        && let Err(e) = db.update(&fresh, &gone).and_then(|()| db.record_scan(root, &sheets, stats.unreadable == 0, now()))
     {
         note(&mut stats, e);
     }
+    finish(root, raw, &sheets, &edits, db, stats)
+}
 
+/// The library as the last scan of `root` left it, from the database alone: no file is opened
+/// and no folder walked, so it's there at once however large the folder. Files added, changed
+/// or removed since by other programs show after a rescan. `None` for a folder never scanned
+/// (or not since the database was cleared), or a database that can't be read: scan it then.
+pub fn load(root: &Path, db: &mut Db) -> Option<(Vec<Track>, ScanStats)> {
+    let mut stats = ScanStats::default();
+    // As in `scan`: songs that can't be reached aren't shown as if they could.
+    if std::fs::read_dir(root).is_err() {
+        stats.unreachable = true;
+        return Some((Vec::new(), stats));
+    }
+    stats.stored = Some(db.scanned(root).ok()??);
+    let (cached, sheets, edits) = (db.tracks_under(root).ok()?, db.sheets_under(root).ok()?, db.edits_under(root).ok()?);
+    let mut raw: Vec<Track> = cached.into_values().map(|c| c.track).collect();
+    raw.sort_by(|a, b| a.path.cmp(&b.path));
+    stats.cached = raw.len();
+    Some(finish(root, raw, &sheets, &edits, Some(db), stats))
+}
+
+/// What every scan does after finding the files: songs from album files, names from folders,
+/// the user's unsaved corrections.
+fn finish(root: &Path, raw: Vec<Track>, sheets: &[PathBuf], edits: &HashMap<String, Cached>, db: Option<&mut Db>, mut stats: ScanStats) -> (Vec<Track>, ScanStats) {
     // Albums stored as one file plus a CUE sheet become one track per song. Like folder-name
     // inference, this runs every scan: sheets are small, and an edited sheet takes effect at once.
-    let raw = cue::expand(raw, &sheets);
+    let raw = cue::expand(raw, sheets);
 
     // Folder-name inference depends on `root`, so it runs every scan rather than being cached.
     let mut stale_edits: HashSet<PathBuf> = HashSet::new();
@@ -173,6 +200,10 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
     (tracks, stats)
 }
 
+fn now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
 /// Keep the first database error; scanning carries on without the cache.
 fn note(stats: &mut ScanStats, e: anyhow::Error) {
     stats.db_error.get_or_insert_with(|| format!("{e:#}"));
@@ -180,6 +211,15 @@ fn note(stats: &mut ScanStats, e: anyhow::Error) {
 
 fn nonempty(s: Option<std::borrow::Cow<'_, str>>) -> Option<String> {
     s.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+/// A file as a scan would read it now: for the database, after the app changed the file.
+pub fn read_file(path: &Path) -> Option<Track> {
+    let ext = path.extension()?.to_string_lossy().to_lowercase();
+    let meta = std::fs::metadata(path).ok()?;
+    let mut t = read_track(path, &ext);
+    (t.size, t.mtime) = (meta.len(), mtime_of(&meta));
+    Some(t)
 }
 
 fn read_track(path: &Path, ext: &str) -> Track {

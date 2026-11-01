@@ -25,13 +25,19 @@ impl App {
                     let device = self.player();
                     let unplayable = tracks.iter().filter(|t| !device.plays(t)).count();
                     let mut parts = vec![format!("{} songs", tracks.len())];
-                    if stats.cached > 0 {
-                        parts.push(format!("{} unchanged (from the library database)", plural_files(stats.cached)));
+                    if let Some(at) = stats.stored {
+                        // Opened as it was: files other programs changed since show after a rescan.
+                        parts.push(format!("as the folder was read {}; rescan to pick up what other programs changed since", crate::ui::text::ago(at)));
+                    } else {
+                        if stats.cached > 0 {
+                            parts.push(format!("{} unchanged (from the library database)", plural_files(stats.cached)));
+                        }
+                        parts.push(format!("{} read from files", stats.read));
+                        if stats.removed > 0 {
+                            parts.push(format!("{} gone since last time", stats.removed));
+                        }
                     }
-                    parts.push(format!("{} read from files", stats.read));
-                    if stats.removed > 0 {
-                        parts.push(format!("{} gone since last time", stats.removed));
-                    }
+                    self.library_read = Some(stats.stored.unwrap_or_else(crate::card::now));
                     if stats.edits > 0 {
                         parts.push(format!("{} unsaved corrections restored", stats.edits));
                     }
@@ -77,8 +83,9 @@ impl App {
                         r.cleaned,
                         if r.errors.is_empty() { String::new() } else { format!(" · {} errors (first: {})", r.errors.len(), r.errors[0]) }
                     ));
-                    if !r.moves.is_empty() {
-                        playlist::remap(&mut self.saved.playlists, &r.moves);
+                    playlist::remap(&mut self.saved.playlists, &r.moves);
+                    // Songs moved or retagged: the library reads them as they are now.
+                    if !r.moves.is_empty() || r.tagged > 0 {
                         self.scan();
                     }
                     self.tidy_plan = None;

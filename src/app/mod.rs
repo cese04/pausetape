@@ -310,6 +310,8 @@ pub struct App {
     pub audio: Audio,
     /// Counts library rebuilds, so work derived from the library knows when to redo itself.
     pub library_generation: u64,
+    /// When the music folder was last read through (seconds since 1970).
+    pub library_read: Option<u64>,
     pub queue: Vec<usize>,
     pub qpos: usize,
     /// Waveform of the playing track, by track id.
@@ -398,6 +400,7 @@ impl App {
             card_renaming: None,
             audio,
             library_generation: 0,
+            library_read: None,
             queue: Vec::new(),
             qpos: 0,
             envelope: None,
@@ -409,7 +412,7 @@ impl App {
             shooter: crate::ui::screenshots::Shooter::from_env(),
         };
         app.apply_theme();
-        app.scan();
+        app.load();
         app
     }
 

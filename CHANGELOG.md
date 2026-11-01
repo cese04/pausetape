@@ -584,3 +584,13 @@ Calibre's device view, for music: the library is where you choose what goes on t
   plugged-in card brings up its setup, with free space and filesystem; ffmpeg runs without
   console windows; the card's label file is hidden; and "Move to the Trash" leaves files on USB
   sticks, SD cards and network drives alone, where Windows would delete them for good.
+
+### 44. The library opens without reading the folder (2026-10-31)
+- Opening the app no longer walks the music folder: the library comes from the database as the
+  last scan left it, corrections included (0.2 s instead of 27 s for 7,100 songs on a USB
+  drive). The status line says when the folder was read.
+- The folder is read when it's chosen, on **rescan**, and after the app's own changes to it
+  (tidy, take-over, Trash, undo, adding music, and a tidy that only retags). Saved tags are
+  re-read into the database at once. Songs added or changed by other programs show after a
+  rescan. A folder the database doesn't know yet, or after "forget stored tags", is read
+  through as before.

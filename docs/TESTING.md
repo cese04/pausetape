@@ -130,8 +130,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 5. The status line reports songs read; the library tab lists artists with letter headings
    and the A–Z rail on the right.
 6. Each album shows its folder and **open folder** opens Explorer / your file manager there.
-7. **Rescan** (or reopen the app): the status line says the songs came from the library
-   database and "0 read from files".
+7. **Rescan**: the status line says the songs came from the library database and "0 read
+   from files". Reopen the app: the library is there at once, "as the folder was read …",
+   without reading the folder; songs added meanwhile by another program show after **rescan**.
 8. Narrow the window to its minimum: nothing overlaps the A–Z rail; long names end in "…".
 
 ### C. Playback and formats

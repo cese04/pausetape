@@ -84,6 +84,17 @@ pub fn time_left(d: Duration) -> String {
     }
 }
 
+/// How long ago `t` (seconds since 1970) was: "just now", "5 min ago", "3 days ago".
+pub fn ago(t: u64) -> String {
+    let s = crate::card::now().saturating_sub(t);
+    match s {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", s / 60),
+        3600..86400 => format!("{} h ago", s / 3600),
+        _ => format!("{} days ago", s / 86400),
+    }
+}
+
 pub fn plural(n: usize, word: &str) -> String {
     if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
 }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use egui::{Align, Layout, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
 
 use super::navigator::describe_space;
-use super::text::{self, plural};
+use super::text::{self, ago, plural};
 use super::theme::{self, ink};
 use super::icons::Icon;
 use super::widgets::{self, caps, link, muted};
@@ -380,16 +380,6 @@ fn pattern_example(index: &crate::library::grouping::Index, tracks: &[crate::lib
     let name = w.custom.artist_names.get(ck).unwrap_or(&artist.name);
     let rel = song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext);
     Some(rel.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join(" / "))
-}
-
-fn ago(t: u64) -> String {
-    let s = crate::card::now().saturating_sub(t);
-    match s {
-        0..60 => "just now".into(),
-        60..3600 => format!("{} min ago", s / 60),
-        3600..86400 => format!("{} h ago", s / 3600),
-        _ => format!("{} days ago", s / 86400),
-    }
 }
 
 /// Bytes per artist (cluster key) and album id, counting only files this write would copy.

@@ -13,6 +13,25 @@ impl App {
         self.scan_with(true);
     }
 
+    /// The library as the app last read it, without reading the folder again: that's for a new
+    /// folder, a rescan, and work that changed its files. A folder never read before is scanned.
+    pub fn load(&mut self) {
+        let Some(root) = self.saved.source.clone() else { return };
+        if self.busy.is_some() {
+            return;
+        }
+        self.busy = Some(Busy::new("opening the library", 0));
+        let ctx = self.ctx.clone();
+        self.spawn(move |tx| {
+            let mut db = Db::open_default();
+            let (tracks, stats) = match db.as_mut().ok().and_then(|db| library::load(&root, db)) {
+                Some(stored) => stored,
+                None => read_folder(&root, &mut db, false, &tx, &ctx),
+            };
+            let _ = tx.send(Msg::Scanned(root, tracks, stats));
+        });
+    }
+
     fn scan_with(&mut self, force: bool) {
         let Some(root) = self.saved.source.clone() else { return };
         if self.busy.is_some() {
@@ -22,13 +41,7 @@ impl App {
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
             let mut db = Db::open_default();
-            let (tracks, mut stats) = library::scan(&root, db.as_mut().ok(), force, |n| {
-                let _ = tx.send(Msg::ScanProgress(n));
-                ctx.request_repaint();
-            });
-            if let Err(e) = db {
-                stats.db_error = Some(format!("{e:#}"));
-            }
+            let (tracks, stats) = read_folder(&root, &mut db, force, &tx, &ctx);
             let _ = tx.send(Msg::Scanned(root, tracks, stats));
         });
     }
@@ -143,8 +156,7 @@ impl App {
         self.busy = Some(busy);
         let ctx = self.ctx.clone();
         self.spawn(move |tx| {
-            let mut ok = Vec::new();
-            let mut errors = Vec::new();
+            let (mut ok, mut errors, mut fresh) = (Vec::new(), Vec::new(), Vec::new());
             let total = dirty.len();
             for (n, (i, t)) in dirty.into_iter().enumerate() {
                 if stop.load(Ordering::Relaxed) {
@@ -158,9 +170,14 @@ impl App {
                     Ok(()) => {
                         let (size, mtime) = std::fs::metadata(&t.path).map(|m| (m.len(), library::mtime_of(&m))).unwrap_or((t.size, t.mtime));
                         ok.push((i, size, mtime));
+                        fresh.extend(library::read_file(&t.path));
                     }
                     Err(e) => errors.push(format!("{e:#}")),
                 }
+            }
+            // What the files hold now, for the next time the library opens without reading them.
+            if let Ok(mut db) = Db::open_default() {
+                let _ = db.update(&fresh, &[]);
             }
             let _ = tx.send(Msg::TagsSaved(ok, errors));
         });
@@ -400,6 +417,18 @@ impl App {
         }
         self.rebuild();
     }
+}
+
+/// Scan `root`, saying so in the stats if the database couldn't be opened.
+fn read_folder(root: &std::path::Path, db: &mut anyhow::Result<Db>, force: bool, tx: &Sender<Msg>, ctx: &egui::Context) -> (Vec<Track>, library::ScanStats) {
+    let (tracks, mut stats) = library::scan(root, db.as_mut().ok(), force, |n| {
+        let _ = tx.send(Msg::ScanProgress(n));
+        ctx.request_repaint();
+    });
+    if let Err(e) = db {
+        stats.db_error = Some(format!("{e:#}"));
+    }
+    (tracks, stats)
 }
 
 /// Suggestions for the songs of a request (`ids`, by place) as suggestions for the library's songs

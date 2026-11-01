@@ -28,7 +28,11 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    MP4 files, the codec code). Then, every time: `.cue` sheets turn album files into one track
    per song (`library/cue.rs`), and folder-name inference ("Artist/Album/03 - Title") fills
    gaps (it depends on which folder is the root). Saved corrections are re-applied.
-   Result: `Vec<Track>`.
+   Result: `Vec<Track>`. The app opens with `scan::load` instead, which does the same from the
+   database alone (stored tracks and CUE sheets, no folder walked): 0.2 s rather than 27 s for
+   7,100 songs on a USB drive. The folder is walked when it's new to the database, on
+   **rescan**, and after the app's own work on its files (tidy, take-over, Trash, undo, adding
+   music); saved tags are re-read into the database file by file.
 2. **Group** (`library/names.rs`, `library/grouping.rs`): artist spellings collapse to a *key* ("The Beatles",
    "Beatles, The" → `beatles`); keys merge by user decisions; near-misses become suggestions.
    An album (same name, same folder) whose songs name different artists stays under one: its
@@ -73,7 +77,7 @@ src/
 │   ├── cue.rs         CUE sheets: parse, decode legacy encodings, album file → songs
 │   ├── dsd.rs         DSD files (.dsf, .dff): rate, length and tags from their own headers
 │   ├── tags.rs        writing corrected tags into files
-│   ├── db.rs          SQLite library database: cached tags, unsaved corrections
+│   ├── db.rs          SQLite library database: cached tags, CUE sheets, when each folder was scanned, unsaved corrections
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
 │   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
 │   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
@@ -153,7 +157,7 @@ src/
 | Library database | `library.sqlite3` in the app data folder | `SCHEMA_VERSION` bump clears the cache (it's re-derivable) |
 | Undo journals for *Reorganise* | `journals/` in the app data folder | |
 | Undo records for taking over a card | `journals/card/` in the app data folder | One per take-over, named by write |
-| ffmpeg conversions | `<temp>/neatlibrary-converted/` | Last 6 kept; cleared at start-up |
+| ffmpeg conversions | `<temp>/neatlibrary-converted/` | Newest kept up to 1 GB; cleared at start-up |
 | Covers fetched from the Cover Art Archive | `covers/` in the app data folder | One per album, named after its first song; embedded when written |
 
 App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
@@ -187,14 +191,14 @@ window on Windows),
 
 ## Tests
 
-`cargo test` runs 67 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 68 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash, undo never replacing a file,
 song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
-tag of a file, ffmpeg's errors. They use temporary folders and fake audio files,
+tag of a file, ffmpeg's errors, opening the library as last scanned. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),

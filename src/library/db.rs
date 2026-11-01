@@ -3,7 +3,8 @@
 //!
 //! One SQLite file serves every music folder; rows are keyed by absolute path (corrections by
 //! track id, which adds "#03" for a song inside an album file). A cached row is trusted only
-//! while the file's size and modification time match what was recorded.
+//! while the file's size and modification time match what was recorded. A folder read through
+//! is recorded with its CUE sheets, so the app can open with its library as it was, unread.
 
 use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -69,13 +70,18 @@ impl Db {
                  size  INTEGER NOT NULL,  -- the file the edit was made against
                  mtime INTEGER NOT NULL,
                  data  TEXT NOT NULL      -- Track as JSON, with the user's corrections
-             );",
+             );
+             CREATE TABLE IF NOT EXISTS folders (
+                 root    TEXT PRIMARY KEY,
+                 scanned INTEGER NOT NULL -- seconds since 1970 when it was last read through
+             );
+             CREATE TABLE IF NOT EXISTS sheets (path TEXT PRIMARY KEY);",
         )?;
         let version: Option<i64> = conn.query_row("SELECT value FROM meta WHERE key = 'schema'", [], |r| r.get(0)).ok();
         if version.is_some_and(|v| v != SCHEMA_VERSION) {
             // Older layout: the cache is disposable, so start over rather than migrate. The
             // user's corrections aren't, so they're kept when they still fit.
-            conn.execute_batch("DELETE FROM tracks;")?;
+            conn.execute_batch("DELETE FROM tracks; DELETE FROM folders;")?;
             if version.is_some_and(|v| !(EDITS_SINCE..=SCHEMA_VERSION).contains(&v)) {
                 conn.execute_batch("DELETE FROM edits;")?;
             }
@@ -126,6 +132,42 @@ impl Db {
         Ok(())
     }
 
+    /// When `root` was last read through, if it was (with this layout of the database).
+    pub fn scanned(&self, root: &Path) -> Result<Option<u64>> {
+        let at = self.conn.query_row("SELECT scanned FROM folders WHERE root = ?1", params![root.to_string_lossy()], |r| r.get::<_, i64>(0));
+        match at {
+            Ok(at) => Ok(Some(at as u64)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// `root` has just been read through and held these CUE sheets. With `complete` false (a
+    /// folder in it couldn't be read), sheets known from before are kept too.
+    pub fn record_scan(&mut self, root: &Path, sheets: &[PathBuf], complete: bool, at: u64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        if complete {
+            let (low, high) = prefix_range(root);
+            tx.execute("DELETE FROM sheets WHERE path >= ?1 AND path < ?2", params![low, high])?;
+        }
+        {
+            let mut put = tx.prepare("INSERT OR IGNORE INTO sheets (path) VALUES (?1)")?;
+            for s in sheets {
+                put.execute(params![s.to_string_lossy()])?;
+            }
+        }
+        tx.execute("INSERT OR REPLACE INTO folders (root, scanned) VALUES (?1, ?2)", params![root.to_string_lossy(), at as i64])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn sheets_under(&self, root: &Path) -> Result<Vec<PathBuf>> {
+        let (low, high) = prefix_range(root);
+        let mut stmt = self.conn.prepare("SELECT path FROM sheets WHERE path >= ?1 AND path < ?2")?;
+        let rows = stmt.query_map(params![low, high], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?.into_iter().map(PathBuf::from).collect())
+    }
+
     pub fn edits_under(&self, root: &Path) -> Result<HashMap<String, Cached>> {
         let (low, high) = prefix_range(root);
         let mut stmt = self.conn.prepare("SELECT path, size, mtime, data FROM edits WHERE path >= ?1 AND path < ?2")?;
@@ -169,7 +211,8 @@ impl Db {
     }
 
     pub fn clear(&mut self) -> Result<()> {
-        self.conn.execute_batch("DELETE FROM tracks;")?;
+        // Folders are read through again too: what they hold is no longer stored.
+        self.conn.execute_batch("DELETE FROM tracks; DELETE FROM folders;")?;
         Ok(())
     }
 
@@ -269,6 +312,56 @@ mod tests {
             assert_eq!((tracks.len(), s.unreadable, s.removed, s.unreachable), (1, 1, 0, false));
             assert_eq!(db.counts(), (3, 1));
         }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_library_opens_as_last_scanned() {
+        use crate::library::{load, scan};
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-open-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let music = root.join("music");
+        let album = music.join("Pink Floyd/Animals");
+        std::fs::create_dir_all(&album).unwrap();
+        std::fs::write(album.join("Animals.flac"), b"one file, five songs").unwrap();
+        let sheet = "FILE \"Animals.flac\" WAVE\n  TRACK 01 AUDIO\n    TITLE \"Pigs on the Wing 1\"\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    TITLE \"Dogs\"\n    INDEX 01 01:25:00\n";
+        std::fs::write(album.join("Animals.cue"), sheet).unwrap();
+        std::fs::write(music.join("Pink Floyd/01 - Single.mp3"), b"x").unwrap();
+        let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
+
+        // Never scanned: there's nothing to open it from.
+        assert!(load(&music, &mut db).is_none());
+        let (scanned, _) = scan(&music, Some(&mut db), false, |_| {});
+        assert_eq!(scanned.len(), 3, "two songs from the album file, and the single");
+
+        // Opened from the database: the same songs, corrections included; files added since
+        // by another program wait for a rescan.
+        let mut dogs = scanned.iter().find(|t| t.display_title() == "Dogs").unwrap().clone();
+        dogs.title = Some("Dogs (2018 Remix)".into());
+        dogs.dirty = true;
+        db.save_edits([&dogs]).unwrap();
+        std::fs::write(music.join("Pink Floyd/02 - New.mp3"), b"x").unwrap();
+        let (opened, s) = load(&music, &mut db).unwrap();
+        assert!(s.stored.is_some() && s.read == 0 && s.edits == 1);
+        let ids = |ts: &[Track]| {
+            let mut v: Vec<PathBuf> = ts.iter().map(Track::id).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(ids(&opened), ids(&scanned));
+        assert!(opened.iter().any(|t| t.dirty && t.title.as_deref() == Some("Dogs (2018 Remix)")));
+        let (rescanned, s) = scan(&music, Some(&mut db), false, |_| {});
+        assert_eq!((rescanned.len(), s.stored), (4, None));
+
+        // The drive isn't connected: as unreachable as a scan says.
+        std::fs::rename(&music, root.join("elsewhere")).unwrap();
+        let (none, s) = load(&music, &mut db).unwrap();
+        assert!(s.unreachable && none.is_empty());
+        std::fs::rename(root.join("elsewhere"), &music).unwrap();
+
+        // Stored tags forgotten: it's read through again.
+        db.clear().unwrap();
+        assert!(load(&music, &mut db).is_none());
         std::fs::remove_dir_all(root).unwrap();
     }
 
