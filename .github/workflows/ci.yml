@@ -5,17 +5,36 @@
 # What's kept (see CONTRIBUTING.md): a build of `main` stays 90 days, the most GitHub allows;
 # one of `develop` or a feature branch 7 days; pull requests keep none. A version tag (`v*`)
 # attaches each platform's binary to its GitHub Release, which is kept for good.
+#
+# The dependencies are checked against the RustSec advisories on every run, and every Monday
+# too: advisories appear whether or not anything is pushed. That weekly run only audits.
 name: CI
 
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
+  workflow_dispatch:
 
 permissions:
   contents: write   # to attach binaries to the release of a version tag
 
 jobs:
+  # A known vulnerability in a dependency fails the build; crates no longer maintained (no
+  # flaw known, nothing to fix here: they come with lofty and egui's Linux support) are only
+  # reported, as `cargo audit` does by default.
+  audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+
   test:
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false   # see every platform's result, not just the first failure
       matrix:
