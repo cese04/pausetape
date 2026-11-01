@@ -37,11 +37,25 @@ impl Label {
 
     pub fn save(&self, card: &Path) -> Result<()> {
         let path = card.join(LABEL_FILE);
-        std::fs::write(&path, serde_json::to_vec_pretty(self)?).with_context(|| format!("labelling the card ({})", path.display()))?;
+        write_hidden(&path, &serde_json::to_vec_pretty(self)?).with_context(|| format!("labelling the card ({})", path.display()))?;
         // macOS adds a "._" companion on FAT cards.
         let _ = std::fs::remove_file(card.join(format!("._{LABEL_FILE}")));
         Ok(())
     }
+}
+
+/// Write a file the player's owner needn't see. The leading dot hides it on macOS and Linux;
+/// Windows needs its hidden attribute, which must also be given to write over it once set.
+fn write_hidden(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut open = std::fs::OpenOptions::new();
+    open.write(true).create(true).truncate(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+        open.attributes(FILE_ATTRIBUTE_HIDDEN);
+    }
+    std::io::Write::write_all(&mut open.open(path)?, bytes)
 }
 
 /// A new setup's id: random, 16 hex digits.

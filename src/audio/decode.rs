@@ -37,7 +37,7 @@ pub fn ffmpeg_encodes(name: &str) -> bool {
     static ENCODERS: OnceLock<String> = OnceLock::new();
     let list = ENCODERS.get_or_init(|| {
         let Some(ff) = ffmpeg() else { return String::new() };
-        std::process::Command::new(ff)
+        crate::platform::quiet_command(ff)
             .args(["-hide_banner", "-encoders"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -206,7 +206,7 @@ fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let tmp = out.with_extension("partial.wav");
     // First audio stream only (skips cover-art streams), downmixed to stereo 16-bit PCM.
-    let status = std::process::Command::new(ff)
+    let status = crate::platform::quiet_command(ff)
         .args(["-nostdin", "-v", "error", "-y", "-i"])
         .arg(path)
         .args(["-map", "0:a:0", "-ac", "2", "-c:a", "pcm_s16le", "-f", "wav"])

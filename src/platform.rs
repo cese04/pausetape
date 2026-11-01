@@ -22,8 +22,28 @@ pub fn reveal(path: &Path) {
     let _ = std::process::Command::new(cmd).arg(path).spawn();
 }
 
+/// A command for a console program (ffmpeg) that, on Windows, runs without opening a console
+/// window of its own: the app has none to lend it, so each run would flash one up.
+pub fn quiet_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Move a file to the Trash (the Recycle Bin on Windows), where it can be restored from.
 pub fn trash(path: &Path) -> Result<(), String> {
+    // Windows keeps no Recycle Bin on removable drives (USB sticks, SD cards) or network ones:
+    // "moving" a file there deletes it for good, so it's left where it is.
+    #[cfg(windows)]
+    if without_recycle_bin(path) {
+        return Err(format!("{}: this drive has no Recycle Bin, so it would be deleted for good; left where it is", path.display()));
+    }
     #[allow(unused_mut)]
     let mut ctx = trash::TrashContext::default();
     // macOS: ask the file manager service directly; the Finder way would make the app ask for
@@ -31,4 +51,15 @@ pub fn trash(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     trash::macos::TrashContextExtMacos::set_delete_method(&mut ctx, trash::macos::DeleteMethod::NsFileManager);
     ctx.delete(path).map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn without_recycle_bin(path: &Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_REMOTE: u32 = 4;
+    let root: Vec<u16> = path.ancestors().last().unwrap_or(path).as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: `root` is a NUL-terminated drive root such as "E:\".
+    let kind = unsafe { windows_sys::Win32::Storage::FileSystem::GetDriveTypeW(root.as_ptr()) };
+    matches!(kind, DRIVE_REMOVABLE | DRIVE_REMOTE)
 }

@@ -112,7 +112,7 @@ fn encode(t: &Track, target: Target, dst: &Path) -> Result<()> {
     let ff = crate::audio::ffmpeg().context("ffmpeg is needed to convert or cut songs")?;
     let secs = |f: u64| format!("{}.{:06}", f / FRAMES_PER_SEC, f % FRAMES_PER_SEC * 1_000_000 / FRAMES_PER_SEC);
     let tmp = dst.with_extension("partial");
-    let mut cmd = std::process::Command::new(ff);
+    let mut cmd = crate::platform::quiet_command(ff);
     cmd.args(["-nostdin", "-v", "error", "-y"]);
     if let Some(c) = t.cue.as_ref().filter(|c| c.start > 0) {
         cmd.args(["-ss", &secs(c.start)]);

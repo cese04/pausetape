@@ -6,7 +6,6 @@
 //! ffmpeg, so its sample is the smallest APE song in the library, copied as it is.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
@@ -136,7 +135,7 @@ fn sample(folder: &Path, s: Sample, n: usize, tracks: &[Track]) -> Result<()> {
     let title = format!("{:02} {}", n + 1, s.label());
     let track = (n + 1).to_string();
     let tags = ["title", &title, "artist", "NeatLibrary", "album_artist", "NeatLibrary", "album", "Format test", "track", &track];
-    let mut cmd = Command::new(ff);
+    let mut cmd = crate::platform::quiet_command(ff);
     cmd.args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", &tone, "-ac", "2"]).args(&codec);
     for kv in tags.chunks(2) {
         cmd.arg("-metadata").arg(format!("{}={}", kv[0], kv[1]));

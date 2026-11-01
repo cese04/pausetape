@@ -1,7 +1,8 @@
 //! Mounted drives that could be the player's card, and their free space and filesystem.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(not(windows))]
+use std::{fs, path::Path};
 
 #[derive(Clone)]
 pub struct Volume {
@@ -23,9 +24,9 @@ impl SpaceInfo {
         self.fs.map(|b| String::from_utf8_lossy(&b).trim_end_matches('\0').to_string())
     }
 
-    /// FAT32/exFAT, i.e. plausibly a player's SD card.
+    /// FAT32/exFAT, i.e. plausibly a player's SD card. (Windows says "FAT32", "exFAT".)
     pub fn is_fat(&self) -> Option<bool> {
-        self.fs_name().map(|f| matches!(f.as_str(), "msdos" | "exfat" | "vfat" | "fat32"))
+        self.fs_name().map(|f| matches!(f.to_lowercase().as_str(), "msdos" | "exfat" | "vfat" | "fat32" | "fat"))
     }
 }
 
@@ -59,12 +60,16 @@ pub fn space(path: &Path) -> Option<SpaceInfo> {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub use windows::{space, volumes};
+
+#[cfg(not(any(unix, windows)))]
 pub fn space(_path: &Path) -> Option<SpaceInfo> {
     None
 }
 
 /// Mounted removable-looking volumes: /Volumes on macOS, /media and /run/media on Linux.
+#[cfg(not(windows))]
 pub fn volumes() -> Vec<Volume> {
     let mut roots = vec![PathBuf::from("/Volumes")];
     if let Ok(user) = std::env::var("USER") {
@@ -85,5 +90,80 @@ pub fn volumes() -> Vec<Volume> {
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+/// Windows: drive letters instead of mount points.
+#[cfg(windows)]
+mod windows {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::path::{Path, PathBuf};
+
+    use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDriveStringsW, GetVolumeInformationW};
+
+    use super::{SpaceInfo, Volume};
+
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_FIXED: u32 = 3;
+
+    fn wide(p: &Path) -> Vec<u16> {
+        p.as_os_str().encode_wide().chain([0]).collect()
+    }
+
+    fn text(buf: &[u16]) -> String {
+        let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        OsString::from_wide(&buf[..end]).to_string_lossy().into_owned()
+    }
+
+    /// The drive's label ("" when it has none) and filesystem ("FAT32", "exFAT", "NTFS").
+    fn label_and_fs(root: &Path) -> Option<(String, String)> {
+        let (mut label, mut fs) = ([0u16; 261], [0u16; 261]);
+        // SAFETY: `root` is NUL-terminated; the buffers are as long as said.
+        let ok = unsafe {
+            GetVolumeInformationW(wide(root).as_ptr(), label.as_mut_ptr(), label.len() as u32, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), fs.as_mut_ptr(), fs.len() as u32)
+        };
+        (ok != 0).then(|| (text(&label), text(&fs)))
+    }
+
+    /// Capacity, free space and filesystem of the drive holding `path`.
+    pub fn space(path: &Path) -> Option<SpaceInfo> {
+        let (mut free, mut total) = (0u64, 0u64);
+        // SAFETY: the path is NUL-terminated; the outputs are plain integers.
+        if unsafe { GetDiskFreeSpaceExW(wide(path).as_ptr(), &mut free, &mut total, std::ptr::null_mut()) } == 0 {
+            return None;
+        }
+        let root = path.ancestors().last().unwrap_or(path);
+        let fs = label_and_fs(root).map(|(_, fs)| {
+            let mut name = [0u8; 16];
+            for (d, s) in name.iter_mut().zip(fs.bytes()) {
+                *d = s;
+            }
+            name
+        });
+        Some(SpaceInfo { total, free, fs })
+    }
+
+    /// Drives that could be a card: removable ones, and fixed ones other than Windows' own
+    /// (card readers and USB drives can show up as either); not network or CD drives.
+    pub fn volumes() -> Vec<Volume> {
+        let mut buf = [0u16; 512];
+        // SAFETY: the buffer is as long as said; the call fills it with NUL-separated roots.
+        let n = unsafe { GetLogicalDriveStringsW(buf.len() as u32, buf.as_mut_ptr()) } as usize;
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()).to_uppercase();
+        let mut out = Vec::new();
+        for root in buf[..n.min(buf.len())].split(|&c| c == 0).filter(|r| !r.is_empty()) {
+            let path = PathBuf::from(OsString::from_wide(root));
+            let letter = path.to_string_lossy().trim_end_matches('\\').to_uppercase();
+            // SAFETY: a NUL-terminated root such as "E:\".
+            let kind = unsafe { GetDriveTypeW(wide(&path).as_ptr()) };
+            if letter == system || !matches!(kind, DRIVE_REMOVABLE | DRIVE_FIXED) {
+                continue;
+            }
+            let Some((label, _)) = label_and_fs(&path) else { continue };
+            let name = if label.is_empty() { format!("Drive ({letter})") } else { format!("{label} ({letter})") };
+            out.push(Volume { name, info: space(&path), path });
+        }
+        out
+    }
 }
 
