@@ -79,6 +79,29 @@ pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) ->
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// A search box. Once something is typed, a clear button sits inside its right end (drawn
+/// over the box, so nothing beside it moves); Esc clears it too while typing.
+pub fn search_field(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> Response {
+    let ink = ink(ui);
+    let edit = egui::TextEdit::singleline(text).hint_text(hint).desired_width(width).margin(egui::Margin { left: 4, right: 24, top: 2, bottom: 2 });
+    let r = ui.add(edit);
+    if (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        text.clear();
+    }
+    if !text.is_empty() {
+        let rect = egui::Rect::from_center_size(egui::pos2(r.rect.right() - 13.0, r.rect.center().y), vec2(18.0, 18.0));
+        let clear = ui.interact(rect, r.id.with("clear"), Sense::click()).on_hover_text("clear (Esc)").on_hover_cursor(egui::CursorIcon::PointingHand);
+        if clear.hovered() {
+            ui.painter().circle_filled(rect.center(), 9.0, ink.faint);
+        }
+        icons::paint(ui.painter(), rect.shrink(3.5), Icon::Close, if clear.hovered() { ink.text } else { ink.muted });
+        if clear.clicked() {
+            text.clear();
+        }
+    }
+    r
+}
+
 /// A word that describes, not a control: a genre, in a small filled pill.
 pub fn tag(ui: &mut Ui, text: impl Into<String>) -> Response {
     let ink = ink(ui);

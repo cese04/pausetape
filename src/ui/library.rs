@@ -159,8 +159,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     ui.horizontal_wrapped(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        ui.add(egui::TextEdit::singleline(&mut app.filter).hint_text("search, or try format:flac").desired_width(260.0))
-            .on_hover_text(crate::library::search::HELP);
+        widgets::search_field(ui, &mut app.filter, "search, or try format:flac", 260.0).on_hover_text(crate::library::search::HELP);
         filters_menu(app, ui);
         let typed = app.filter.trim().to_string();
         if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "save").on_hover_text("keep this search for later, beside the box").clicked() {

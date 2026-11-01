@@ -624,3 +624,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   browser. Buying links carry the accent; searches standing in for a missing link are grey,
   with a magnifier.
 
+### 47. A clear button in the search boxes (2026-10-31)
+- The library's search and the card tab's filter get a × inside their right end once something
+  is typed; Esc clears them too while typing.
+

@@ -957,7 +957,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        ui.add(egui::TextEdit::singleline(&mut app.card_filter).hint_text("filter").desired_width(200.0));
+        widgets::search_field(ui, &mut app.card_filter, "filter", 200.0);
         if widgets::icon_link(ui, Icon::Add, "tick all").clicked() {
             edits.push(Edit::All(true));
         }
