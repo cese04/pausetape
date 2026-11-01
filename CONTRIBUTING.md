@@ -51,6 +51,12 @@ Every push and pull request is built and tested on macOS, Windows and Linux
 ([ci.yml](.github/workflows/ci.yml)); `main`, version tags and pull requests also get the
 packaged Mac app ([macos.yml](.github/workflows/macos.yml)).
 
+The dependencies are audited against the [RustSec advisories](https://rustsec.org) with
+`cargo audit` on every run, and every Monday on `main` (GitHub runs scheduled workflows from
+the default branch). A known vulnerability fails the build; crates that are only no longer
+maintained are reported as warnings. To check locally: `cargo install cargo-audit`, then
+`cargo audit`.
+
 | Pushed to | Kept | For |
 |---|---|---|
 | a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image and each platform's binary | Versions people download |
