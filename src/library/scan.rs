@@ -71,14 +71,22 @@ pub fn scan(root: &Path, mut db: Option<&mut Db>, force: bool, mut progress: imp
     let mut raw: Vec<Track> = Vec::new();
     let mut fresh: Vec<Track> = Vec::new();
     let mut sheets: Vec<PathBuf> = Vec::new();
-    let entries = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| {
+    // Linked folders are followed: on Linux especially, music from several drives is often
+    // gathered into one folder that way. Songs keep their paths inside the music folder.
+    let entries = WalkDir::new(root).follow_links(true).into_iter().filter_entry(|e| {
         // Skip hidden entries, including macOS "._" AppleDouble files on FAT volumes.
         e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')
     });
     for entry in entries {
-        let Ok(entry) = entry else {
-            stats.unreadable += 1;
-            continue;
+        let entry = match entry {
+            Ok(entry) => entry,
+            // A link back to a folder above it: everything there is found the first time round.
+            Err(e) if e.loop_ancestor().is_some() => continue,
+            // Unreadable, or a link to a drive that isn't connected: the songs known there are kept.
+            Err(_) => {
+                stats.unreadable += 1;
+                continue;
+            }
         };
         if !entry.file_type().is_file() {
             continue;
@@ -318,6 +326,29 @@ mod tests {
         let mut t = Track { path: root.join("Joy Division - коллекция/1980. Closer {x}/a.flac"), artist: Some("JOY DIVISION".into()), ..Default::default() };
         infer_from_path(&mut t, root);
         assert_eq!((t.artist.as_deref(), t.album.as_deref()), (Some("JOY DIVISION"), Some("Closer")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_folders_are_followed() {
+        use std::os::unix::fs::symlink;
+        let dir = std::env::temp_dir().join(format!("neatlibrary-test-links-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (music, other) = (dir.join("music"), dir.join("other drive"));
+        std::fs::create_dir_all(other.join("Blur/Parklife")).unwrap();
+        std::fs::write(other.join("Blur/Parklife/01 - Girls & Boys.mp3"), "x").unwrap();
+        std::fs::create_dir_all(&music).unwrap();
+        symlink(&other, music.join("Linked")).unwrap();
+        // A link back up: found once, not round and round.
+        symlink(&music, music.join("Loop")).unwrap();
+        let (tracks, stats) = scan(&music, None, false, |_| {});
+        assert_eq!(tracks.iter().map(|t| t.path.clone()).collect::<Vec<_>>(), [music.join("Linked/Blur/Parklife/01 - Girls & Boys.mp3")]);
+        assert_eq!(stats.unreadable, 0);
+        // The linked drive unplugged: its songs count as unreachable, not gone.
+        std::fs::remove_dir_all(&other).unwrap();
+        let (_, stats) = scan(&music, None, false, |_| {});
+        assert_eq!(stats.unreadable, 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
