@@ -1,5 +1,6 @@
-# Test and package the macOS app on every push; attach the DMG to a GitHub Release for tags
-# like v0.1.0. Not yet run: it needs the repository on GitHub first.
+# Test and package the macOS app for `main`, version tags and pull requests. The disk image of
+# a version tag (`v*`) goes on its GitHub Release, kept for good; that of `main` is kept 90
+# days, the most GitHub allows; pull requests are checked, not kept.
 name: macOS
 
 on:
@@ -39,10 +40,12 @@ jobs:
 
       - run: scripts/package-macos.sh
 
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
         with:
           name: macOS-dmg
           path: dist/*.dmg*
+          retention-days: 90
 
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

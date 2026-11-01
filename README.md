@@ -98,6 +98,7 @@ ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt 
 | [docs/NEXT.md](docs/NEXT.md) | Agreed next changes: safer MusicBrainz lookups, folder-name reading, CUE sheets |
 | [docs/TESTING.md](docs/TESTING.md) | Testing on Windows and Linux, step by step, and how to report results |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging, signing and releases for macOS, Windows and Linux |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How work is done: git flow branches, versions, what the CI keeps, open feature branches |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the code fits together, where data is stored |
 | [CHANGELOG.md](CHANGELOG.md) | Everything done so far, in order |
 

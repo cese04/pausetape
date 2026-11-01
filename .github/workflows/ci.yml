@@ -1,11 +1,18 @@
-# Build and test on all three platforms for every push and pull request. This is the first
-# check that the app compiles and its tests pass on Windows and Linux (it has only ever been
-# developed on macOS). Packaging lives in macos.yml.
+# Build and test on all three platforms for every push and pull request: the check that the
+# app compiles and its tests pass on Windows and Linux (it's developed on macOS). Packaging the
+# Mac app lives in macos.yml.
+#
+# What's kept (see CONTRIBUTING.md): a build of `main` stays 90 days, the most GitHub allows;
+# one of `develop` or a feature branch 7 days; pull requests keep none. A version tag (`v*`)
+# attaches each platform's binary to its GitHub Release, which is kept for good.
 name: CI
 
 on:
   push:
   pull_request:
+
+permissions:
+  contents: write   # to attach binaries to the release of a version tag
 
 jobs:
   test:
@@ -37,10 +44,27 @@ jobs:
       - run: cargo test --locked
 
       # The release binary, for trying on a machine without a Rust toolchain.
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
         with:
           name: pausetape-${{ runner.os }}
           path: |
             target/release/pausetape
             target/release/pausetape.exe
           if-no-files-found: ignore
+          retention-days: ${{ github.ref == 'refs/heads/main' && 90 || 7 }}
+
+      # A version: the binary goes on its release, named for its platform.
+      - if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ -f target/release/pausetape.exe ]; then
+            cp target/release/pausetape.exe "dist/pausetape-${{ github.ref_name }}-${{ runner.os }}.exe"
+          else
+            cp target/release/pausetape "dist/pausetape-${{ github.ref_name }}-${{ runner.os }}"
+          fi
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/pausetape-*
