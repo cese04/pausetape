@@ -36,28 +36,29 @@ pub fn space(path: &Path) -> Option<SpaceInfo> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
     let c = CString::new(path.as_os_str().as_bytes()).ok()?;
-    // SAFETY: `c` is a valid NUL-terminated path; the structs are plain data filled by the call.
-    unsafe {
-        let mut v: libc::statvfs = std::mem::zeroed();
-        if libc::statvfs(c.as_ptr(), &mut v) != 0 {
-            return None;
-        }
-        let frsize = v.f_frsize as u64;
-        #[cfg(target_os = "macos")]
-        let fs = {
-            let mut st: libc::statfs = std::mem::zeroed();
-            (libc::statfs(c.as_ptr(), &mut st) == 0).then(|| {
-                let mut name = [0u8; 16];
-                for (d, s) in name.iter_mut().zip(st.f_fstypename.iter()) {
-                    *d = *s as u8;
-                }
-                name
-            })
-        };
-        #[cfg(not(target_os = "macos"))]
-        let fs = None;
-        Some(SpaceInfo { total: v.f_blocks as u64 * frsize, free: v.f_bavail as u64 * frsize, fs })
+    // SAFETY: `statvfs` is a plain C struct, for which all zeroes is a valid value.
+    let mut v: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` is a valid NUL-terminated path and `v` a struct of the type the call fills.
+    if unsafe { libc::statvfs(c.as_ptr(), &mut v) } != 0 {
+        return None;
     }
+    let frsize = v.f_frsize as u64;
+    #[cfg(target_os = "macos")]
+    let fs = {
+        // SAFETY: as above, for `statfs`.
+        let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+        // SAFETY: as above.
+        (unsafe { libc::statfs(c.as_ptr(), &mut st) } == 0).then(|| {
+            let mut name = [0u8; 16];
+            for (d, s) in name.iter_mut().zip(st.f_fstypename.iter()) {
+                *d = *s as u8;
+            }
+            name
+        })
+    };
+    #[cfg(not(target_os = "macos"))]
+    let fs = None;
+    Some(SpaceInfo { total: v.f_blocks as u64 * frsize, free: v.f_bavail as u64 * frsize, fs })
 }
 
 #[cfg(windows)]
