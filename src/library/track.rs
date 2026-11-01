@@ -21,7 +21,7 @@ const NO_DECODER_CODECS: &[&str] = &["ac-4"];
 const NATIVE_MP4_CODECS: &[&str] = &["mp4a", "alac"];
 
 /// Lossless formats: songs cut from an album file in one of these become FLAC on the card.
-const LOSSLESS: &[&str] = &["flac", "wav", "aiff", "aif", "aifc", "ape", "wv", "w64"];
+const LOSSLESS: &[&str] = &["flac", "wav", "aiff", "aif", "aifc", "ape", "wv", "w64", "dsf", "dff"];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]

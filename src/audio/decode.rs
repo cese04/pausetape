@@ -206,11 +206,16 @@ fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
     }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let tmp = out.with_extension("partial.wav");
-    // First audio stream only (skips cover-art streams), downmixed to stereo 16-bit PCM.
-    let status = crate::platform::quiet_command(ff)
-        .args(["-nostdin", "-v", "error", "-y", "-i"])
-        .arg(path)
-        .args(["-map", "0:a:0", "-ac", "2", "-c:a", "pcm_s16le", "-f", "wav"])
+    // First audio stream only (skips cover-art streams), downmixed to stereo 16-bit PCM; DSD
+    // would come out at an eighth of its rate (352.8 kHz and up), so it's brought down.
+    let mut cmd = crate::platform::quiet_command(ff);
+    cmd.args(["-nostdin", "-v", "error", "-y", "-i"]).arg(path).args(["-map", "0:a:0", "-ac", "2", "-c:a", "pcm_s16le"]);
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if crate::library::dsd::is_dsd(&ext) {
+        cmd.args(["-ar", &crate::library::dsd::PCM_RATE.to_string()]);
+    }
+    let status = cmd
+        .args(["-f", "wav"])
         .arg(&tmp)
         .status()
         .map_err(|e| format!("running ffmpeg: {e}"))?;

@@ -12,9 +12,11 @@ use super::mp4::{MP4_EXTS, mp4_audio_codec};
 use super::names::{artist_key, clean_album, clean_artist_folder, container_folder, disc_folder, parse_file_stem, split_artist_album, split_known_artist};
 use super::track::Track;
 
-/// Everything scanned. Opus, APE, WavPack and WMA have no Rust decoder: listed, organised, not playable.
+/// Everything scanned. Opus, APE, WavPack, WMA and DSD have no Rust decoder: listed, organised,
+/// played here and converted for the card through ffmpeg.
 pub const AUDIO: &[&str] = &[
-    "flac", "mp3", "wav", "m4a", "m4b", "mp4", "aac", "alac", "aiff", "aif", "aifc", "ogg", "oga", "caf", "mka", "mp2", "opus", "ape", "wv", "wma",
+    "flac", "mp3", "wav", "m4a", "m4b", "mp4", "aac", "alac", "aiff", "aif", "aifc", "ogg", "oga", "caf", "mka", "mp2", "opus", "ape", "wv", "wma", "dsf",
+    "dff",
 ];
 
 #[derive(Default)]
@@ -185,6 +187,9 @@ fn read_track(path: &Path, ext: &str) -> Track {
     if MP4_EXTS.contains(&ext) {
         t.codec = mp4_audio_codec(path);
     }
+    if super::dsd::is_dsd(ext) {
+        return read_dsd(t);
+    }
     let Ok(file) = lofty::read_from_path(path) else {
         t.damaged = starts_blank(path);
         return t;
@@ -192,6 +197,11 @@ fn read_track(path: &Path, ext: &str) -> Track {
     let props = file.properties();
     t.duration = props.duration();
     (t.kbps, t.sample_rate, t.bit_depth) = (props.audio_bitrate(), props.sample_rate(), props.bit_depth());
+    read_tags(&mut t, &file);
+    t
+}
+
+fn read_tags(t: &mut Track, file: &lofty::file::TaggedFile) {
     if let Some(tag) = file.primary_tag().or_else(|| file.first_tag()) {
         t.artist = nonempty(tag.artist());
         t.title = nonempty(tag.title());
@@ -203,6 +213,20 @@ fn read_track(path: &Path, ext: &str) -> Track {
         t.compilation = matches!(tag.get_string(ItemKey::FlagCompilation), Some("1" | "true"));
     }
     t.embedded_cover = file.tags().iter().any(|tag| tag.picture_count() > 0);
+}
+
+/// A DSD file, from its own headers (lofty doesn't read them). One bit a sample at millions of
+/// samples a second: "hi-res", lossless.
+fn read_dsd(mut t: Track) -> Track {
+    let Some(d) = super::dsd::read(&t.path, &t.ext) else {
+        t.damaged = starts_blank(&t.path);
+        return t;
+    };
+    (t.duration, t.sample_rate, t.bit_depth) = (d.duration, Some(d.rate), Some(1));
+    t.kbps = Some(d.rate * d.channels as u32 / 1000);
+    if let Some(file) = d.id3.as_deref().and_then(super::dsd::tags) {
+        read_tags(&mut t, &file);
+    }
     t
 }
 

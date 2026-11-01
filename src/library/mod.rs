@@ -4,6 +4,7 @@
 pub mod cover;
 pub mod cue;
 pub mod db;
+pub mod dsd;
 pub mod grouping;
 pub mod mp4;
 pub mod names;

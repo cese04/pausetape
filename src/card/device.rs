@@ -45,7 +45,7 @@ impl Device {
     pub fn plays_text(self) -> &'static str {
         match self {
             Device::EchoMiniRecho => "RECHO plays FLAC, MP3 and WAV only.",
-            Device::EchoMiniStock => "The Echo Mini's stock firmware plays FLAC, MP3, WAV, APE, AAC (M4A), Ogg Vorbis and WMA.",
+            Device::EchoMiniStock => "The Echo Mini's stock firmware plays FLAC, MP3, WAV, APE, AAC (M4A), Ogg Vorbis, WMA and DSD.",
         }
     }
 
@@ -67,7 +67,8 @@ impl Device {
                 t.plays_anywhere()
                     || t.cue.is_none()
                         && match t.ext.as_str() {
-                            "ape" | "wma" | "ogg" | "oga" | "aac" => true,
+                            // DSD: from the player's specifications (DSD64 to DSD256).
+                            "ape" | "wma" | "ogg" | "oga" | "aac" | "dsf" | "dff" => true,
                             // AAC only: ALAC inside M4A isn't known to play.
                             "m4a" | "m4b" | "mp4" => t.codec.as_deref() == Some("mp4a"),
                             _ => false,

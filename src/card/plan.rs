@@ -104,8 +104,12 @@ pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
     Ok(match to {
         Target::Copy | Target::Flac if rules.lossless_mp3 && t.lossless() && can_encode && crate::audio::ffmpeg_encodes("libmp3lame") => Target::Mp3,
         Target::Copy | Target::Flac if rules.cd_quality && t.lossless() && hires(t) && can_encode => Target::FlacCd,
-        // Above the highest rate the test card played.
-        Target::Copy | Target::Flac if t.lossless() && can_encode && rules.player.max_rate().is_some_and(|m| t.sample_rate.is_some_and(|r| r > m)) => Target::FlacCd,
+        // Above the highest rate the test card played (DSD's FLAC is made at 88.2 kHz anyway).
+        Target::Copy | Target::Flac
+            if t.lossless() && can_encode && !crate::library::dsd::is_dsd(&t.ext) && rules.player.max_rate().is_some_and(|m| t.sample_rate.is_some_and(|r| r > m)) =>
+        {
+            Target::FlacCd
+        }
         to => to,
     })
 }
@@ -149,8 +153,13 @@ fn base_target(t: &Track, device: Player, unplayable: Unplayable) -> Result<Targ
 /// lossless format is about as large as its source; at CD quality it shrinks with bits × rate
 /// (measured: 24/192 → 17%, 24/96 → 32%).
 pub fn card_size(t: &Track, target: Target) -> u64 {
+    // DSD becomes PCM: stereo, 24-bit at 88.2 kHz or 16-bit at 44.1, which FLAC keeps at about
+    // 70% (DSD's high-frequency noise doesn't pack well).
+    let pcm = |rate: f64, bytes: f64| (t.duration.as_secs_f64() * rate * 2.0 * bytes * 0.7) as u64;
     match target {
         Target::Mp3 => (t.duration.as_secs_f64() * 40_000.0) as u64,
+        Target::Flac if crate::library::dsd::is_dsd(&t.ext) => pcm(crate::library::dsd::PCM_RATE as f64, 3.0),
+        Target::FlacCd if crate::library::dsd::is_dsd(&t.ext) => pcm(44_100.0, 2.0),
         Target::FlacCd => {
             let (bits, rate) = (t.bit_depth.unwrap_or(24).max(16) as u64, t.sample_rate.unwrap_or(96_000).max(1) as u64);
             t.size * 16 * cd_rate(rate as u32) as u64 / (bits * rate)

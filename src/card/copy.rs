@@ -125,6 +125,11 @@ fn encode(t: &Track, target: Target, dst: &Path) -> Result<()> {
     }
     cmd.args(["-map", "0:a:0", "-map_metadata", "-1"]);
     match target {
+        Target::Flac if crate::library::dsd::is_dsd(&t.ext) => {
+            // 24-bit (ffmpeg's FLAC takes 32-bit samples as 24).
+            let rate = crate::library::dsd::PCM_RATE;
+            cmd.args(["-af", &format!("aresample=osr={rate}:osf=s32"), "-c:a", "flac", "-f", "flac"]);
+        }
         Target::Flac => {
             cmd.args(["-c:a", "flac", "-f", "flac"]);
         }
