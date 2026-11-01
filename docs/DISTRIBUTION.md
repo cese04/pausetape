@@ -66,8 +66,8 @@ card step no longer says "not connected" where free space can't be read.
 
 | # | Issue | Affects | Fix | Effort |
 |---|---|---|---|---|
-| 1 | **No drives found.** The card picker only looks in `/Volumes`, `/media/$USER`, `/run/media/$USER`. | Windows | List drive letters (`GetLogicalDriveStringsW`), skip the system drive, and read label + filesystem (`GetVolumeInformationW`) and free space (`GetDiskFreeSpaceExW`) via the `windows-sys` crate. | M |
-| 2 | **No free space or filesystem type.** `card::space` uses `statvfs`, which is Unix-only. | Windows | Same Win32 calls as #1. | (in #1) |
+| 1 | ~~**No drives found.**~~ *Done 2026-10-31 (type-checked, not yet run on Windows):* drive letters with label, filesystem and free space through `windows-sys`, skipping Windows' own drive and network/CD drives. | Windows | — | — |
+| 2 | ~~**No free space or filesystem type.**~~ *Done with #1.* | Windows | — | — |
 | 3 | **Filesystem type unknown**, so the "not FAT32/exFAT" warning never shows. | Linux | `statfs` gives `f_type`: `0x4d44` = FAT, `0x2011BAB0` = exFAT. | S |
 | 4 | **A console window opens behind the app.** | Windows | `#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]`; for `--plan`, attach to the parent console (`AttachConsole`). | S |
 | 5 | **Reserved names.** Windows can't open files or folders named `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9` (with any extension). An artist called "Aux" would break the card write. | Windows (and cards later read on Windows) | `sanitize_component` appends `_` to those names. Add a test. | S |

@@ -90,8 +90,8 @@ cargo run --release -- --plan ~/Music           # Linux
 
 | # | System | What you'll see | Workaround for now |
 |---|---|---|---|
-| 1 | **Windows** | **No SD cards listed** in the card dialog ("No SD cards found"). Drive detection only knows macOS and Linux mount points. | In the dialog: **Use a folder on a card…** → **system picker…** → choose the card's drive (e.g. `E:\`) → **Use "E:\"**. |
-| 2 | **Windows** | No free space, filesystem or "not FAT" warning for the card; the card tab shows no size bar. Step 2 says "Connected. Free space isn't shown on this system yet." | None needed; writing still works. |
+| 1 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* drives are now listed by letter and label ("NO NAME (E:)"). | To check it: the card dialog lists the card; Windows' own drive isn't listed. If no drive shows, use **Use a folder on a card…** → **system picker…** and say so. |
+| 2 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* free space, filesystem and the "not FAT" warning. | To check it: the card tab shows the size bar and "FAT32"/"exFAT". |
 | 3 | **Windows** | A **console window** opens next to the app; closing it closes the app. | Leave it open (it also shows errors, which helps testing). |
 | 4 | **Windows** | The in-app browser can't reach other drives except through **system picker…**; there's no "Drives" button. | Use **system picker…**. |
 | 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9` can't be written to the card. | Rename it for that write in the card tab. Rare. |
@@ -100,9 +100,9 @@ cargo run --release -- --plan ~/Music           # Linux
 | 8 | **Linux** | Fonts: the serif look depends on DejaVu Serif at the Debian/Ubuntu path. On Fedora/Arch the app falls back to a sans font, and Chinese/Japanese/Korean names may show as boxes. | Cosmetic only. |
 | 9 | Both | ffmpeg isn't bundled (only the Mac app includes it). | Install it as in §1. |
 | 10 | All | *Fixed 2026-10-31:* starting with the music folder's drive unplugged used to empty the library database, and a Sync with an empty library removed the setup's songs from the card ([REVIEW](REVIEW.md) R1, R2). Now the library says it can't reach the folder and keeps everything. | To check it: start the app with the music drive unplugged, plug it in, and see it read again by itself. |
-| 11 | **Windows** | Plugging in a card doesn't switch to its setup (no drives are listed, #1). A black console window flashes for each song converted onto the card ([REVIEW](REVIEW.md) R12, R13). | Choose the setup by hand. |
-| 12 | **Windows**, **Linux** | **Move to the Trash** may delete outright on USB drives and SD cards (no Recycle Bin), or fail on Linux drives without a trash folder ([REVIEW](REVIEW.md) R10). | Test it on a copy first: see if the files appear in the Recycle Bin/Trash. |
-| 13 | **Linux** | Music in folders linked into the music folder (symbolic links) isn't found ([REVIEW](REVIEW.md) R20). | Point the app at the real folder. |
+| 11 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* plugging in a labelled card brings up its setup, and converting songs no longer flashes console windows ([REVIEW](REVIEW.md) R12, R13). The card's `.neatlibrary` file is hidden (R23). | To check it: unplug and plug the card back in with another setup open; Sync a few songs that need converting and watch for console windows; the card's root in Explorer shows no `.neatlibrary` (unless hidden files are shown). |
+| 12 | **Windows**, **Linux** | *Fixed on Windows 2026-10-31:* **Move to the Trash** leaves files on USB sticks, SD cards and network drives where they are, as they'd be deleted for good there. **Linux:** files should go to a `.Trash-<uid>` folder on the drive ([REVIEW](REVIEW.md) R10). | To check it on Linux: move one covered copy to the Trash on an external drive and find it in the file manager's Trash. |
+| 13 | **Linux** | *Fixed 2026-10-31:* folders linked into the music folder are followed ([REVIEW](REVIEW.md) R20). | To check it: link a folder of music in and rescan. |
 
 \#1–9 have planned fixes in [DISTRIBUTION §1](DISTRIBUTION.md#1-code-changes-needed-first); \#10–13
 and the rest of what a full code review found are in [REVIEW](REVIEW.md).

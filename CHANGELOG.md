@@ -560,3 +560,25 @@ Calibre's device view, for music: the library is where you choose what goes on t
   blue, plum or graphite (no colour). It marks the open tab, the main button (Sync, play),
   progress bars, the playhead and what's playing. Warnings stay brick red whatever the accent.
   Every preset reads at 4.5:1 or more in both themes.
+
+### 43. The rest of the review: R10–R24 (2026-10-31)
+- **Playback:** if the audio output disappears with nothing to take over (a USB DAC unplugged,
+  Bluetooth headphones gone), the app opens the system's output again and carries on with the
+  song where it was. Nothing is printed on quitting any more. A rescan no longer empties the
+  player bar while music plays. "Skipped … can't play" says why the last one failed.
+- **Undo** (a tidy or a take-over) never writes over a file that has since taken a song's old
+  place; it leaves the song and says so.
+- **Tags:** emptying a field in the app empties it in the file; full dates stay full while
+  their year is right; the compilation flag is written; an MP3's old ID3v1 tag (and an APE tag
+  beside another) gets the same corrections.
+- **DSD** (`.dsf`, `.dff`) joins the library: it plays here through ffmpeg, goes on the card as
+  it is for the stock firmware, and becomes 24-bit/88.2 kHz FLAC for RECHO.
+- **Linked folders** in the music folder are followed (often used on Linux). A link to a drive
+  that isn't connected keeps its songs in the library.
+- **Card:** a song folder named like the app's own (the playlists folder, the format test) gets
+  a `_` added. The card tab no longer works out every song's size on every frame.
+- The playback conversion cache is capped at 1 GB instead of six files (up to ~4 GB).
+- **Windows** (type-checked here, not yet run there): cards are found by drive letter, so a
+  plugged-in card brings up its setup, with free space and filesystem; ffmpeg runs without
+  console windows; the card's label file is hidden; and "Move to the Trash" leaves files on USB
+  sticks, SD cards and network drives alone, where Windows would delete them for good.

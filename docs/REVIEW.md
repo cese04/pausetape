@@ -1,7 +1,8 @@
 # Code review: bugs and risks found (2026-10-31)
 
 A read through the whole code base (about 15,000 lines) after part E of [NEXT](NEXT.md), looking
-for bugs, and for what will behave differently on Windows and Linux. Nothing here is fixed yet.
+for bugs, and for what will behave differently on Windows and Linux. Each finding says when it
+was fixed; all but R26 are (2026-10-31).
 
 Related: [TESTING](TESTING.md) (the Windows and Linux test guide; §3 lists what testers will
 see) · [DISTRIBUTION §1](DISTRIBUTION.md#1-code-changes-needed-first) (portability fixes known
@@ -21,22 +22,22 @@ reading the code; each says what would happen and where.
 | [R7](#r7) | Medium | For up to 3 seconds, Sync can write over another setup's card (**fixed**) | All |
 | [R8](#r8) | Medium | Damaged audio files join the library as ordinary songs (**fixed**) | All |
 | [R9](#r9) | Medium | Songs with unsaved corrections are copied again at every Sync (**fixed**) | All |
-| [R10](#r10) | Medium | "Moved to the Trash" may really delete, on some drives | Windows, Linux |
-| [R11](#r11) | Medium | Playback stops for good when the audio device changes | All |
-| [R12](#r12) | Medium | Every ffmpeg run flashes a console window | Windows |
+| [R10](#r10) | Medium | "Moved to the Trash" may really delete, on some drives (**fixed**) | Windows, Linux |
+| [R11](#r11) | Medium | Playback stops for good when the audio device changes (**fixed**) | All |
+| [R12](#r12) | Medium | Every ffmpeg run flashes a console window (**fixed**) | Windows |
 | [R25](#r25) | Medium | Playback can stutter while the music drive is busy (**fixed**) | All |
-| [R13](#r13) | Medium | Plugging in a card doesn't bring up its setup | Windows |
-| [R14](#r14) | Low | Writing tags can't clear a field, shortens dates to the year, and leaves old secondary tags | All |
-| [R15](#r15) | Low | Undoing a tidy can overwrite a file | macOS, Linux |
-| [R16](#r16) | Low | A rescan while music plays leaves the player bar without the song | All |
-| [R17](#r17) | Low | Why a song was skipped is often lost | All |
-| [R18](#r18) | Low | Playing album files needs up to ~4 GB of temporary space | All |
-| [R19](#r19) | Low | "Dropping DeviceSink…" is printed on quitting | All |
-| [R20](#r20) | Low | Folders linked into the music folder are skipped | Linux, macOS |
-| [R21](#r21) | Low | DSD files aren't scanned, though the stock firmware plays them | All |
-| [R22](#r22) | Low | A song folder named like the playlists folder confuses Sync | All |
-| [R23](#r23) | Low | The card's `.neatlibrary` label shows in Explorer | Windows |
-| [R24](#r24) | Low | The card tab recomputes sizes on every frame | All |
+| [R13](#r13) | Medium | Plugging in a card doesn't bring up its setup (**fixed**) | Windows |
+| [R14](#r14) | Low | Writing tags can't clear a field, shortens dates to the year, and leaves old secondary tags (**fixed**) | All |
+| [R15](#r15) | Low | Undoing a tidy can overwrite a file (**fixed**) | macOS, Linux |
+| [R16](#r16) | Low | A rescan while music plays leaves the player bar without the song (**fixed**) | All |
+| [R17](#r17) | Low | Why a song was skipped is often lost (**fixed**) | All |
+| [R18](#r18) | Low | Playing album files needs up to ~4 GB of temporary space (**fixed**) | All |
+| [R19](#r19) | Low | "Dropping DeviceSink…" is printed on quitting (**fixed**) | All |
+| [R20](#r20) | Low | Folders linked into the music folder are skipped (**fixed**) | Linux, macOS |
+| [R21](#r21) | Low | DSD files aren't scanned, though the stock firmware plays them (**fixed**) | All |
+| [R22](#r22) | Low | A song folder named like the playlists folder confuses Sync (**fixed**) | All |
+| [R23](#r23) | Low | The card's `.neatlibrary` label shows in Explorer (**fixed**) | Windows |
+| [R24](#r24) | Low | The card tab recomputes sizes on every frame (**fixed**) | All |
 | [R26](#r26) | Low | ffmpeg's errors during playback go to the terminal, not the app | All |
 
 R1 and R2 lost data in a situation that's easy to get into (an external music drive, as here);
@@ -187,7 +188,10 @@ Moving duplicate songs and covered album copies uses the system Trash. Windows h
 on removable USB drives and SD cards (files are deleted outright), and on Linux, drives without a
 `.Trash-<uid>` folder may refuse or delete. The message still says "moved to the Trash".
 
-*Fix:* test on both (TESTING has steps). If deletion is permanent there, say so and ask first.
+**Fixed 2026-10-31.** On Windows, files on removable and network drives (which have no Recycle
+Bin) are left where they are, and the app says why. On Linux, the `trash` crate puts files in a
+`.Trash-<uid>` folder at the top of the drive, creating it if it can, and fails rather than
+deleting when it can't; still to be seen on a real machine (TESTING §3 #12).
 
 ### R11
 **Playback stops for good when the audio device changes.**
@@ -196,8 +200,11 @@ on removable USB drives and SD cards (files are deleted outright), and on Linux,
 The audio output is opened once, at start-up. Unplugging headphones from a USB DAC, or Bluetooth
 headphones disconnecting, leaves the app playing into nothing until it's restarted.
 
-*Fix:* reopen the default output when the stream reports an error, or when the default device
-changes.
+**Fixed 2026-10-31.** The audio library (cpal 0.18) already follows a change of the default
+output on macOS, Windows and PipeWire. What was missing: when the output fails for good (the
+device gone with nothing taking over), the app now opens the default output again, every 2
+seconds until there is one, and carries on with the song where it was (paused if it was).
+Rerouting notices and glitches no longer reach the terminal.
 
 ### R12
 **Every ffmpeg run flashes a console window.** (Windows)
@@ -207,8 +214,8 @@ changes.
 Once the app runs without its own console (DISTRIBUTION §1 #4), each ffmpeg it starts opens a
 console window for as long as it runs: one per converted song on the card.
 
-*Fix:* start ffmpeg through one helper that sets `CREATE_NO_WINDOW`
-(`std::os::windows::process::CommandExt::creation_flags(0x0800_0000)`).
+**Fixed 2026-10-31.** Every ffmpeg run goes through `platform::quiet_command`, which sets
+`CREATE_NO_WINDOW` on Windows. Type-checked for Windows; not yet run there.
 
 ### R13
 **Plugging in a card doesn't bring up its setup.** (Windows)
@@ -217,6 +224,10 @@ console window for as long as it runs: one per converted song on the card.
 Card recognition (E3) looks for labelled cards among the mounted drives, and on Windows none are
 listed yet (DISTRIBUTION §1 #1). The safety check still works: a setup won't sync to another
 setup's card once its folder is chosen by hand. Fixed by the same work as #1.
+
+**Fixed 2026-10-31** (with DISTRIBUTION §1 #1 and #2). On Windows, drive letters are listed
+(not Windows' own drive, network or CD drives) with their label, filesystem and free space,
+through `windows-sys`. Type-checked for Windows; not yet run there.
 
 ### R25
 **Playback can stutter while the music drive is busy.**
@@ -246,26 +257,40 @@ removed) comes back from the file at the next scan. The date is replaced by the 
 "1997-05-21" becomes "1997". The compilation flag isn't written. Only the main tag is updated:
 an MP3's ID3v1 tag, or an APE tag on other files, keeps the old values for players that read it.
 
+**Fixed 2026-10-31.** Emptied fields are removed from the file; a full date stays while its year
+is unchanged; the compilation flag is written; and every tag in the file gets the same fields
+(the cover goes in the main one only). Tested on a file carrying two tags.
+
 ### R15
 **Undoing a tidy can overwrite a file.** (macOS, Linux)
 [journal.rs:50](../src/card/journal.rs#L50)
 
 Undo moves each file back with a plain rename, which on macOS and Linux replaces whatever now
-has that name (a file added there since). *Fix:* skip, and report, files whose old place is taken.
+has that name (a file added there since). (Rust's rename replaces files on Windows too.)
+
+**Fixed 2026-10-31.** Undoing a tidy, and undoing a take-over, leave a file where it is, and
+report it, when its old place is taken by another file. A change of case only (one file under
+two spellings on most Mac and Windows disks) still goes back. Tested.
 
 ### R16
 **A rescan while music plays leaves the player bar without the song.**
 [events.rs:41](../src/app/events.rs#L41)
 
 A rescan clears the play queue, but the music goes on. The bar says "Nothing playing", and
-**next** stops the music. *Fix:* keep the queue across a rescan by track id.
+**next** stops the music.
+
+**Fixed 2026-10-31.** The queue follows its songs into the new library by id. Should one of
+them be gone, it's let go as before (the audio thread knows songs by their place in it).
 
 ### R17
 **Why a song was skipped is often lost.**
 [player.rs:74](../src/audio/player.rs#L74)
 
 When a song fails and the next one plays, the error is overwritten; only "skipped 1 file
-NeatLibrary can't play" remains. *Fix:* put the reason in that message.
+NeatLibrary can't play" remains.
+
+**Fixed 2026-10-31.** The notice ends with the last reason: "skipped 1 file NeatLibrary can't
+play (last: song.ape: …)".
 
 ### R18
 **Playing album files needs up to ~4 GB of temporary space.**
@@ -273,15 +298,20 @@ NeatLibrary can't play" remains. *Fix:* put the reason in that message.
 
 Formats the built-in decoder can't read (APE, WavPack…) are converted to WAV whole: about 600 MB
 for a CD stored as one file, and the last 6 conversions are kept. Starting the app also clears
-the folder another running copy of the app may be using. *Fix:* cap the folder by size, or
-convert only the song being played.
+the folder another running copy of the app may be using.
+
+**Fixed 2026-10-31.** The conversions kept are capped at 1 GB, newest first (the one playing is
+always kept). Clearing at start-up is harmless to another running copy: a file it has open
+stays readable on macOS and Linux, and can't be removed on Windows.
 
 ### R19
 **"Dropping DeviceSink…" is printed on quitting.**
 [player.rs:104](../src/audio/player.rs#L104)
 
 A notice from the audio library, shown in the terminal (when the app was started from one) as it
-closes the output. Harmless. *Fix:* `sink.log_on_drop(false)`.
+closes the output. Harmless.
+
+**Fixed 2026-10-31** with R11: `log_on_drop(false)`.
 
 ### R20
 **Folders linked into the music folder are skipped.** (Linux, macOS)
@@ -290,6 +320,10 @@ closes the output. Harmless. *Fix:* `sink.log_on_drop(false)`.
 The scan doesn't follow symbolic links, which Linux users often use to gather music from several
 drives. Decide whether to follow them (walkdir guards against loops).
 
+**Fixed 2026-10-31.** Links are followed; songs keep their paths inside the music folder. A
+link back up is skipped. A link to a drive that isn't connected counts as an unreadable folder,
+so the songs known there are kept rather than forgotten (as in R1). Tested.
+
 ### R21
 **DSD files aren't scanned, though the stock firmware plays them.**
 [scan.rs:16](../src/library/scan.rs#L16)
@@ -297,19 +331,30 @@ drives. Decide whether to follow them (walkdir guards against loops).
 `.dsf` and `.dff` aren't in the list of audio files, so they don't appear at all. A missing
 feature more than a bug: they'd need a profile entry and a decision on conversion.
 
+**Fixed 2026-10-31.** `.dsf` and `.dff` are scanned: rate, channels and length from their
+headers (`library/dsd.rs`), tags from their ID3v2 block. They play here through ffmpeg (at
+88.2 kHz), go on the card as they are for the stock firmware (DSD64–256 per its
+specifications, not yet checked on a player), and become 24-bit/88.2 kHz FLAC for RECHO.
+Tested with a made-up DSD64 file, through to the card and a second, unchanged write.
+
 ### R22
 **A song folder named like the playlists folder confuses Sync.**
 [write.rs:74](../src/card/write.rs#L74)
 
 An artist (or pattern) whose folder is `_Playlists`, or "NeatLibrary format test", collides with
 the folders the app keeps for itself: renaming treats its songs as playlist copies, and the take-
-over skips the test folder. Rare. *Fix:* add `_` to song folders that take those names.
+over skips the test folder. Rare.
+
+**Fixed 2026-10-31.** A song folder with one of those names gets a `_` added on the card.
+Tested.
 
 ### R23
 **The card's `.neatlibrary` label shows in Explorer.** (Windows)
 
-A leading dot hides a file on macOS and Linux only. *Fix:* set the hidden attribute when writing
-it on Windows.
+A leading dot hides a file on macOS and Linux only.
+
+**Fixed 2026-10-31.** On Windows it's written with the hidden attribute (which Windows also
+needs given to write over it). Type-checked for Windows; not yet run there.
 
 ### R24
 **The card tab recomputes sizes on every frame.**
@@ -317,6 +362,9 @@ it on Windows.
 
 Each frame works out every song's card size and the card's free space. Fine on this Mac with 7,000
 songs; worth watching on slower machines.
+
+**Fixed 2026-10-31.** Measured at 0.2 s a frame in a debug build with 7,100 songs. The sizes are
+now worked out again only when the library, the setup or its playlists change.
 
 ### R26
 **ffmpeg's errors during playback go to the terminal, not the app.**

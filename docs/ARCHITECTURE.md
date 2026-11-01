@@ -63,13 +63,15 @@ uses, so call sites read `crate::card::build_plan`, `crate::library::Track`, `cr
 ```
 src/
 ├── main.rs            start-up, --version, --plan; APP_NAME / APP_ID
-├── platform.rs        app data folder; open a folder in Finder/Explorer/file manager
+├── platform.rs        app data folder; open a folder in Finder/Explorer/file manager; the Trash;
+│                      console programs without a console window (Windows)
 ├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive)
 ├── library/           reading and understanding the music folder
 │   ├── track.rs       Track; which formats play on RECHO / here / not at all
 │   ├── scan.rs        incremental scan (database reuse), tag reading, folder-name inference
 │   ├── mp4.rs         the codec inside .m4a/.mp4 files (AAC, ALAC, Dolby E-AC-3, …)
 │   ├── cue.rs         CUE sheets: parse, decode legacy encodings, album file → songs
+│   ├── dsd.rs         DSD files (.dsf, .dff): rate, length and tags from their own headers
 │   ├── tags.rs        writing corrected tags into files
 │   ├── db.rs          SQLite library database: cached tags, unsaved corrections
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
@@ -87,7 +89,7 @@ src/
 │   ├── journal.rs     undo journal for reorganising in place
 │   ├── adopt.rs       a card's (or folder's) music: survey, take over (move into place, undo), copy into the library
 │   ├── write.rs       saved writes (WriteProfile), compare-with-card, write (renamed songs move on the card)
-│   ├── volumes.rs     mounted drives, free space, filesystem type
+│   ├── volumes.rs     mounted drives (drive letters on Windows), free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
 ├── audio/             playing music
 │   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI
@@ -174,20 +176,25 @@ App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
 
 ## Platform-specific code
 
-`card/volumes.rs` (free space: `statvfs` on Unix, `statfs` filesystem name on macOS, none on
-Windows yet; mount points), `platform.rs` (data folder; `open`/`explorer`/`xdg-open`),
+`card/volumes.rs` (free space: `statvfs` on Unix, `statfs` filesystem name on macOS; drive
+letters, label, filesystem and free space through `windows-sys` on Windows; mount points),
+`card/label.rs` (the label's hidden attribute on Windows), `platform.rs` (data folder;
+`open`/`explorer`/`xdg-open`; no Trash on Windows removable drives; ffmpeg without a console
+window on Windows),
 `ui/theme.rs` (font paths), `audio/decode.rs` (ffmpeg locations, `ffmpeg.exe`),
 `ui/navigator.rs` (drive shortcuts). The gaps are listed in
 [TESTING §3](TESTING.md#3-known-gaps-found-by-reading-the-code-not-yet-seen-on-a-real-machine).
 
 ## Tests
 
-`cargo test` runs 61 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs 66 tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
-search terms, MP3 for lossless, moving a covered copy to the Trash. They use temporary folders and fake audio files,
+search terms, MP3 for lossless, moving a covered copy to the Trash, undo never replacing a file,
+song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
+tag of a file. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
 (`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
