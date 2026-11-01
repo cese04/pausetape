@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(first.into_iter().chain(p).collect::<Vec<_>>(), samples);
     }
 
-    /// `NEATLIBRARY_STUTTER=<song>|<another song>|<folder> cargo test --release -- --ignored stutter --nocapture`
+    /// `PAUSETAPE_STUTTER=<song>|<another song>|<folder> cargo test --release -- --ignored stutter --nocapture`
     /// Plays (silently) the first song as it is and the second through `Prefetch`, 20 s each at the
     /// pace of an audio output, while another thread reads the folder's files as a card write
     /// would. Counts the 10 ms slices the output would have waited for (heard as dropouts).
@@ -263,7 +263,7 @@ mod tests {
         use std::io::Read;
         use std::sync::atomic::{AtomicBool, Ordering};
         use std::time::Instant;
-        let Ok(spec) = std::env::var("NEATLIBRARY_STUTTER") else { return };
+        let Ok(spec) = std::env::var("PAUSETAPE_STUTTER") else { return };
         let parts: Vec<&str> = spec.split('|').collect();
         let (a, b, folder) = (parts[0], parts[1], parts[2].to_string());
         let stop = std::sync::Arc::new(AtomicBool::new(false));

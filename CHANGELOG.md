@@ -57,7 +57,7 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   (packaging plan for macOS, Windows, Linux).
 
 ### 10. macOS app
-- MIT licence. Display name in one constant (`APP_NAME`; "NeatLibrary" is a placeholder).
+- MIT licence. Display name in one constant (`APP_NAME`).
 - `scripts/build-ffmpeg-macos.sh`: minimal LGPL ffmpeg 9.0.2 from source, universal, 8.3 MB.
 - `scripts/package-macos.sh`: universal `.app` (47 MB) and `.dmg` (24 MB) with ffmpeg inside,
   icon (`scripts/make-icon.py`), licences, permission texts, ad-hoc signature, "Read me first".
@@ -141,7 +141,7 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   - The status line says "files unchanged".
 - **ffmpeg:** the bundled build adds the FLAC encoder, FLAC writer and `atrim` filter (8.4 MB);
   `scripts/build-ffmpeg-macos.sh` rebuilds when its flags change.
-- Debug demo: `NEATLIBRARY_SHOT_ARTIST` chooses the album played and looked up.
+- Debug demo: `PAUSETAPE_SHOT_ARTIST` chooses the album played and looked up.
 - 33 tests (28 offline); new opt-in checks against a real album: `section_matches_cut`,
   `cue_album_write`.
 
@@ -178,7 +178,7 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   - Nothing is deleted; other cases are left for the choice at write time.
   - On the test library: 11 copies, 1.9 GB.
 - `--plan` also lists every album copy with its format and status.
-- Debug demo: `NEATLIBRARY_SHOT_DUPLICATES=1` opens that view.
+- Debug demo: `PAUSETAPE_SHOT_DUPLICATES=1` opens that view.
 - 37 tests (31 offline).
 
 ### 18. Converting for the card (2026-10-28)
@@ -226,7 +226,7 @@ Everything built so far, in the order it happened. All of it is unreleased work 
 - **Take over the card.**
   - Exact copies are moved into the write's layout (a rename on the card: instant) and join
     its manifest, so they aren't copied again.
-  - Optionally, everything else goes into one folder, `_Before NeatLibrary`. Nothing is
+  - Optionally, everything else goes into one folder, `_Before Pausetape`. Nothing is
     deleted.
   - Folders emptied by the moves are removed.
   - **undo taking over the card** puts every file back (a record per take-over in the app's
@@ -236,7 +236,7 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   - 535 files are other versions of library songs;
   - 1,840 songs (29.8 GB) aren't in the library;
   - the survey takes about 80 s.
-- Debug demo: `NEATLIBRARY_SHOT_SURVEY=1` runs the check. New tests: a take-over and its undo
+- Debug demo: `PAUSETAPE_SHOT_SURVEY=1` runs the check. New tests: a take-over and its undo
   on a fake card; opt-in `survey_a_real_card` (reads only).
 - **Delete clutter** (opt-in, unticked by default, can't be undone).
   - What counts as clutter: iTunes library data (`.itc2` artwork cache, `.itl`/`.itdb`
@@ -267,7 +267,7 @@ Everything built so far, in the order it happened. All of it is unreleased work 
   copies a take-over can move into place.
 - **Space estimate:** once the card is checked, the songs a take-over would move into place
   count as already there.
-- Debug demo: `NEATLIBRARY_SHOT_ON_CARD=<album text>` fakes "on card" marks in memory.
+- Debug demo: `PAUSETAPE_SHOT_ON_CARD=<album text>` fakes "on card" marks in memory.
 
 ### 22. The first real take-over, and what it taught (2026-10-29)
 - The first take-over of the test card took 3½ minutes but moved only 659 files. The other
@@ -309,7 +309,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - **Card tab:** its header is pinned: the space bar, "doesn't fit" with the CD-quality offer,
   what the next Sync changes, and **Compare** / **Sync**. Everything else scrolls under it. The
   list's ticks are the same choice as the library's buttons.
-- Debug demo: `NEATLIBRARY_SHOT_TOGGLE=<album text>` sends matching albums to the card or takes
+- Debug demo: `PAUSETAPE_SHOT_TOGGLE=<album text>` sends matching albums to the card or takes
   them off, in memory.
 - 47 tests (37 offline).
 
@@ -466,11 +466,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - The stock firmware's facts come from reviews and haven't been checked on a player yet.
 
 ### 35. Testing the player (2026-10-31)
-- The card tab's player row has **test it on the player**. It writes `NeatLibrary format test/`
+- The card tab's player row has **test it on the player**. It writes `Pausetape format test/`
   to the card: 6-second tones in every format (FLAC 16/44.1, 24/96, 24/192, 24/384; MP3, WAV,
   AAC, ALAC, AIFF, Opus, Ogg Vorbis, WavPack, WMA), APE copied from the library's smallest APE
   song (ffmpeg can't make APE), a FLAC with an orange and blue cover, MP3s titled
-  "Café ü 日本" in ID3v2.3 and ID3v2.4, and `NeatLibrary format test.m3u8` beside it.
+  "Café ü 日本" in ID3v2.3 and ID3v2.4, and `Pausetape format test.m3u8` beside it.
 - Try them on the player and tick **yes**, **no** or **not tried** for each. The answers are kept
   with the card setup, separately for each player, and win over what's known from reviews: a
   format that didn't play is converted, songs above the highest rate that played are written at
@@ -481,7 +481,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   the card** removes only the files the test wrote.
 
 ### 36. Recognising a card (2026-10-31)
-- Every write and take-over puts a small `.neatlibrary` file at the top of the card naming the
+- Every write and take-over puts a small `.pausetape` file at the top of the card naming the
   card setup (and its player), as calibre's `metadata.calibre` does. Players skip it. Setups
   now have an id for this, which saved setups get when they load.
 - A card plugged in brings up its setup: the app looks at the mounted drives every few seconds,
@@ -627,4 +627,16 @@ Calibre's device view, for music: the library is where you choose what goes on t
 ### 47. A clear button in the search boxes (2026-10-31)
 - The library's search and the card tab's filter get a × inside their right end once something
   is typed; Esc clears them too while typing.
+
+### 48. The app is called Pausetape (2026-11-01)
+- After the tapes once recorded from the radio, pause button at the ready, to carry a selection
+  of one's own: what the app does with a library and a card.
+- What the app kept under its former name carries over: its data folder (settings, library
+  database, undo journals, fetched covers) moves on the first start, and the covers chosen for
+  unsaved corrections are found at their new place. Cards keep being recognised by their label,
+  which is rewritten under the new name at the next write; the format test's files and a
+  take-over's gather folder from before are still the app's own. Temporary conversions from
+  before are removed. The former name lives in one constant (`FORMER_NAME`), used for nothing
+  else.
+- Test switches are now `PAUSETAPE_*`.
 

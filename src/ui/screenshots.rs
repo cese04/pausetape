@@ -1,5 +1,5 @@
-//! Debug builds only: `NEATLIBRARY_SHOT=<dir>` stages a demo (expand, play, look up, playlist),
-//! saves a screenshot of every tab as PPM, then quits. `NEATLIBRARY_SHOT_ARTIST` (default
+//! Debug builds only: `PAUSETAPE_SHOT=<dir>` stages a demo (expand, play, look up, playlist),
+//! saves a screenshot of every tab as PPM, then quits. `PAUSETAPE_SHOT_ARTIST` (default
 //! Radiohead) chooses the album played and looked up; more switches below. Handy for checking
 //! the look headlessly.
 //! The demo changes playlists and the active write in memory only: `App::save` skips saving
@@ -33,22 +33,22 @@ pub struct Shooter {
     dir: PathBuf,
     step: usize,
     until: Option<Instant>,
-    /// NEATLIBRARY_SHOT_SURVEY: check the card's own music once the comparison is in (reads only).
+    /// PAUSETAPE_SHOT_SURVEY: check the card's own music once the comparison is in (reads only).
     survey: bool,
-    /// The app looks for cards plugged in only once the demo is set up (NEATLIBRARY_SHOT_WATCH).
+    /// The app looks for cards plugged in only once the demo is set up (PAUSETAPE_SHOT_WATCH).
     pub watch: bool,
 }
 
 impl Shooter {
     pub fn from_env() -> Option<Self> {
-        std::env::var_os("NEATLIBRARY_SHOT").map(|d| Shooter { dir: d.into(), step: 0, until: None, survey: std::env::var_os("NEATLIBRARY_SHOT_SURVEY").is_some(), watch: false })
+        std::env::var_os("PAUSETAPE_SHOT").map(|d| Shooter { dir: d.into(), step: 0, until: None, survey: std::env::var_os("PAUSETAPE_SHOT_SURVEY").is_some(), watch: false })
     }
 
     pub fn tick(&mut self, app: &mut App, ctx: &egui::Context) {
         ctx.request_repaint();
         // The "job" shot shows a pretend write, so it doesn't wait for that one.
         let pretend = app.busy.as_ref().is_some_and(|b| b.stop.is_some()) && self.step / 2 < TABS.len() && TABS[self.step.saturating_sub(1) / 2].1 == "job";
-        // NEATLIBRARY_SHOT_SOURCE=<missing folder>: the library stays empty; go on once that's known.
+        // PAUSETAPE_SHOT_SOURCE=<missing folder>: the library stays empty; go on once that's known.
         let waiting = app.tracks.is_empty() && !app.source_missing;
         if waiting || (app.busy.is_some() && !pretend) || self.until.is_some_and(|t| Instant::now() < t) {
             return;
@@ -59,30 +59,30 @@ impl Shooter {
             return;
         }
         if self.step == 0 {
-            // NEATLIBRARY_SHOT_SIZE=720x560 checks narrow-window layouts.
-            if let Some((w, h)) = std::env::var("NEATLIBRARY_SHOT_SIZE").ok().and_then(|v| {
+            // PAUSETAPE_SHOT_SIZE=720x560 checks narrow-window layouts.
+            if let Some((w, h)) = std::env::var("PAUSETAPE_SHOT_SIZE").ok().and_then(|v| {
                 let (w, h) = v.split_once('x')?;
                 Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
             }) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
             }
-            // NEATLIBRARY_SHOT_THEME=light|dark, whatever the saved choice.
-            match std::env::var("NEATLIBRARY_SHOT_THEME").as_deref() {
+            // PAUSETAPE_SHOT_THEME=light|dark, whatever the saved choice.
+            match std::env::var("PAUSETAPE_SHOT_THEME").as_deref() {
                 Ok("light") => ctx.set_theme(egui::ThemePreference::Light),
                 Ok("dark") => ctx.set_theme(egui::ThemePreference::Dark),
                 _ => {}
             }
-            // NEATLIBRARY_SHOT_ACCENT=teal (any name from the settings tab).
-            if let Some(a) = std::env::var("NEATLIBRARY_SHOT_ACCENT").ok().and_then(|n| crate::ui::theme::Accent::ALL.into_iter().find(|a| a.name() == n)) {
+            // PAUSETAPE_SHOT_ACCENT=teal (any name from the settings tab).
+            if let Some(a) = std::env::var("PAUSETAPE_SHOT_ACCENT").ok().and_then(|n| crate::ui::theme::Accent::ALL.into_iter().find(|a| a.name() == n)) {
                 app.saved.accent = a;
                 crate::ui::theme::set_accent(ctx, a);
             }
             for a in &app.index.artists {
                 app.expanded.insert(crate::library::names::artist_key(&a.name));
             }
-            // NEATLIBRARY_SHOT_ARTIST picks whose album plays and is looked up (preferring an
+            // PAUSETAPE_SHOT_ARTIST picks whose album plays and is looked up (preferring an
             // album stored as one file with a CUE sheet).
-            let who = std::env::var("NEATLIBRARY_SHOT_ARTIST").unwrap_or_else(|_| "Radiohead".into());
+            let who = std::env::var("PAUSETAPE_SHOT_ARTIST").unwrap_or_else(|_| "Radiohead".into());
             let found = app.index.artists.iter().enumerate().find(|(_, a)| a.name.eq_ignore_ascii_case(&who));
             if let Some((ai, a)) = found {
                 let al = a.albums.iter().position(|al| al.tracks.iter().any(|&i| app.tracks[i].cue.is_some())).unwrap_or(0);
@@ -95,17 +95,17 @@ impl Shooter {
             app.saved.playlists = vec![Playlist { name: "Road Trip".into(), tracks: some }];
             app.active_playlist = Some(0);
             app.preview_tidy();
-            app.filter = std::env::var("NEATLIBRARY_SHOT_FILTER").unwrap_or_default();
-            // NEATLIBRARY_SHOT_DUPLICATES=1 opens the library on the duplicate copies.
-            app.duplicates_only = std::env::var_os("NEATLIBRARY_SHOT_DUPLICATES").is_some();
+            app.filter = std::env::var("PAUSETAPE_SHOT_FILTER").unwrap_or_default();
+            // PAUSETAPE_SHOT_DUPLICATES=1 opens the library on the duplicate copies.
+            app.duplicates_only = std::env::var_os("PAUSETAPE_SHOT_DUPLICATES").is_some();
             app.card_filter = app.filter.clone();
             for a in &app.index.artists {
                 app.card_expanded.insert(app.index.clusters[a.cluster].key.clone());
             }
             app.write_mut().playlists.insert("Road Trip".into());
-            // NEATLIBRARY_SHOT_ON_CARD=<text>: pretend, in memory, that the write put the albums
+            // PAUSETAPE_SHOT_ON_CARD=<text>: pretend, in memory, that the write put the albums
             // whose title contains <text> (all but one song of the first) on the card.
-            if let Ok(what) = std::env::var("NEATLIBRARY_SHOT_ON_CARD") {
+            if let Ok(what) = std::env::var("PAUSETAPE_SHOT_ON_CARD") {
                 let plan = app.write().plan(&app.tracks, &app.index);
                 let mut first = true;
                 let mut written = Vec::new();
@@ -120,9 +120,9 @@ impl Shooter {
                 app.write_mut().manifest = written;
                 app.refresh_on_card();
             }
-            // NEATLIBRARY_SHOT_TOGGLE=<text>: send albums whose title contains <text> to the card,
+            // PAUSETAPE_SHOT_TOGGLE=<text>: send albums whose title contains <text> to the card,
             // or take them off, in memory, to show the marks of changes waiting for Sync.
-            if let Ok(what) = std::env::var("NEATLIBRARY_SHOT_TOGGLE") {
+            if let Ok(what) = std::env::var("PAUSETAPE_SHOT_TOGGLE") {
                 let mut toggle = Vec::new();
                 for (ai, a) in app.index.artists.iter().enumerate() {
                     let ck = &app.index.clusters[a.cluster].key;
@@ -134,33 +134,33 @@ impl Shooter {
                     app.card_album(ai, bi, on);
                 }
             }
-            // NEATLIBRARY_SHOT_DEVICE=stock: write for the Echo Mini's stock firmware instead of RECHO.
-            if std::env::var("NEATLIBRARY_SHOT_DEVICE").is_ok_and(|d| d == "stock") {
+            // PAUSETAPE_SHOT_DEVICE=stock: write for the Echo Mini's stock firmware instead of RECHO.
+            if std::env::var("PAUSETAPE_SHOT_DEVICE").is_ok_and(|d| d == "stock") {
                 app.write_mut().options.device = crate::card::Device::EchoMiniStock;
             }
-            // NEATLIBRARY_SHOT_PATTERN=<pattern>: name the card's songs by it.
-            if let Ok(p) = std::env::var("NEATLIBRARY_SHOT_PATTERN") {
+            // PAUSETAPE_SHOT_PATTERN=<pattern>: name the card's songs by it.
+            if let Ok(p) = std::env::var("PAUSETAPE_SHOT_PATTERN") {
                 app.write_mut().options.pattern = Some(p);
                 app.refresh_on_card();
             }
-            // NEATLIBRARY_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
-            if std::env::var_os("NEATLIBRARY_SHOT_SELECT").is_some() {
+            // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
+            if std::env::var_os("PAUSETAPE_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();
             }
-            // NEATLIBRARY_SHOT_ROOM=<GB>: pretend the card (an empty temporary folder) has this
+            // PAUSETAPE_SHOT_ROOM=<GB>: pretend the card (an empty temporary folder) has this
             // much room, to show what the card tab offers when the choice doesn't fit.
-            if let Some(gb) = std::env::var("NEATLIBRARY_SHOT_ROOM").ok().and_then(|v| v.parse::<f64>().ok()) {
-                let card = std::env::temp_dir().join("neatlibrary-shot-card");
+            if let Some(gb) = std::env::var("PAUSETAPE_SHOT_ROOM").ok().and_then(|v| v.parse::<f64>().ok()) {
+                let card = std::env::temp_dir().join("pausetape-shot-card");
                 // Something copied by hand, for the take-over.
                 let _ = std::fs::create_dir_all(card.join("Hand Copied"));
                 let _ = std::fs::write(card.join("Hand Copied/01 - Song.mp3"), b"not really a song");
                 app.write_mut().dest = Some(card);
                 app.room_while_writing = Some((gb * 1e9) as u64);
             }
-            // NEATLIBRARY_SHOT_WATCH=<a mounted scratch volume>: label it for a second setup,
+            // PAUSETAPE_SHOT_WATCH=<a mounted scratch volume>: label it for a second setup,
             // "Road trip", that shares the first one's destination, then look for cards: the
             // volume should bring "Road trip" up. Writes only the label there.
-            if let Some(vol) = std::env::var_os("NEATLIBRARY_SHOT_WATCH").map(PathBuf::from) {
+            if let Some(vol) = std::env::var_os("PAUSETAPE_SHOT_WATCH").map(PathBuf::from) {
                 app.write_mut().dest = Some(vol.clone());
                 app.new_write(true);
                 app.write_mut().name = "Road trip".into();
@@ -182,7 +182,7 @@ impl Shooter {
                 "cardpicker" => Some(crate::ui::folders::Picker::Card { browse: None, show_all: true }),
                 _ => None,
             };
-            let filter = std::env::var("NEATLIBRARY_SHOT_FILTER").unwrap_or_default();
+            let filter = std::env::var("PAUSETAPE_SHOT_FILTER").unwrap_or_default();
             app.saved.album_table = TABS[n].1 == "albums";
             app.take_over_open = TABS[n].1 == "takeover";
             app.player_test_open = TABS[n].1 == "playertest";

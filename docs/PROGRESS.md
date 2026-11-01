@@ -1,8 +1,8 @@
-# NeatLibrary: progress and roadmap
+# Pausetape: progress and roadmap
 
 *Last updated: 2026-10-30: the roadmap's steps 1–5 and 7 are done, 6 and 8 in a first form (see §2 and the [CHANGELOG](../CHANGELOG.md), sections 23–33). Section 1 below still describes 2026-10-28 in places; the CHANGELOG is the full record.*
 
-NeatLibrary organises a music collection for the Snowsky Echo Mini running the
+Pausetape organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
 it, browses it folder by folder sorted by name, has no playlists, and plays only FLAC, MP3 and
 WAV. Everything here is shaped by those limits.
@@ -110,7 +110,7 @@ the card is a device view of it, metadata and covers are first-class and fixable
 sending to the device converts as needed. Steps in order of importance. Effort: **S** = an hour
 or two, **M** = about a day, **L** = several days.
 
-| Calibre | NeatLibrary | Status |
+| Calibre | Pausetape | Status |
 |---|---|---|
 | Convert on send | FLAC / MP3 320, CUE albums cut into songs | Done |
 | Download metadata | MusicBrainz suggestions, checked against your songs | Done |
@@ -147,7 +147,7 @@ library, and 2.6 GB is iTunes and system clutter.
    ticked and *delete clutter* ticked. Undo is available.
 4. **Write to the card**, then test on the Echo Mini: folder sorting, songs cut from CUE
    albums, converted MP3s, covers, names on its screen.
-5. Delete `_Before NeatLibrary` from the card once happy.
+5. Delete `_Before Pausetape` from the card once happy.
 
 Where it stands (2026-10-29): steps 1–2 done. The first take-over moved 659 files and stopped
 on locked files (see CHANGELOG §22); the take-over now unlocks them, so check the card again and
@@ -289,22 +289,22 @@ cargo run --release                         # the app
 cargo run --release -- --plan ~/Music       # dry run: print the planned layout
 cargo test                                  # offline tests
 cargo test -- --ignored musicbrainz         # live MusicBrainz test
-NEATLIBRARY_BENCH=~/Music      cargo test --release -- --ignored scan_speed --nocapture
-NEATLIBRARY_FORMATS=/some/dir  cargo test --release -- --ignored decodes_formats --nocapture
+PAUSETAPE_BENCH=~/Music      cargo test --release -- --ignored scan_speed --nocapture
+PAUSETAPE_FORMATS=/some/dir  cargo test --release -- --ignored decodes_formats --nocapture
 ```
 
 Debug builds include a screenshot harness that opens every tab and dialog, saves each as a PPM,
 and quits:
 
 ```sh
-NEATLIBRARY_SHOT=/tmp/shots \
-NEATLIBRARY_SHOT_SIZE=720x600 \
-NEATLIBRARY_SHOT_FILTER=beatles \
+PAUSETAPE_SHOT=/tmp/shots \
+PAUSETAPE_SHOT_SIZE=720x600 \
+PAUSETAPE_SHOT_FILTER=beatles \
 cargo run
 ```
 
-`NEATLIBRARY_FFMPEG=/path/to/ffmpeg` points the app at a specific ffmpeg.
-`neatlibrary --version` prints the version and which ffmpeg is in use.
+`PAUSETAPE_FFMPEG=/path/to/ffmpeg` points the app at a specific ffmpeg.
+`pausetape --version` prints the version and which ffmpeg is in use.
 
 Mac packaging: `scripts/package-macos.sh` (uses `scripts/build-ffmpeg-macos.sh` and the icon
 from `scripts/make-icon.py`). Details in [DISTRIBUTION](DISTRIBUTION.md).

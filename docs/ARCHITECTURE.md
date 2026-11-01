@@ -1,6 +1,6 @@
 # Architecture
 
-How NeatLibrary's code fits together. For status and plans see [PROGRESS](PROGRESS.md); for
+How Pausetape's code fits together. For status and plans see [PROGRESS](PROGRESS.md); for
 building and releases see [DISTRIBUTION](DISTRIBUTION.md) and [TESTING](TESTING.md).
 
 ## Shape of the app
@@ -88,7 +88,7 @@ src/
 │   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows,
 │   │                  corrected by test results (Player)
 │   ├── testcard.rs    the test card: a folder of samples per format, a cover, accented titles, a playlist
-│   ├── label.rs       the card's label (.neatlibrary): which card setup a card belongs to
+│   ├── label.rs       the card's label (.pausetape): which card setup a card belongs to
 │   ├── plan.rs        Options + Custom → planned paths (what's chosen, album order, names)
 │   ├── pattern.rs     the naming pattern ({albumartist}/[{year} - ]{album}/…) songs' card paths come from
 │   ├── copy.rs        copy / move, prune a previous write, clean macOS ._ files
@@ -127,7 +127,7 @@ src/
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     ├── albums.rs      the library as a sortable table of albums
     ├── player_test.rs the dialog for testing the card's player
-    └── screenshots.rs debug-only screenshot demo (NEATLIBRARY_SHOT)
+    └── screenshots.rs debug-only screenshot demo (PAUSETAPE_SHOT)
 ```
 
 ### Layering
@@ -160,11 +160,11 @@ src/
 | Library database | `library.sqlite3` in the app data folder | `SCHEMA_VERSION` bump clears the cache (it's re-derivable) |
 | Undo journals for *Reorganise* | `journals/` in the app data folder | |
 | Undo records for taking over a card | `journals/card/` in the app data folder | One per take-over, named by write |
-| ffmpeg conversions | `<temp>/neatlibrary-converted/` | Newest kept up to 1 GB; cleared at start-up |
+| ffmpeg conversions | `<temp>/pausetape-converted/` | Newest kept up to 1 GB; cleared at start-up |
 | Covers fetched from the Cover Art Archive | `covers/` in the app data folder | One per album, named after its first song; embedded when written |
 
-App data folder: macOS `~/Library/Application Support/NeatLibrary`, Windows
-`%APPDATA%\NeatLibrary\data`, Linux `~/.local/share/neatlibrary`. `APP_ID` names it, so keep
+App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
+`%APPDATA%\Pausetape\data`, Linux `~/.local/share/pausetape`. `APP_ID` names it, so keep
 `APP_ID` when renaming the app (or migrate the folder).
 
 ## Safety rules the code keeps
@@ -203,11 +203,11 @@ search terms, MP3 for lossless, moving a covered copy to the Trash, undo never r
 song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
 tag of a file, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another, artist links sorted for the panel, artist entries kept, renaming an artist in its tags, search links. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
-(live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`NEATLIBRARY_BENCH=<dir>`), `decodes_formats`
-(`NEATLIBRARY_FORMATS=<dir>`), `section_matches_cut` (`NEATLIBRARY_SECTION=…`, see the test),
-`cue_album_write` (`NEATLIBRARY_CUE_ALBUM=<folder>`), `embeds_cover`
-(`NEATLIBRARY_EMBED=<song>:<image>`), `convert_write` (`NEATLIBRARY_CONVERT=<folder>`), `writes_test_card` (`NEATLIBRARY_TESTCARD=<folder>`), `stutter` (`NEATLIBRARY_STUTTER=<song>|<song>|<folder>`: playback waits while a folder is read), `queue_advances_without_ui`
-(`NEATLIBRARY_PLAY=<song>`), `survey_a_real_card` (`NEATLIBRARY_SURVEY=<card>:<music folder>`).
+(live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`PAUSETAPE_BENCH=<dir>`), `decodes_formats`
+(`PAUSETAPE_FORMATS=<dir>`), `section_matches_cut` (`PAUSETAPE_SECTION=…`, see the test),
+`cue_album_write` (`PAUSETAPE_CUE_ALBUM=<folder>`), `embeds_cover`
+(`PAUSETAPE_EMBED=<song>:<image>`), `convert_write` (`PAUSETAPE_CONVERT=<folder>`), `writes_test_card` (`PAUSETAPE_TESTCARD=<folder>`), `stutter` (`PAUSETAPE_STUTTER=<song>|<song>|<folder>`: playback waits while a folder is read), `queue_advances_without_ui`
+(`PAUSETAPE_PLAY=<song>`), `survey_a_real_card` (`PAUSETAPE_SURVEY=<card>:<music folder>`).
 
 ## Conventions
 

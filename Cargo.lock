@@ -2245,32 +2245,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "neatlibrary"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chardetng",
- "crossbeam-channel",
- "deunicode",
- "eframe",
- "egui",
- "encoding_rs",
- "image",
- "libc",
- "lofty",
- "rfd",
- "rodio",
- "rusqlite",
- "serde",
- "serde_json",
- "strsim",
- "trash",
- "ureq",
- "walkdir",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2840,6 +2814,32 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "pausetape"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chardetng",
+ "crossbeam-channel",
+ "deunicode",
+ "eframe",
+ "egui",
+ "encoding_rs",
+ "image",
+ "libc",
+ "lofty",
+ "rfd",
+ "rodio",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "strsim",
+ "trash",
+ "ureq",
+ "walkdir",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "peniko"

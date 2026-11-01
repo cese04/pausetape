@@ -179,7 +179,7 @@ pub(crate) mod tests {
     #[test]
     fn dsf_headers_and_tags() {
         use lofty::prelude::*;
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-dsd-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-dsd-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("tone.dsf");
         std::fs::write(&path, dsf_bytes(2, "Test Tone", "Sample Artist")).unwrap();

@@ -13,8 +13,19 @@ use super::Sample;
 use crate::library::Track;
 
 /// The folder on the card, and the playlist beside it (at the top level, where players look).
-pub const TEST_FOLDER: &str = "NeatLibrary format test";
-pub const TEST_PLAYLIST: &str = "NeatLibrary format test.m3u8";
+pub const TEST_FOLDER: &str = "Pausetape format test";
+pub const TEST_PLAYLIST: &str = "Pausetape format test.m3u8";
+
+/// The test folder and playlist, as written now and under the app's former name.
+fn test_names() -> [String; 4] {
+    let former = format!("{} format test", crate::FORMER_NAME);
+    [TEST_FOLDER.into(), TEST_PLAYLIST.into(), former.clone(), format!("{former}.m3u8")]
+}
+
+/// Whether a name at the top of a card is the test card's folder or playlist.
+pub fn is_test_name(name: &str) -> bool {
+    test_names().iter().any(|n| n == name)
+}
 
 /// The file a sample is written to, inside `TEST_FOLDER`.
 pub fn file_name(s: Sample) -> String {
@@ -61,22 +72,26 @@ pub fn write(dest: &Path, tracks: &[Track], mut progress: impl FnMut(usize, usiz
     out
 }
 
-/// Take the test folder and playlist off the card: only the files the test card writes.
+/// Take the test folder and playlist off the card (those written under the app's former name
+/// too): only the files the test card writes.
 pub fn remove(dest: &Path) -> Result<()> {
-    let folder = dest.join(TEST_FOLDER);
-    for &s in &Sample::ALL[..Sample::ALL.len() - 1] {
-        let f = folder.join(file_name(s));
-        if f.exists() {
-            std::fs::remove_file(&f).with_context(|| format!("removing {}", f.display()))?;
+    let [folder, list, former_folder, former_list] = test_names();
+    for (folder, list) in [(folder, list), (former_folder, former_list)] {
+        let folder = dest.join(folder);
+        for &s in &Sample::ALL[..Sample::ALL.len() - 1] {
+            let f = folder.join(file_name(s));
+            if f.exists() {
+                std::fs::remove_file(&f).with_context(|| format!("removing {}", f.display()))?;
+            }
+            // macOS leaves "._" companions on FAT cards.
+            let _ = std::fs::remove_file(folder.join(format!("._{}", file_name(s))));
         }
-        // macOS leaves "._" companions on FAT cards.
-        let _ = std::fs::remove_file(folder.join(format!("._{}", file_name(s))));
-    }
-    // Only if nothing else was put in it.
-    let _ = std::fs::remove_dir(&folder);
-    let list = dest.join(TEST_PLAYLIST);
-    if list.exists() {
-        std::fs::remove_file(&list).with_context(|| format!("removing {}", list.display()))?;
+        // Only if nothing else was put in it.
+        let _ = std::fs::remove_dir(&folder);
+        let list = dest.join(list);
+        if list.exists() {
+            std::fs::remove_file(&list).with_context(|| format!("removing {}", list.display()))?;
+        }
     }
     remove_companions(dest);
     Ok(())
@@ -84,7 +99,7 @@ pub fn remove(dest: &Path) -> Result<()> {
 
 /// The "._" companions macOS gives the test folder and playlist on a FAT card.
 fn remove_companions(dest: &Path) {
-    for name in [TEST_FOLDER, TEST_PLAYLIST] {
+    for name in test_names() {
         let _ = std::fs::remove_file(dest.join(format!("._{name}")));
     }
 }
@@ -134,7 +149,7 @@ fn sample(folder: &Path, s: Sample, n: usize, tracks: &[Track]) -> Result<()> {
     }
     let title = format!("{:02} {}", n + 1, s.label());
     let track = (n + 1).to_string();
-    let tags = ["title", &title, "artist", "NeatLibrary", "album_artist", "NeatLibrary", "album", "Format test", "track", &track];
+    let tags = ["title", &title, "artist", "Pausetape", "album_artist", "Pausetape", "album", "Format test", "track", &track];
     let mut cmd = crate::platform::quiet_command(ff);
     cmd.args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", &tone, "-ac", "2"]).args(&codec);
     for kv in tags.chunks(2) {
@@ -146,7 +161,7 @@ fn sample(folder: &Path, s: Sample, n: usize, tracks: &[Track]) -> Result<()> {
         bail!("ffmpeg: {}", String::from_utf8_lossy(&done.stderr).lines().last().unwrap_or("failed"));
     }
     if s == Sample::Cover {
-        let image = std::env::temp_dir().join(format!("neatlibrary-test-cover-{}.png", std::process::id()));
+        let image = std::env::temp_dir().join(format!("pausetape-test-cover-{}.png", std::process::id()));
         cover_image().save(&image).context("making the cover")?;
         let t = Track { cover: Some(image.clone()), ..Default::default() };
         let written = crate::library::write_tags(&t, &path);
@@ -160,7 +175,7 @@ fn sample(folder: &Path, s: Sample, n: usize, tracks: &[Track]) -> Result<()> {
 fn playlist(dest: &Path, made: &[(Sample, Result<(), String>)]) -> Result<()> {
     let mut list = String::from("#EXTM3U\n");
     for (s, _) in made.iter().filter(|(_, r)| r.is_ok()) {
-        list.push_str(&format!("#EXTINF:6,NeatLibrary - {}\n{TEST_FOLDER}/{}\n", s.label(), file_name(*s)));
+        list.push_str(&format!("#EXTINF:6,Pausetape - {}\n{TEST_FOLDER}/{}\n", s.label(), file_name(*s)));
     }
     let path: PathBuf = dest.join(TEST_PLAYLIST);
     std::fs::write(&path, list).with_context(|| format!("writing {}", path.display()))
@@ -176,10 +191,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_files_from_the_former_name_are_the_apps() {
+        assert!(is_test_name(TEST_FOLDER) && is_test_name(TEST_PLAYLIST));
+        let former = format!("{} format test", crate::FORMER_NAME);
+        assert!(is_test_name(&former) && is_test_name(&format!("{former}.m3u8")));
+        assert!(!is_test_name("Format test"));
+    }
+
+    #[test]
     fn test_card_files_and_removal() {
         assert_eq!(file_name(Sample::Flac), "01 - FLAC 16-bit 44.1 kHz.flac");
         assert_eq!(file_name(Sample::Id3v23), "16 - ID3v2.3.mp3");
-        let card = std::env::temp_dir().join(format!("neatlibrary-test-testcard-{}", std::process::id()));
+        let card = std::env::temp_dir().join(format!("pausetape-test-testcard-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&card);
         // Without the encoders a sample says why; with them, it's made. Either way the playlist
         // lists only what was made, and removing leaves the card as it was.
@@ -203,12 +226,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&card);
     }
 
-    /// `NEATLIBRARY_TESTCARD=<folder> cargo test -- --ignored writes_test_card --nocapture`
+    /// `PAUSETAPE_TESTCARD=<folder> cargo test -- --ignored writes_test_card --nocapture`
     /// Writes the test card's samples into the folder and says what each became.
     #[test]
     #[ignore]
     fn writes_test_card() {
-        let Some(dest) = std::env::var_os("NEATLIBRARY_TESTCARD").map(PathBuf::from) else { return };
+        let Some(dest) = std::env::var_os("PAUSETAPE_TESTCARD").map(PathBuf::from) else { return };
         for (s, r) in write(&dest, &[], |_, _| {}) {
             println!("{:<28} {}", file_name(s), r.err().unwrap_or_else(|| "ok".into()));
         }

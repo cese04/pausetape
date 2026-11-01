@@ -39,8 +39,8 @@ jobs:
       # The release binary, for trying on a machine without a Rust toolchain.
       - uses: actions/upload-artifact@v4
         with:
-          name: neatlibrary-${{ runner.os }}
+          name: pausetape-${{ runner.os }}
           path: |
-            target/release/neatlibrary
-            target/release/neatlibrary.exe
+            target/release/pausetape
+            target/release/pausetape.exe
           if-no-files-found: ignore

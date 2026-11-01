@@ -30,6 +30,12 @@ pub fn gather_folder() -> String {
     format!("_Before {}", crate::APP_NAME)
 }
 
+/// Whether a name at the top of a card is a take-over's gather folder, now or under the app's
+/// former name.
+fn is_gather_folder(name: &str) -> bool {
+    name == gather_folder() || name == format!("_Before {}", crate::FORMER_NAME)
+}
+
 /// What's on a card besides what this write put there.
 #[derive(Default)]
 pub struct Survey {
@@ -101,14 +107,12 @@ fn system_file(name: &str, ext: &str) -> bool {
 /// not looked at.
 pub fn foreign_files(dest: &Path, manifest: &[Written]) -> Vec<(PathBuf, u64)> {
     let ours: HashSet<String> = manifest.iter().map(|w| w.rel.to_string_lossy().to_lowercase()).collect();
-    let gather = gather_folder();
     WalkDir::new(dest)
         .min_depth(1)
         .into_iter()
         .filter_entry(|e| {
             let n = e.file_name().to_string_lossy();
-            let test_card = n == super::testcard::TEST_FOLDER || n == super::testcard::TEST_PLAYLIST;
-            !n.starts_with('.') && !(e.depth() == 1 && (n == "System Volume Information" || n == "$RECYCLE.BIN" || n == gather.as_str() || test_card))
+            !n.starts_with('.') && !(e.depth() == 1 && (n == "System Volume Information" || n == "$RECYCLE.BIN" || is_gather_folder(&n) || super::testcard::is_test_name(&n)))
         })
         .flatten()
         .filter(|e| e.file_type().is_file())
@@ -503,12 +507,12 @@ pub fn undo_latest(id: &str, name: &str, dest: &Path) -> Result<(Vec<PathBuf>, u
 mod tests {
     use super::*;
 
-    /// `NEATLIBRARY_SURVEY=<card>:<music folder> cargo test -- --ignored survey_a_real_card --nocapture`
+    /// `PAUSETAPE_SURVEY=<card>:<music folder> cargo test -- --ignored survey_a_real_card --nocapture`
     /// Reads only: what a default write would take over on that card.
     #[test]
     #[ignore]
     fn survey_a_real_card() {
-        let Ok(spec) = std::env::var("NEATLIBRARY_SURVEY") else { return };
+        let Ok(spec) = std::env::var("PAUSETAPE_SURVEY") else { return };
         let (card, music) = spec.split_once(':').unwrap();
         let mut db = crate::library::db::Db::open_default().ok();
         let (tracks, _) = crate::library::scan(Path::new(music), db.as_mut(), false, |_| {});
@@ -550,7 +554,7 @@ mod tests {
 
     #[test]
     fn music_only_on_the_card_is_copied_into_the_library() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-import-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-import-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (music, card) = (root.join("music"), root.join("card"));
         for (p, body) in [
@@ -584,7 +588,7 @@ mod tests {
 
     #[test]
     fn a_hand_copied_card_is_taken_over_and_can_be_undone() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-adopt-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-adopt-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
         let song = |p: &Path, body: &[u8]| {
@@ -633,12 +637,12 @@ mod tests {
         let out = take_over(&s, &card, true, true, true, "test write", |_, _| {});
         assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
         assert!(out.errors[0].contains("Vanished/song.mp3") && out.errors[0].contains("no longer there"), "{:?}", out.errors);
-        assert!(!card.join("_Before NeatLibrary/Vanished").exists());
+        assert!(!card.join("_Before Pausetape/Vanished").exists());
         assert_eq!((out.moved, out.gathered, out.written.len(), out.deleted), (2, 4, 2, 4));
         assert!(WalkDir::new(&card).into_iter().flatten().all(|e| !e.file_name().to_string_lossy().starts_with("._")), "macOS files cleaned");
         assert!(!card.join("iTunes").exists(), "clutter deleted, its folders removed");
         assert!(card.join("Muse/2003 - Absolution/01 - Intro.mp3").exists());
-        assert!(card.join("_Before NeatLibrary/Someone Else/song.mp3").exists());
+        assert!(card.join("_Before Pausetape/Someone Else/song.mp3").exists());
         assert!(!card.join("muse absolution [mp3]").exists(), "emptied folders go");
 
         // Found by the setup's id; records from before ids hold its name, so that works too.
@@ -653,7 +657,7 @@ mod tests {
         assert_eq!((released.len(), restored), (6, 6));
         assert!(card.join("muse absolution [mp3]/02 Apocalypse.mp3").exists());
         assert!(card.join("Someone Else/song.mp3").exists());
-        assert!(!card.join("Muse").exists() && !card.join("_Before NeatLibrary").exists());
+        assert!(!card.join("Muse").exists() && !card.join("_Before Pausetape").exists());
         assert!(!card.join("muse absolution [mp3]/rip.log").exists(), "deleted clutter doesn't come back");
         fs::remove_dir_all(root).unwrap();
     }

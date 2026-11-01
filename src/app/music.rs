@@ -320,9 +320,9 @@ impl App {
     pub(super) fn user_agent(&self) -> String {
         let contact = self.saved.mb_contact.trim();
         if contact.is_empty() {
-            format!("NeatLibrary/{}", env!("CARGO_PKG_VERSION"))
+            format!("Pausetape/{}", env!("CARGO_PKG_VERSION"))
         } else {
-            format!("NeatLibrary/{} ( {contact} )", env!("CARGO_PKG_VERSION"))
+            format!("Pausetape/{} ( {contact} )", env!("CARGO_PKG_VERSION"))
         }
     }
 
@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn a_covered_copy_goes_with_its_folder_unless_it_shares_it() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-trash-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-trash-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let (own, shared) = (root.join("Album (MP3)"), root.join("Mixed"));
         for d in [&own, &shared] {

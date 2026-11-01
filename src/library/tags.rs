@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn fields_are_cleared_dates_kept_and_every_tag_written() {
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-tags-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-tags-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("song.wav");
         wav(&path);
@@ -149,16 +149,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// `NEATLIBRARY_EMBED=<song>:<image> cargo test -- --ignored embeds_cover --nocapture`
+    /// `PAUSETAPE_EMBED=<song>:<image> cargo test -- --ignored embeds_cover --nocapture`
     /// Embeds the image as the front cover of a temporary copy of the song and reads it back.
     #[test]
     #[ignore]
     fn embeds_cover() {
         use lofty::prelude::*;
-        let Ok(spec) = std::env::var("NEATLIBRARY_EMBED") else { return };
+        let Ok(spec) = std::env::var("PAUSETAPE_EMBED") else { return };
         let (song, image) = spec.rsplit_once(':').unwrap();
         let song = std::path::Path::new(song);
-        let copy = std::env::temp_dir().join(format!("neatlibrary-embed-{}.{}", std::process::id(), song.extension().unwrap().to_string_lossy()));
+        let copy = std::env::temp_dir().join(format!("pausetape-embed-{}.{}", std::process::id(), song.extension().unwrap().to_string_lossy()));
         std::fs::copy(song, &copy).unwrap();
         let t = super::Track { title: Some("Disorder".into()), cover: Some(image.into()), ..Default::default() };
         super::write_tags(&t, &copy).unwrap();

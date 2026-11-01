@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 pub(super) fn journal_dir() -> PathBuf {
     if cfg!(test) {
-        return std::env::temp_dir().join("neatlibrary-test-journals");
+        return std::env::temp_dir().join("pausetape-test-journals");
     }
     crate::platform::data_dir().join("journals")
 }
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn moving_back_never_replaces_a_file() {
-        let dir = std::env::temp_dir().join(format!("neatlibrary-move-back-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-move-back-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let (old, new) = (dir.join("song.flac"), dir.join("moved.flac"));

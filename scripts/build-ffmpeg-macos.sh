@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the minimal, LGPL-only ffmpeg that ships inside the macOS app.
 #
-# It only does what NeatLibrary asks of it: decode the formats the built-in decoder can't
+# It only does what Pausetape asks of it: decode the formats the built-in decoder can't
 # (Dolby E-AC-3/AC-3/TrueHD, Opus, APE, WavPack, WMA, DTS…) and write a stereo 16-bit WAV;
 # for the card, cut albums stored as one file plus a CUE sheet into one FLAC per song, and
 # convert songs RECHO can't play to FLAC (lossless sources) or MP3 320 (with LAME, LGPL too).

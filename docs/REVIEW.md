@@ -36,7 +36,7 @@ reading the code; each says what would happen and where.
 | [R20](#r20) | Low | Folders linked into the music folder are skipped (**fixed**) | Linux, macOS |
 | [R21](#r21) | Low | DSD files aren't scanned, though the stock firmware plays them (**fixed**) | All |
 | [R22](#r22) | Low | A song folder named like the playlists folder confuses Sync (**fixed**) | All |
-| [R23](#r23) | Low | The card's `.neatlibrary` label shows in Explorer (**fixed**) | Windows |
+| [R23](#r23) | Low | The card's `.pausetape` label shows in Explorer (**fixed**) | Windows |
 | [R24](#r24) | Low | The card tab recomputes sizes on every frame (**fixed**) | All |
 | [R26](#r26) | Low | ffmpeg's errors during playback go to the terminal, not the app (**fixed**) | All |
 
@@ -154,7 +154,7 @@ card's music, and as soon as a card is chosen in the card dialog.
 [scan.rs:153](../src/library/scan.rs#L153)
 
 When a file's tags and audio header can't be read, it's still listed, with no length, and
-nothing says so. It then fails when played ("skipped 1 file NeatLibrary can't play") and at every
+nothing says so. It then fails when played ("skipped 1 file Pausetape can't play") and at every
 Sync ("ffmpeg couldn't convert the song: Invalid data found"). This is what happened with 24 of
 the 25 Emerson, Lake & Palmer `.ape` album files under `From the card/ELP`: they are 92–100% zero
 bytes, already damaged on the old card they were imported from.
@@ -287,9 +287,9 @@ them be gone, it's let go as before (the audio thread knows songs by their place
 [player.rs:74](../src/audio/player.rs#L74)
 
 When a song fails and the next one plays, the error is overwritten; only "skipped 1 file
-NeatLibrary can't play" remains.
+Pausetape can't play" remains.
 
-**Fixed 2026-10-31.** The notice ends with the last reason: "skipped 1 file NeatLibrary can't
+**Fixed 2026-10-31.** The notice ends with the last reason: "skipped 1 file Pausetape can't
 play (last: song.ape: …)".
 
 ### R18
@@ -341,7 +341,7 @@ Tested with a made-up DSD64 file, through to the card and a second, unchanged wr
 **A song folder named like the playlists folder confuses Sync.**
 [write.rs:74](../src/card/write.rs#L74)
 
-An artist (or pattern) whose folder is `_Playlists`, or "NeatLibrary format test", collides with
+An artist (or pattern) whose folder is `_Playlists`, or "Pausetape format test", collides with
 the folders the app keeps for itself: renaming treats its songs as playlist copies, and the take-
 over skips the test folder. Rare.
 
@@ -349,7 +349,7 @@ over skips the test folder. Rare.
 Tested.
 
 ### R23
-**The card's `.neatlibrary` label shows in Explorer.** (Windows)
+**The card's `.pausetape` label shows in Explorer.** (Windows)
 
 A leading dot hides a file on macOS and Linux only.
 
@@ -377,7 +377,7 @@ song (the player and the waveform each try). *Fix:* capture ffmpeg's output, as 
 already do, and put its last line in the error the player shows.
 
 **Fixed 2026-10-31.** ffmpeg's error output is captured, and its first line, the cause, goes in
-the error the player shows ("skipped 1 file NeatLibrary can't play (last: … ffmpeg couldn't
+the error the player shows ("skipped 1 file Pausetape can't play (last: … ffmpeg couldn't
 convert it: Error opening input: Invalid data found when processing input)"). Nothing reaches
 the terminal any more.
 

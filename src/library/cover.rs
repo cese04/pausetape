@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_an_image_beside_the_track() {
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-cover-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-cover-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let track = dir.join("01 - Song.mp3");

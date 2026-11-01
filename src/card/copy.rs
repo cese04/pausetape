@@ -238,7 +238,7 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
     }
     progress(Progress::Step { done, total });
 
-    let work = std::env::temp_dir().join(format!("neatlibrary-card-{}", std::process::id()));
+    let work = std::env::temp_dir().join(format!("pausetape-card-{}", std::process::id()));
     let _ = fs::remove_dir_all(&work);
     if !made.is_empty()
         && let Err(e) = fs::create_dir_all(&work)
@@ -462,7 +462,7 @@ mod tests {
 
     /// Untagged dummy files: everything is inferred from "Artist/Album/NN - Title.ext".
     fn fixture(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         for f in ["src/Muse/Absolution/02 - Apocalypse Please.mp3", "src/Muse/Absolution/01 - Intro.mp3", "src/Muse/Absolution/._junk.mp3", "src/Downloads/Muse - Hysteria.mp3"] {
             let p = root.join(f);

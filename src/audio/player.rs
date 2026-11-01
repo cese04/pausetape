@@ -282,13 +282,13 @@ impl Audio {
 mod tests {
     use std::time::{Duration, Instant};
 
-    /// `NEATLIBRARY_PLAY=<song> cargo test -- --ignored queue_advances --nocapture` (plays sound)
+    /// `PAUSETAPE_PLAY=<song> cargo test -- --ignored queue_advances --nocapture` (plays sound)
     /// Queues two one-second parts of a song, plus an entry that can't play, and checks the
     /// audio thread moves through them with no UI asking it to.
     #[test]
     #[ignore]
     fn queue_advances_without_ui() {
-        let Some(song) = std::env::var_os("NEATLIBRARY_PLAY").map(std::path::PathBuf::from) else { return };
+        let Some(song) = std::env::var_os("PAUSETAPE_PLAY").map(std::path::PathBuf::from) else { return };
         let audio = super::Audio::spawn(|| {});
         let part = |a: u64, b: u64| Some((song.clone(), Some((Duration::from_secs(a), Some(Duration::from_secs(b))))));
         audio.play_queue(vec![part(30, 31), None, part(60, 61)], 0);

@@ -12,13 +12,13 @@ use rodio::{ChannelCount, Decoder, Sample, SampleRate, Source};
 
 /// Where ffmpeg is: the copy bundled next to the app's executable (inside the .app), else an
 /// installed one. Apps started from Finder don't get the shell's PATH, so the usual install
-/// locations are checked as well. `NEATLIBRARY_FFMPEG` overrides everything.
+/// locations are checked as well. `PAUSETAPE_FFMPEG` overrides everything.
 pub fn ffmpeg() -> Option<&'static Path> {
     static FOUND: OnceLock<Option<PathBuf>> = OnceLock::new();
     FOUND
         .get_or_init(|| {
             let exe = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
-            let mut candidates: Vec<PathBuf> = std::env::var_os("NEATLIBRARY_FFMPEG").map(PathBuf::from).into_iter().collect();
+            let mut candidates: Vec<PathBuf> = std::env::var_os("PAUSETAPE_FFMPEG").map(PathBuf::from).into_iter().collect();
             if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) {
                 candidates.push(dir.join(exe));
             }
@@ -32,7 +32,7 @@ pub fn ffmpeg() -> Option<&'static Path> {
 }
 
 /// The ffmpeg in use has this encoder ("flac", "libmp3lame"). Builds differ: the minimal one
-/// bundled with the app has only what NeatLibrary asks of it.
+/// bundled with the app has only what Pausetape asks of it.
 pub fn ffmpeg_encodes(name: &str) -> bool {
     static ENCODERS: OnceLock<String> = OnceLock::new();
     let list = ENCODERS.get_or_init(|| {
@@ -64,7 +64,7 @@ pub fn open(path: &Path, on_convert: impl FnOnce()) -> Result<FileSource, String
         Err(e) => e,
     };
     let Some(ff) = ffmpeg() else {
-        return Err(format!("{native_err}. Installing ffmpeg lets NeatLibrary play this format."));
+        return Err(format!("{native_err}. Installing ffmpeg lets Pausetape play this format."));
     };
     on_convert();
     let wav = converted(path, ff)?;
@@ -182,12 +182,13 @@ impl<S: Source> Source for Section<S> {
 const KEEP_BYTES: u64 = 1 << 30;
 
 fn converted_dir() -> PathBuf {
-    std::env::temp_dir().join("neatlibrary-converted")
+    std::env::temp_dir().join("pausetape-converted")
 }
 
-/// Remove conversions left over from earlier runs.
+/// Remove conversions left over from earlier runs, those made under the app's former name too.
 pub fn clear_converted() {
     let _ = std::fs::remove_dir_all(converted_dir());
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("{}-converted", crate::FORMER_NAME.to_lowercase())));
 }
 
 fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
@@ -284,14 +285,14 @@ mod tests {
         assert_eq!(super::ffmpeg_error(b""), "ffmpeg couldn't convert it");
     }
 
-    /// `NEATLIBRARY_SECTION=<album.flac>:<start frames>:<end frames>:<reference.raw>` with the
+    /// `PAUSETAPE_SECTION=<album.flac>:<start frames>:<end frames>:<reference.raw>` with the
     /// reference being that section cut by ffmpeg as 16-bit stereo PCM; checks that playback of
     /// a CUE song yields exactly those samples.
     #[test]
     #[ignore]
     fn section_matches_cut() {
         use rodio::Source;
-        let Ok(spec) = std::env::var("NEATLIBRARY_SECTION") else { return };
+        let Ok(spec) = std::env::var("PAUSETAPE_SECTION") else { return };
         let parts: Vec<&str> = spec.split(':').collect();
         let frames = |s: &str| crate::library::cue::frames_to_time(s.parse().unwrap());
         let src = super::open_span(std::path::Path::new(parts[0]), Some((frames(parts[1]), Some(frames(parts[2])))), || {}).unwrap();
@@ -305,12 +306,12 @@ mod tests {
         assert!(worst < 1e-4);
     }
 
-    /// `NEATLIBRARY_FORMATS=<dir> cargo test -- --ignored decodes_formats --nocapture`
+    /// `PAUSETAPE_FORMATS=<dir> cargo test -- --ignored decodes_formats --nocapture`
     /// Fully decodes every file in the folder and reports which formats work.
     #[test]
     #[ignore]
     fn decodes_formats() {
-        let Some(dir) = std::env::var_os("NEATLIBRARY_FORMATS") else { return };
+        let Some(dir) = std::env::var_os("PAUSETAPE_FORMATS") else { return };
         let mut files: Vec<_> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.path()).collect();
         files.sort();
         for f in files {

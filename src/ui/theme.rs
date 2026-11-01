@@ -71,7 +71,7 @@ impl Accent {
 }
 
 fn accent_id() -> egui::Id {
-    egui::Id::unique("neatlibrary accent")
+    egui::Id::unique("pausetape accent")
 }
 
 /// Make `accent` the one `ink` hands out from now on.

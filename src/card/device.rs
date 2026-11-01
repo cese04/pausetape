@@ -180,7 +180,7 @@ impl Sample {
         match self {
             Sample::Cover => "shows the cover (orange and blue)",
             Sample::Id3v23 | Sample::Id3v24 => "shows the title with é, ü and 日本",
-            Sample::Playlist => "lists the playlist “NeatLibrary format test”",
+            Sample::Playlist => "lists the playlist “Pausetape format test”",
             _ => "plays",
         }
     }

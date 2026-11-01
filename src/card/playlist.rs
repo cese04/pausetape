@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn export_numbers_copies_and_prunes_removed_tracks() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-pl-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-pl-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let tracks: Vec<Track> = ["a", "b"]

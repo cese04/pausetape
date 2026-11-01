@@ -365,7 +365,7 @@ fn label_note(app: &mut App, ui: &mut Ui) {
         None => {
             widgets::help(
                 ui,
-                format!("Last written by NeatLibrary for “{}”, a card setup not on this Mac ({}). Sync makes it “{this}”'s; it only ever removes files “{this}” put there.", l.name, l.device.name()),
+                format!("Last written by Pausetape for “{}”, a card setup not on this Mac ({}). Sync makes it “{this}”'s; it only ever removes files “{this}” put there.", l.name, l.device.name()),
             );
         }
     }

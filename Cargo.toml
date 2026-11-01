@@ -1,5 +1,5 @@
 [package]
-name = "neatlibrary"
+name = "pausetape"
 version = "0.1.0"
 edition = "2024"
 description = "Organise a music library for the Snowsky Echo Mini (RECHO firmware), and play it."

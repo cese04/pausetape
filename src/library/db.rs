@@ -252,6 +252,14 @@ impl Db {
         Ok(())
     }
 
+    /// The app's data folder moved: covers chosen for unsaved corrections, kept in it, follow.
+    pub fn data_folder_moved(&mut self, old: &Path, new: &Path) -> Result<()> {
+        // As the paths appear inside the stored JSON (escaped backslashes on Windows).
+        let json = |p: &Path| serde_json::to_string(&p.join("covers")).map(|s| s.trim_matches('"').to_string());
+        self.conn.execute("UPDATE edits SET data = replace(data, ?1, ?2)", params![json(old)?, json(new)?])?;
+        Ok(())
+    }
+
     pub fn clear(&mut self) -> Result<()> {
         // Folders are read through again too: what they hold is no longer stored.
         self.conn.execute_batch("DELETE FROM tracks; DELETE FROM folders;")?;
@@ -294,7 +302,7 @@ mod tests {
     #[test]
     fn rescans_reuse_unchanged_files_and_keep_corrections() {
         use crate::library::scan;
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-db-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-db-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let music = root.join("music");
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Blur/Parklife/01 - Girls and Boys.mp3"] {
@@ -366,8 +374,22 @@ mod tests {
     }
 
     #[test]
+    fn covers_follow_the_data_folder() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-moved-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
+        let (old, new) = (root.join("Old Name"), root.join("New Name"));
+        let t = Track { path: "/music/a.flac".into(), cover: Some(old.join("covers/1.jpg")), dirty: true, ..Default::default() };
+        db.save_edits([&t]).unwrap();
+        db.data_folder_moved(&old, &new).unwrap();
+        let edits = db.edits_under(Path::new("/music")).unwrap();
+        assert_eq!(edits["/music/a.flac"].track.cover.as_deref(), Some(new.join("covers/1.jpg").as_path()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn artist_info_is_kept() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-artists-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-artists-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
         assert!(db.artist_info("flyinglotus").unwrap().is_none());
@@ -383,7 +405,7 @@ mod tests {
     #[test]
     fn the_library_opens_as_last_scanned() {
         use crate::library::{load, scan};
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-open-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-open-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let music = root.join("music");
         let album = music.join("Pink Floyd/Animals");
@@ -438,14 +460,14 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
-    /// `NEATLIBRARY_BENCH=~/Music cargo test --release -- --ignored scan_speed --nocapture`
+    /// `PAUSETAPE_BENCH=~/Music cargo test --release -- --ignored scan_speed --nocapture`
     /// Times a first scan against a rescan, using a throwaway database.
     #[test]
     #[ignore]
     fn scan_speed() {
         use crate::library::scan;
-        let Some(dir) = std::env::var_os("NEATLIBRARY_BENCH") else { return };
-        let db_path = std::env::temp_dir().join(format!("neatlibrary-bench-{}.sqlite3", std::process::id()));
+        let Some(dir) = std::env::var_os("PAUSETAPE_BENCH") else { return };
+        let db_path = std::env::temp_dir().join(format!("pausetape-bench-{}.sqlite3", std::process::id()));
         let mut db = Db::open(&db_path).unwrap();
         for label in ["first scan", "rescan"] {
             let t = std::time::Instant::now();

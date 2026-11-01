@@ -66,7 +66,7 @@ fn source_step(app: &mut App, ui: &mut Ui) {
         ui.add_space(6.0);
         match app.saved.source.clone() {
             None => {
-                muted(ui, "The folder on this computer that holds your music. It can be messy; NeatLibrary only reads it.");
+                muted(ui, "The folder on this computer that holds your music. It can be messy; Pausetape only reads it.");
             }
             Some(src) => {
                 ui.label(RichText::new(folder_name(&src)).size(20.0).strong());

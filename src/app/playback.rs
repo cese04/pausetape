@@ -30,7 +30,7 @@ impl App {
         let (skipped, why) = self.audio.take_skipped();
         if skipped > 0 {
             let why = why.map(|w| format!(" (last: {w})")).unwrap_or_default();
-            self.notice(format!("skipped {} NeatLibrary can't play{why}", plural_files(skipped)));
+            self.notice(format!("skipped {} Pausetape can't play{why}", plural_files(skipped)));
         }
         if let Some(i) = self.audio.status().index
             && i != self.qpos

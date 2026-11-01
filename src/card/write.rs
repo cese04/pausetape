@@ -341,23 +341,23 @@ mod tests {
 
     use super::*;
 
-    /// `NEATLIBRARY_CONVERT=<folder> [NEATLIBRARY_CD=1] cargo test -- --ignored convert_write --nocapture`
+    /// `PAUSETAPE_CONVERT=<folder> [PAUSETAPE_CD=1] cargo test -- --ignored convert_write --nocapture`
     /// Writes a folder of songs RECHO can't play (ALAC, AAC, Dolby…) to a temporary "card" with
     /// conversion on, reports what each became, and checks that a second write converts nothing.
     #[test]
     #[ignore]
     fn convert_write() {
         use lofty::prelude::*;
-        let Some(src) = std::env::var_os("NEATLIBRARY_CONVERT").map(PathBuf::from) else { return };
-        let card = std::env::temp_dir().join(format!("neatlibrary-test-convert-{}", std::process::id()));
+        let Some(src) = std::env::var_os("PAUSETAPE_CONVERT").map(PathBuf::from) else { return };
+        let card = std::env::temp_dir().join(format!("pausetape-test-convert-{}", std::process::id()));
         let _ = fs::remove_dir_all(&card);
         fs::create_dir_all(&card).unwrap();
         let (tracks, _) = crate::library::scan(&src, None, false, |_| {});
         let index = crate::library::grouping::build(&tracks, &Default::default());
         let mut w = WriteProfile::default();
         assert!(w.options.unplayable == super::super::Unplayable::Convert, "converting is the default");
-        // NEATLIBRARY_CD=1: hi-res at CD quality too.
-        w.options.cd_quality = std::env::var_os("NEATLIBRARY_CD").is_some();
+        // PAUSETAPE_CD=1: hi-res at CD quality too.
+        w.options.cd_quality = std::env::var_os("PAUSETAPE_CD").is_some();
         let plan = w.plan(&tracks, &index);
         for p in plan.iter().filter(|p| p.skip.is_some()) {
             println!("  left out: {} ({})", tracks[p.track].path.display(), p.skip.unwrap());
@@ -392,14 +392,14 @@ mod tests {
         let _ = fs::remove_dir_all(&card);
     }
 
-    /// `NEATLIBRARY_CUE_ALBUM=<folder with an album file + .cue> cargo test -- --ignored cue_album --nocapture`
+    /// `PAUSETAPE_CUE_ALBUM=<folder with an album file + .cue> cargo test -- --ignored cue_album --nocapture`
     /// Writes the folder to a temporary "card": every song is cut into its own FLAC, and a second
     /// write cuts nothing.
     #[test]
     #[ignore]
     fn cue_album_write() {
-        let Some(src) = std::env::var_os("NEATLIBRARY_CUE_ALBUM").map(PathBuf::from) else { return };
-        let card = std::env::temp_dir().join(format!("neatlibrary-test-cue-card-{}", std::process::id()));
+        let Some(src) = std::env::var_os("PAUSETAPE_CUE_ALBUM").map(PathBuf::from) else { return };
+        let card = std::env::temp_dir().join(format!("pausetape-test-cue-card-{}", std::process::id()));
         let _ = fs::remove_dir_all(&card);
         fs::create_dir_all(&card).unwrap();
         let (tracks, _) = crate::library::scan(&src, None, false, |_| {});
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn stopped_write_records_what_is_on_the_card() {
         use std::sync::atomic::Ordering;
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-stop-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-stop-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Muse/Absolution/03 - Time Is Running Out.mp3"] {
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn corrected_songs_are_copied_once() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-corrected-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-corrected-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3"] {
@@ -502,9 +502,9 @@ mod tests {
 
     #[test]
     fn song_folders_keep_clear_of_the_apps_own() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-own-folders-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-own-folders-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        for f in ["_Playlists/Mix Tape/01 - One.mp3", "NeatLibrary format test/Demo/01 - Two.mp3", "Muse/Absolution/01 - Intro.mp3"] {
+        for f in ["_Playlists/Mix Tape/01 - One.mp3", "Pausetape format test/Demo/01 - Two.mp3", "Muse/Absolution/01 - Intro.mp3"] {
             fs::create_dir_all(root.join(f).parent().unwrap()).unwrap();
             fs::write(root.join(f), f.as_bytes()).unwrap();
         }
@@ -514,13 +514,13 @@ mod tests {
         let w = WriteProfile { playlists_folder: "Playlists".into(), ..Default::default() };
         let mut firsts: Vec<String> = w.plan(&tracks, &index).iter().map(|p| p.rel.components().next().unwrap().as_os_str().to_string_lossy().into_owned()).collect();
         firsts.sort();
-        assert_eq!(firsts, ["Muse", "NeatLibrary format test_", "Playlists_"]);
+        assert_eq!(firsts, ["Muse", "Pausetape format test_", "Playlists_"]);
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn a_new_pattern_renames_on_the_card() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-rename-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-rename-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Muse/Absolution/03 - Time Is Running Out.mp3"] {
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn rewrite_after_deselecting_artist_and_playlist_cleans_up() {
-        let root = std::env::temp_dir().join(format!("neatlibrary-test-card-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pausetape-test-card-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
         for f in ["Muse/Absolution/01 - Intro.mp3", "Blur/Parklife/01 - Girls and Boys.mp3"] {

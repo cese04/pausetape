@@ -836,7 +836,7 @@ mod tests {
     #[test]
     #[ignore]
     fn musicbrainz_album_and_artist() {
-        let mut w = Worker::new(format!("NeatLibrary-tests/{}", env!("CARGO_PKG_VERSION")));
+        let mut w = Worker::new(format!("Pausetape-tests/{}", env!("CARGO_PKG_VERSION")));
         let (label, changes) = w.album("Radiohead", "OK Computer", &[lt(0, "Airbag", Some(1)), lt(1, "Karma Police", None), lt(2, "paranoid android", Some(2))]).unwrap();
         println!("{label}");
         for c in &changes {
@@ -864,7 +864,7 @@ mod tests {
     fn musicbrainz_cover() {
         let job = CoverJob { artist: "Radiohead".into(), album: "OK Computer".into(), tracks: vec![lt(0, "Airbag", Some(1)), lt(1, "Karma Police", Some(6)), lt(2, "Paranoid Android", Some(2))] };
         let mut got = None;
-        find_covers(format!("NeatLibrary-tests/{}", env!("CARGO_PKG_VERSION")), &[job], &AtomicBool::new(false), |i, r| got = Some((i, r)));
+        find_covers(format!("Pausetape-tests/{}", env!("CARGO_PKG_VERSION")), &[job], &AtomicBool::new(false), |i, r| got = Some((i, r)));
         let (i, r) = got.expect("one reply");
         let (bytes, label) = r.unwrap();
         println!("{label}: {} bytes", bytes.len());

@@ -1,4 +1,4 @@
-# Distributing NeatLibrary on macOS, Windows and Linux
+# Distributing Pausetape on macOS, Windows and Linux
 
 *Plan and status, 2026-10-27.* Related: [PROGRESS](PROGRESS.md) · [TESTING](TESTING.md)
 (Windows/Linux test guide) · [ARCHITECTURE](ARCHITECTURE.md) · [README](../README.md).
@@ -12,18 +12,18 @@
 | Apple Developer Program | **Not yet**: ad-hoc signed builds; users approve the app once in System Settings |
 | Country (for Windows signing) | **Mexico**: Azure's individual tier is unavailable, so SignPath (free, needs a public open-source repo, which MIT qualifies for) or a Certum certificate, when Windows comes |
 | ffmpeg | **Bundled**, as a minimal LGPL build made from source |
-| Name | **"NeatLibrary" is a placeholder**; renaming is a few known edits (below) |
+| Name | **Pausetape** (chosen 2026-11-01). Bundle identifier `io.github.pausetape.app`, to match the GitHub owner once the repository is public |
 
 ## Status: macOS (done)
 
-`scripts/package-macos.sh` builds `dist/NeatLibrary.app` and `dist/NeatLibrary-<version>.dmg`
+`scripts/package-macos.sh` builds `dist/Pausetape.app` and `dist/Pausetape-<version>.dmg`
 (+ SHA-256). Verified on this Mac (Apple Silicon, macOS 27):
 
 | Piece | Result |
 |---|---|
 | Universal app (Apple Silicon + Intel), macOS 12+ | 47 MB app, 24 MB DMG |
 | Bundled ffmpeg (`scripts/build-ffmpeg-macos.sh`) | FFmpeg 9.0.2, LGPL only, decoders/demuxers this app needs plus FLAC and MP3 (LAME) encoding for the card, universal, **8.9 MB**, links only system libraries. Converted a *Love (Dolby Atmos)* E-AC-3 track in 1 s. |
-| App finds its own ffmpeg first | `NeatLibrary --version` → `ffmpeg: bundled (…/Contents/MacOS/ffmpeg)` |
+| App finds its own ffmpeg first | `Pausetape --version` → `ffmpeg: bundled (…/Contents/MacOS/ffmpeg)` |
 | Info.plist | Version, category, minimum macOS, and the permission messages for SD cards, Documents, Downloads, Desktop, network drives |
 | Icon | `assets/icon/icon-1024.png`, redrawn by `scripts/make-icon.py [letter]` |
 | Licences in the app | `Contents/Resources/Licenses`: MIT, FFmpeg LGPL + build details, list of Rust crates and licences |
@@ -48,9 +48,9 @@ One release, three downloads that install like any other app:
 
 | Platform | Users download | Installs as |
 |---|---|---|
-| macOS 12+ (Apple Silicon and Intel) | `NeatLibrary.dmg` | `NeatLibrary.app` in Applications, signed and notarised |
-| Windows 10/11 (x64) | `NeatLibrary-setup.exe` | Start-menu app, signed if possible (see §4) |
-| Linux (x86_64) | `NeatLibrary.AppImage` and `neatlibrary.deb` | AppImage runs anywhere; .deb for Debian/Ubuntu |
+| macOS 12+ (Apple Silicon and Intel) | `Pausetape.dmg` | `Pausetape.app` in Applications, signed and notarised |
+| Windows 10/11 (x64) | `Pausetape-setup.exe` | Start-menu app, signed if possible (see §4) |
+| Linux (x86_64) | `Pausetape.AppImage` and `pausetape.deb` | AppImage runs anywhere; .deb for Debian/Ubuntu |
 
 All three are built by one automated workflow when a version tag is pushed, and published as a
 GitHub Release.
@@ -110,13 +110,13 @@ before use:
 
 ```toml
 [package.metadata.packager]
-product-name = "NeatLibrary"
-identifier = "io.github.<github-user>.neatlibrary"
+product-name = "Pausetape"
+identifier = "io.github.<github-user>.pausetape"
 version = "0.1.0"
 icons = ["assets/icon/32x32.png", "assets/icon/128x128.png", "assets/icon/icon.icns", "assets/icon/icon.ico"]
 before-packaging-command = "cargo build --release"
 out-dir = "dist"
-binaries = [{ path = "neatlibrary", main = true }]
+binaries = [{ path = "pausetape", main = true }]
 
 [package.metadata.packager.macos]
 minimum-system-version = "12.0"
@@ -242,8 +242,8 @@ notarisation), and Windows signing credentials for whichever option is chosen.
 - **Versioning:** semantic versions, `CHANGELOG.md`, and the version shown in Settings.
 
 Where user data lives (already handled by eframe, worth documenting for users):
-macOS `~/Library/Application Support/NeatLibrary`, Windows `%APPDATA%\NeatLibrary\data`,
-Linux `~/.local/share/neatlibrary`.
+macOS `~/Library/Application Support/Pausetape`, Windows `%APPDATA%\Pausetape\data`,
+Linux `~/.local/share/pausetape`.
 
 ---
 
@@ -292,7 +292,8 @@ the macOS build signed as soon as the Apple account exists.
 
 ## 10. Still open
 
-1. **Final name** and bundle identifier (placeholder: `NeatLibrary`, `io.github.neatlibrary.app`).
+1. ~~**Final name**~~ *Pausetape, 2026-11-01.* The bundle identifier should follow the
+   repository's owner (`io.github.<owner>.pausetape`) before the first public release.
 2. **Public repository?** Needed for the free SignPath route on Windows, and the natural home
    for releases and the macOS workflow.
 3. **Apple Developer Program** when it makes sense (removes the first-launch approval; enables

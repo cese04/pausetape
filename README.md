@@ -1,13 +1,14 @@
-# NeatLibrary
+# Pausetape
 
-*(working name)*
+*Like the tapes once made from the radio, pause button at the ready: your own selection, for the
+road.*
 
 A desktop app that organises your music for the **Snowsky Echo Mini** running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware, and plays it on your computer in a quiet,
 Tufte-inspired player.
 
 RECHO is fast, but it reads the SD card as it is: it browses folders sorted by name, has no
-playlists, and plays only FLAC, MP3 and WAV. NeatLibrary turns a music folder (organised or not)
+playlists, and plays only FLAC, MP3 and WAV. Pausetape turns a music folder (organised or not)
 into exactly the layout RECHO browses well:
 
 ```
@@ -60,7 +61,7 @@ tried yet**. Details: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Install on macOS
 
-1. Open `NeatLibrary-<version>.dmg` and drag the app to Applications.
+1. Open `Pausetape-<version>.dmg` and drag the app to Applications.
 2. Open it once; macOS says it can't verify the developer. Click **Done**.
 3. System Settings › Privacy & Security › **Open Anyway**. Only needed the first time.
 
@@ -68,7 +69,7 @@ To build the DMG yourself (needs Xcode Command Line Tools and
 `rustup target add x86_64-apple-darwin`; the first run also compiles the bundled ffmpeg):
 
 ```sh
-scripts/package-macos.sh      # → dist/NeatLibrary.app and dist/NeatLibrary-<version>.dmg
+scripts/package-macos.sh      # → dist/Pausetape.app and dist/Pausetape-<version>.dmg
 ```
 
 ## Build from source (any platform)

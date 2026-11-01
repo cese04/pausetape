@@ -43,7 +43,7 @@ impl App {
     fn card_arrived(&mut self, path: PathBuf, label: Label, bring_up: Option<usize>, first: bool) {
         let shown = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let Some(i) = self.saved.writes.iter().position(|w| w.id == label.id) else {
-            self.notice(format!("“{shown}” plugged in: written by NeatLibrary for “{}”, a card setup not on this Mac", label.name));
+            self.notice(format!("“{shown}” plugged in: written by Pausetape for “{}”, a card setup not on this Mac", label.name));
             return;
         };
         let name = self.saved.writes[i].name.clone();

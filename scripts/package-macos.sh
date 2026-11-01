@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build the macOS app and its disk image:
 #
-#   dist/NeatLibrary.app                 universal (Apple Silicon + Intel), ffmpeg inside
-#   dist/NeatLibrary-<version>.dmg       drag-to-Applications disk image
-#   dist/NeatLibrary-<version>.dmg.sha256
+#   dist/Pausetape.app                 universal (Apple Silicon + Intel), ffmpeg inside
+#   dist/Pausetape-<version>.dmg       drag-to-Applications disk image
+#   dist/Pausetape-<version>.dmg.sha256
 #
 # Not signed with a Developer ID yet (no Apple Developer Program): the app is ad-hoc signed,
 # so on first launch macOS asks the user to approve it (see "Read me first.txt" in the DMG).
@@ -12,8 +12,8 @@
 set -euo pipefail
 
 # Placeholder name and identifier; change together with APP_NAME in src/main.rs.
-APP_NAME="NeatLibrary"
-BUNDLE_ID="io.github.neatlibrary.app"
+APP_NAME="Pausetape"
+BUNDLE_ID="io.github.pausetape.app"
 MIN_MACOS=12.0
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -21,7 +21,7 @@ cd "$ROOT"
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
-BIN=neatlibrary
+BIN=pausetape
 
 echo "== $APP_NAME $VERSION"
 

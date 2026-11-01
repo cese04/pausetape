@@ -1,4 +1,4 @@
-//! NeatLibrary: organise a music collection, write it to SD cards in the Artist / Album / Track
+//! Pausetape: organise a music collection, write it to SD cards in the Artist / Album / Track
 //! folders a portable player browses (the Snowsky Echo Mini, with RECHO or its own firmware),
 //! and listen to it on the way.
 
@@ -10,15 +10,36 @@ mod musicbrainz;
 mod platform;
 mod ui;
 
-/// Name shown to the user. A placeholder: renaming the app means changing this, `APP_NAME` in
-/// `scripts/package-macos.sh`, and the bundle identifier there.
-pub const APP_NAME: &str = "NeatLibrary";
+/// Name shown to the user. Renaming the app means changing this, `APP_NAME` in
+/// `scripts/package-macos.sh` and the bundle identifier there, and adding a former name below.
+pub const APP_NAME: &str = "Pausetape";
 /// Folder name for settings, the library database and undo journals. Keep it stable across a
-/// rename (or migrate the folder), or users lose their settings.
-pub const APP_ID: &str = "NeatLibrary";
+/// rename (or migrate the folder, as `adopt_former_data` does), or users lose their settings.
+pub const APP_ID: &str = "Pausetape";
+/// The app's name until 2026-11-01, used for nothing but recognising what it left behind: its
+/// data folder (moved over on the first start), and its label, test files and gathered files
+/// on cards.
+pub const FORMER_NAME: &str = "NeatLibrary";
+
+/// The first start under this name: the former name's data folder becomes this one's, and the
+/// covers chosen for unsaved corrections (kept there) are found at their new place.
+fn adopt_former_data() {
+    let (Some(old), Some(new)) = (eframe::storage_dir(FORMER_NAME), eframe::storage_dir(APP_ID)) else { return };
+    if !old.is_dir() || new.exists() {
+        return;
+    }
+    if let Some(parent) = new.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if std::fs::rename(&old, &new).is_ok()
+        && let Ok(mut db) = library::db::Db::open_default()
+    {
+        let _ = db.data_folder_moved(&old, &new);
+    }
+}
 
 fn main() -> eframe::Result {
-    // Headless dry run: `neatlibrary --plan <music folder>` prints the layout without touching files.
+    // Headless dry run: `pausetape --plan <music folder>` prints the layout without touching files.
     let args: Vec<String> = std::env::args().collect();
     // `--version`: what's running and which ffmpeg it uses (handy for bug reports).
     if args.get(1).is_some_and(|a| a == "--version") {
@@ -36,6 +57,7 @@ fn main() -> eframe::Result {
         print_plan(std::path::Path::new(dir));
         return Ok(());
     }
+    adopt_former_data();
     audio::clear_converted();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_title(APP_NAME).with_inner_size([1040.0, 760.0]).with_min_inner_size([720.0, 480.0]),

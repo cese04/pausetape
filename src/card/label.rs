@@ -10,7 +10,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{Device, WriteProfile};
 
-pub const LABEL_FILE: &str = ".neatlibrary";
+pub const LABEL_FILE: &str = ".pausetape";
+
+/// The label as the app wrote it under its former name: read, and replaced at the next write.
+fn former_label_file() -> String {
+    format!(".{}", crate::FORMER_NAME.to_lowercase())
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -29,9 +34,10 @@ impl Label {
         Label { id: w.id.clone(), name: w.name.clone(), device: w.options.device, written: super::now() }
     }
 
-    /// The label at the top of `card`, if NeatLibrary wrote one there.
+    /// The label at the top of `card`, if Pausetape wrote one there.
     pub fn read(card: &Path) -> Option<Label> {
-        let l: Label = serde_json::from_slice(&std::fs::read(card.join(LABEL_FILE)).ok()?).ok()?;
+        let bytes = std::fs::read(card.join(LABEL_FILE)).or_else(|_| std::fs::read(card.join(former_label_file()))).ok()?;
+        let l: Label = serde_json::from_slice(&bytes).ok()?;
         (!l.id.is_empty()).then_some(l)
     }
 
@@ -40,6 +46,10 @@ impl Label {
         write_hidden(&path, &serde_json::to_vec_pretty(self)?).with_context(|| format!("labelling the card ({})", path.display()))?;
         // macOS adds a "._" companion on FAT cards.
         let _ = std::fs::remove_file(card.join(format!("._{LABEL_FILE}")));
+        let former = former_label_file();
+        for name in [former.clone(), format!("._{former}")] {
+            let _ = std::fs::remove_file(card.join(name));
+        }
         Ok(())
     }
 }
@@ -72,7 +82,7 @@ mod tests {
 
     #[test]
     fn labels_name_their_setup() {
-        let card = std::env::temp_dir().join(format!("neatlibrary-test-label-{}", std::process::id()));
+        let card = std::env::temp_dir().join(format!("pausetape-test-label-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&card);
         std::fs::create_dir_all(&card).unwrap();
         assert_eq!(Label::read(&card), None);
@@ -87,9 +97,23 @@ mod tests {
         // Saved setups from before ids get one when they load.
         let old: WriteProfile = serde_json::from_str(r#"{"name":"Echo Mini"}"#).unwrap();
         assert_eq!(old.id.len(), 16);
-        // Not NeatLibrary's, or damaged: no label.
+        // Not Pausetape's, or damaged: no label.
         std::fs::write(card.join(LABEL_FILE), "{}").unwrap();
         assert_eq!(Label::read(&card), None);
+        let _ = std::fs::remove_dir_all(&card);
+    }
+
+    #[test]
+    fn a_label_from_the_former_name_is_read_then_replaced() {
+        let card = std::env::temp_dir().join(format!("pausetape-test-former-label-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&card);
+        std::fs::create_dir_all(&card).unwrap();
+        let l = Label { id: "0123456789abcdef".into(), name: "Echo Mini".into(), ..Default::default() };
+        std::fs::write(card.join(former_label_file()), serde_json::to_vec(&l).unwrap()).unwrap();
+        assert_eq!(Label::read(&card).as_ref(), Some(&l));
+        l.save(&card).unwrap();
+        assert!(card.join(LABEL_FILE).is_file() && !card.join(former_label_file()).exists());
+        assert_eq!(Label::read(&card), Some(l));
         let _ = std::fs::remove_dir_all(&card);
     }
 }

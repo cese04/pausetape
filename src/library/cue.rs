@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn album_file_becomes_songs() {
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-cue-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-cue-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let sheet = dir.join("1979 - Unknown Pleasures.cue");
@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn one_song_file_takes_gaps_from_sheet() {
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-cue-single-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-cue-single-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let sheet = dir.join("Octavarium.cue");

@@ -122,7 +122,7 @@ pub fn split_artist_album(s: &str) -> Option<(String, AlbumName)> {
 }
 
 /// A folder that holds music without naming an artist: "Music", iTunes' "Música", a downloads
-/// folder, or the one NeatLibrary copies a card's music into.
+/// folder, or the one Pausetape copies a card's music into.
 pub fn container_folder(s: &str) -> bool {
     const NAMES: &[&str] = &[
         "music", "música", "musica", "musique", "musik", "muziek", "itunes", "itunes media", "itunes music", "media", "downloads", "download", "descargas",

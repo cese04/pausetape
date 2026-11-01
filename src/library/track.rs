@@ -12,7 +12,7 @@ use super::mp4::codec_name;
 /// up to 24-bit/192 kHz, MP3 up to 320 kbps). What a particular player plays is `card::Device`'s.
 pub const COMMON_FORMATS: &[&str] = &["flac", "mp3", "wav"];
 
-/// Formats NeatLibrary itself can decode and play (via Symphonia).
+/// Formats Pausetape itself can decode and play (via Symphonia).
 pub const APP_FORMATS: &[&str] = &["flac", "mp3", "wav", "m4a", "m4b", "mp4", "aac", "alac", "aiff", "aif", "aifc", "ogg", "oga", "caf", "mka", "mp2"];
 
 /// MP4 sample entries Symphonia decodes. Anything else in an .m4a (Dolby, Opus…) needs ffmpeg.
@@ -101,7 +101,7 @@ impl Track {
         APP_FORMATS.contains(&self.ext.as_str()) && self.codec.as_deref().is_none_or(|c| NATIVE_MP4_CODECS.contains(&c))
     }
 
-    /// NeatLibrary's player can play this file, natively or by converting it with ffmpeg.
+    /// Pausetape's player can play this file, natively or by converting it with ffmpeg.
     pub fn plays_here(&self) -> bool {
         !self.damaged && (self.native() || (self.ffmpeg_can_decode() && crate::audio::ffmpeg().is_some()))
     }

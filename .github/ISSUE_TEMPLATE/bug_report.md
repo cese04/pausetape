@@ -13,6 +13,6 @@ labels: bug
 1.
 2.
 
-**System and version:** <!-- OS + output of `neatlibrary --version` -->
+**System and version:** <!-- OS + output of `pausetape --version` -->
 
 **Error text or screenshots** <!-- run the app from a terminal to see errors -->

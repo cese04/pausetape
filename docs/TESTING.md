@@ -2,7 +2,7 @@
 
 *Written 2026-10-27, before the app had ever been built on either system.*
 
-NeatLibrary was developed and tested only on macOS. The code is meant to be portable, but
+Pausetape was developed and tested only on macOS. The code is meant to be portable, but
 nobody has compiled or run it on Windows or Linux yet. This guide takes you from a fresh machine
 to a full test pass, says what to expect (including the gaps already known), and how to report
 results.
@@ -24,8 +24,8 @@ tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
   compile error there is likely, since this code has never met those compilers.
 
 Each run also uploads the built program (*Artifacts* at the bottom of the run page:
-`neatlibrary-Windows`, `neatlibrary-Linux`), so you can test on a machine without installing
-Rust. On Linux, make it executable first: `chmod +x neatlibrary`.
+`pausetape-Windows`, `pausetape-Linux`), so you can test on a machine without installing
+Rust. On Linux, make it executable first: `chmod +x pausetape`.
 
 ---
 
@@ -70,7 +70,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 git clone https://github.com/<you>/<repo>.git
 cd <repo>
 cargo test                          # 35 tests should pass (9 more are skipped on purpose)
-cargo run --release -- --version    # e.g. "NeatLibrary 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
+cargo run --release -- --version    # e.g. "Pausetape 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
 
@@ -100,7 +100,7 @@ cargo run --release -- --plan ~/Music           # Linux
 | 8 | **Linux** | Fonts: the serif look depends on DejaVu Serif at the Debian/Ubuntu path. On Fedora/Arch the app falls back to a sans font, and Chinese/Japanese/Korean names may show as boxes. | Cosmetic only. |
 | 9 | Both | ffmpeg isn't bundled (only the Mac app includes it). | Install it as in §1. |
 | 10 | All | *Fixed 2026-10-31:* starting with the music folder's drive unplugged used to empty the library database, and a Sync with an empty library removed the setup's songs from the card ([REVIEW](REVIEW.md) R1, R2). Now the library says it can't reach the folder and keeps everything. | To check it: start the app with the music drive unplugged, plug it in, and see it read again by itself. |
-| 11 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* plugging in a labelled card brings up its setup, and converting songs no longer flashes console windows ([REVIEW](REVIEW.md) R12, R13). The card's `.neatlibrary` file is hidden (R23). | To check it: unplug and plug the card back in with another setup open; Sync a few songs that need converting and watch for console windows; the card's root in Explorer shows no `.neatlibrary` (unless hidden files are shown). |
+| 11 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* plugging in a labelled card brings up its setup, and converting songs no longer flashes console windows ([REVIEW](REVIEW.md) R12, R13). The card's `.pausetape` file is hidden (R23). | To check it: unplug and plug the card back in with another setup open; Sync a few songs that need converting and watch for console windows; the card's root in Explorer shows no `.pausetape` (unless hidden files are shown). |
 | 12 | **Windows**, **Linux** | *Fixed on Windows 2026-10-31:* **Move to the Trash** leaves files on USB sticks, SD cards and network drives where they are, as they'd be deleted for good there. **Linux:** files should go to a `.Trash-<uid>` folder on the drive ([REVIEW](REVIEW.md) R10). | To check it on Linux: move one covered copy to the Trash on an external drive and find it in the file manager's Trash. |
 | 13 | **Linux** | *Fixed 2026-10-31:* folders linked into the music folder are followed ([REVIEW](REVIEW.md) R20). | To check it: link a folder of music in and rescan. |
 
@@ -197,7 +197,7 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     card** opens *Music already on the card* by itself (once; later, **go through them**);
     **Check them against the library** sorts them; **Take
     over the card** moves the copies into the layout (and, if ticked, the rest into
-    `_Before NeatLibrary`; with **delete clutter** ticked, iTunes data, `desktop.ini`/`Thumbs.db`
+    `_Before Pausetape`; with **delete clutter** ticked, iTunes data, `desktop.ini`/`Thumbs.db`
     and rip logs are deleted); **undo taking over the card** puts everything back (except deleted
     clutter). **copy them into your music folder** puts the card's songs that aren't in the
     library under `From the card` in the music folder.
@@ -235,12 +235,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     converted (AAC, APE, WMA and Ogg go as they are), and the library's format note and badges
     say "the Echo Mini" instead of "RECHO". Switch back to RECHO and the counts return.
 20b. **test it on the player** › **Write the test folder to the card**: the card gets
-    `NeatLibrary format test/` (17 samples, or 16 without an APE song in the library) and
-    `NeatLibrary format test.m3u8`. The card tab doesn't count them as music the write didn't put
+    `Pausetape format test/` (17 samples, or 16 without an APE song in the library) and
+    `Pausetape format test.m3u8`. The card tab doesn't count them as music the write didn't put
     there. Try them on the player and tick yes or no; the text at the bottom says what changes.
     Untick a format the player couldn't play and **Compare** converts it. **take it off the card**
     removes only the test's files.
-20c. **Sync** to the card, then look at its top folder (⇧⌘. shows hidden files): `.neatlibrary`
+20c. **Sync** to the card, then look at its top folder (⇧⌘. shows hidden files): `.pausetape`
     names the card setup. Make a second setup (**duplicate**), switch to it: the card tab says the
     card belongs to the first and offers **switch to** and **use it for this setup**; Sync is gone.
     Eject the card, switch back to the second setup, plug the card in: within a few seconds the
@@ -268,17 +268,17 @@ Debug builds can capture every tab and dialog automatically. Run from the projec
 
 ```powershell
 # Windows (PowerShell)
-$env:NEATLIBRARY_SHOT = "C:\temp\shots"; cargo run
+$env:PAUSETAPE_SHOT = "C:\temp\shots"; cargo run
 ```
 
 ```sh
 # Linux
-NEATLIBRARY_SHOT=/tmp/shots cargo run
+PAUSETAPE_SHOT=/tmp/shots cargo run
 ```
 
 It opens the app, steps through the tabs (with a short demo: plays a track, opens dialogs),
-saves `folders.ppm`, `library.ppm`, … and quits. Add `NEATLIBRARY_SHOT_SIZE=720x600` to check
-a small window, and `NEATLIBRARY_SHOT_FILTER=<text>` to filter the library first. PPM opens in
+saves `folders.ppm`, `library.ppm`, … and quits. Add `PAUSETAPE_SHOT_SIZE=720x600` to check
+a small window, and `PAUSETAPE_SHOT_FILTER=<text>` to filter the library first. PPM opens in
 GIMP or IrfanView, or convert with `ffmpeg -i library.ppm library.png`. The demo plays a track,
 shows a sample "Road Trip" playlist, and runs a MusicBrainz lookup if your library has a
 "Radiohead" album. These changes aren't saved: your real playlists and settings stay as they were.
@@ -293,7 +293,7 @@ Open an issue with the **Test report** template (`.github/ISSUE_TEMPLATE/test-re
 asks for:
 
 - the OS and version (and on Linux, the distribution and Wayland or X11);
-- the output of `neatlibrary --version`;
+- the output of `pausetape --version`;
 - the checklist with ✅/❌;
 - any error text from the terminal, and screenshots of anything that looks wrong.
 
@@ -303,9 +303,9 @@ asks for:
 
 | | Settings, library database, undo journals | ffmpeg conversions (temporary) |
 |---|---|---|
-| Windows | `%APPDATA%\NeatLibrary\data\` | `%TEMP%\neatlibrary-converted\` |
-| Linux | `~/.local/share/neatlibrary/` (or `$XDG_DATA_HOME/neatlibrary/`) | `/tmp/neatlibrary-converted/` |
-| macOS | `~/Library/Application Support/NeatLibrary/` | `$TMPDIR/neatlibrary-converted/` |
+| Windows | `%APPDATA%\Pausetape\data\` | `%TEMP%\pausetape-converted\` |
+| Linux | `~/.local/share/pausetape/` (or `$XDG_DATA_HOME/pausetape/`) | `/tmp/pausetape-converted/` |
+| macOS | `~/Library/Application Support/Pausetape/` | `$TMPDIR/pausetape-converted/` |
 
 Files there: `app.ron` (settings, writes, playlists), `library.sqlite3` (cached tags and
 unsaved corrections), `journals/` (undo for *Reorganise*). Deleting the folder resets the app.

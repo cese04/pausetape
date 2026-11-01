@@ -398,7 +398,7 @@ mod tests {
     #[test]
     fn linked_folders_are_followed() {
         use std::os::unix::fs::symlink;
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-links-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-links-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let (music, other) = (dir.join("music"), dir.join("other drive"));
         std::fs::create_dir_all(other.join("Blur/Parklife")).unwrap();
@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn blank_files_are_damaged() {
-        let dir = std::env::temp_dir().join(format!("neatlibrary-test-damaged-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("pausetape-test-damaged-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // As a failing card leaves them: the size is right, the bytes are zeros.

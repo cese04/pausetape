@@ -355,7 +355,7 @@ impl App {
         saved.active_write = saved.active_write.min(saved.writes.len() - 1);
         // Screenshots of a music folder that can't be reached (never saved: see `save`).
         #[cfg(debug_assertions)]
-        if let Some(dir) = std::env::var_os("NEATLIBRARY_SHOT_SOURCE").filter(|_| std::env::var_os("NEATLIBRARY_SHOT").is_some()) {
+        if let Some(dir) = std::env::var_os("PAUSETAPE_SHOT_SOURCE").filter(|_| std::env::var_os("PAUSETAPE_SHOT").is_some()) {
             saved.source = Some(dir.into());
         }
         let first_run = saved.source.is_none();
