@@ -177,8 +177,9 @@ impl<S: Source> Source for Section<S> {
     }
 }
 
-/// Cache of converted files, newest last; only a few are kept (a 5-minute track is ~55 MB).
-const KEEP_CONVERTED: usize = 6;
+/// Cache of converted files: the newest are kept up to this size (a 5-minute song is ~55 MB, a
+/// CD stored as one file ~600 MB); the newest is always kept, as it's likely playing.
+const KEEP_BYTES: u64 = 1 << 30;
 
 fn converted_dir() -> PathBuf {
     std::env::temp_dir().join("neatlibrary-converted")
@@ -219,13 +220,24 @@ fn converted(path: &Path, ff: &Path) -> Result<PathBuf, String> {
     }
     std::fs::rename(&tmp, &out).map_err(|e| e.to_string())?;
 
-    // Trim the cache to the most recent conversions.
+    // Trim the cache to the most recent conversions that fit in `KEEP_BYTES`.
     if let Ok(entries) = std::fs::read_dir(&dir) {
-        let mut files: Vec<(std::time::SystemTime, PathBuf)> =
-            entries.flatten().filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path()))).collect();
+        let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = entries
+            .flatten()
+            .filter_map(|e| {
+                let m = e.metadata().ok()?;
+                Some((m.modified().ok()?, m.len(), e.path()))
+            })
+            .collect();
         files.sort();
-        for (_, old) in files.iter().rev().skip(KEEP_CONVERTED) {
-            let _ = std::fs::remove_file(old);
+        let mut kept = 0;
+        for (i, (_, size, old)) in files.iter().rev().enumerate() {
+            kept += size;
+            if i > 0 && kept > KEEP_BYTES {
+                // A file another copy of the app is playing stays readable where it's open
+                // (macOS, Linux) or can't be removed (Windows): either way, nothing breaks.
+                let _ = std::fs::remove_file(old);
+            }
         }
     }
     Ok(out)

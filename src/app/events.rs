@@ -45,9 +45,14 @@ impl App {
                         parts.push(format!("database unavailable, read everything: {e}"));
                     }
                     self.notice(parts.join(" · "));
+                    // The play queue follows its songs into the new library (the music plays on
+                    // meanwhile); it's let go only if one of them is gone, since the audio thread
+                    // knows the songs by their place in it.
+                    let ids: Vec<PathBuf> = self.queue.iter().map(|&i| self.tracks[i].id()).collect();
                     self.tracks = tracks;
+                    let now: HashMap<PathBuf, usize> = self.tracks.iter().enumerate().map(|(i, t)| (t.id(), i)).collect();
+                    self.queue = ids.iter().map(|id| now.get(id).copied()).collect::<Option<Vec<_>>>().unwrap_or_default();
                     self.lookups.clear();
-                    self.queue.clear();
                     // Track numbers change with a new scan.
                     self.selected.clear();
                     self.select_anchor = None;

@@ -3,9 +3,10 @@
 //! another even when the window isn't being drawn.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Sender, unbounded};
 use rodio::Source;
@@ -38,7 +39,11 @@ pub struct Status {
     pub converting: bool,
     /// Entries stepped over since the UI last asked (`take_skipped`).
     pub skipped: usize,
+    /// Why the last of them failed to open, when it was tried.
+    pub skip_reason: Option<String>,
 }
+
+const NO_OUTPUT: &str = "no audio output";
 
 pub struct Audio {
     tx: Sender<Cmd>,
@@ -72,8 +77,8 @@ impl Queue {
             let mut st = shared.lock().unwrap();
             match decoded {
                 Ok(src) => {
-                    let total = st.skipped + skipped;
-                    *st = Status { len: src.total_duration(), path: Some(path), index: Some(i), skipped: total, ..Default::default() };
+                    let (total, skip_reason) = (st.skipped + skipped, st.skip_reason.take());
+                    *st = Status { len: src.total_duration(), path: Some(path), index: Some(i), skipped: total, skip_reason, ..Default::default() };
                     // Decoded ahead on a thread of its own: a busy disk mustn't reach the speakers.
                     player.append(super::prefetch::Prefetch::new(src));
                     player.play();
@@ -83,6 +88,8 @@ impl Queue {
                 }
                 Err(e) => {
                     // Note it and carry on with the next song.
+                    let name = path.file_name().unwrap_or_default().to_string_lossy();
+                    st.skip_reason = Some(format!("{name}: {e}"));
                     st.error = Some(format!("{}: {e}", path.display()));
                     skipped += 1;
                 }
@@ -90,10 +97,43 @@ impl Queue {
         }
         // Nothing left to play: the queue is done.
         let mut st = shared.lock().unwrap();
-        let (error, index, total) = (st.error.take(), st.index, st.skipped + skipped);
-        *st = Status { error, index, skipped: total, ..Default::default() };
+        let (error, index, total, skip_reason) = (st.error.take(), st.index, st.skipped + skipped, st.skip_reason.take());
+        *st = Status { error, index, skipped: total, skip_reason, ..Default::default() };
         wake();
     }
+}
+
+/// The audio output and its player. Where the system's default output changes (headphones
+/// plugged in), the stream follows it by itself on macOS, Windows and PipeWire; when it fails
+/// for good (a USB DAC or Bluetooth headphones gone with nothing taking over), `lost` is set and
+/// the playback thread opens the output afresh.
+struct Output {
+    _sink: rodio::MixerDeviceSink,
+    player: rodio::Player,
+}
+
+/// How often to try again while there's no output.
+const RETRY: Duration = Duration::from_secs(2);
+
+fn open_output(lost: &Arc<AtomicBool>, volume: f32) -> Result<Output, String> {
+    let flag = lost.clone();
+    let mut sink = rodio::DeviceSinkBuilder::from_default_device()
+        .map_err(|e| e.to_string())?
+        .with_error_callback(move |e: rodio::CpalError| {
+            use rodio::CpalErrorKind as K;
+            // Rerouted to the new default, or a glitch: playback goes on as it is.
+            if !matches!(e.kind(), K::DeviceChanged | K::Xrun | K::RealtimeDenied) {
+                flag.store(true, Ordering::Relaxed);
+            }
+        })
+        .open_sink_or_fallback()
+        .map_err(|e| e.to_string())?;
+    // Quiet on closing: the library would otherwise print a notice to the terminal (R19).
+    sink.log_on_drop(false);
+    let player = rodio::Player::connect_new(sink.mixer());
+    player.set_volume(volume);
+    lost.store(false, Ordering::Relaxed);
+    Ok(Output { _sink: sink, player })
 }
 
 impl Audio {
@@ -102,46 +142,102 @@ impl Audio {
         let status = Arc::new(Mutex::new(Status::default()));
         let shared = status.clone();
         thread::spawn(move || {
-            let sink = match rodio::DeviceSinkBuilder::open_default_sink() {
-                Ok(s) => s,
-                Err(e) => {
-                    shared.lock().unwrap().error = Some(format!("no audio output: {e}"));
-                    return;
-                }
-            };
-            let player = rodio::Player::connect_new(sink.mixer());
+            let lost = Arc::new(AtomicBool::new(false));
+            let mut volume = 1.0;
+            let mut out: Option<Output> = None;
+            let mut tried: Option<Instant> = None;
+            // What was playing when the output went: (queue position, where, paused).
+            let mut resume: Option<(usize, Duration, bool)> = None;
             let mut queue = Queue { items: Vec::new(), live: false };
             loop {
-                match rx.recv_timeout(Duration::from_millis(100)) {
+                if lost.load(Ordering::Relaxed)
+                    && let Some(o) = out.take()
+                {
+                    let index = shared.lock().unwrap().index;
+                    if let Some(i) = index.filter(|_| queue.live) {
+                        resume = Some((i, o.player.get_pos(), o.player.is_paused()));
+                    }
+                    queue.live = false;
+                    // Dropped before opening the next, so the old device is let go of first.
+                    drop(o);
+                }
+                if out.is_none() && tried.is_none_or(|t| t.elapsed() >= RETRY) {
+                    tried = Some(Instant::now());
+                    match open_output(&lost, volume) {
+                        Ok(o) => {
+                            if let Some((i, pos, paused)) = resume.take() {
+                                queue.start(i, &o.player, &shared, &wake);
+                                let _ = o.player.try_seek(pos);
+                                if paused {
+                                    o.player.pause();
+                                }
+                            }
+                            let mut st = shared.lock().unwrap();
+                            if st.error.as_deref().is_some_and(|e| e.starts_with(NO_OUTPUT)) {
+                                st.error = None;
+                            }
+                            drop(st);
+                            out = Some(o);
+                            wake();
+                        }
+                        Err(e) => {
+                            let mut st = shared.lock().unwrap();
+                            if st.error.is_none() {
+                                st.error = Some(format!("{NO_OUTPUT}: {e}"));
+                                wake();
+                            }
+                        }
+                    }
+                }
+                let cmd = rx.recv_timeout(Duration::from_millis(100));
+                if let Err(crossbeam_channel::RecvTimeoutError::Disconnected) = cmd {
+                    return;
+                }
+                let Some(o) = &out else {
+                    // No output: keep what was asked for, to play once there is one.
+                    match cmd {
+                        Ok(Cmd::Queue(items, from)) => (queue.items, resume) = (items, Some((from, Duration::ZERO, false))),
+                        Ok(Cmd::Jump(i)) => resume = Some((i, Duration::ZERO, false)),
+                        Ok(Cmd::Volume(v)) => volume = v,
+                        Ok(Cmd::Stop) => resume = None,
+                        _ => {}
+                    }
+                    continue;
+                };
+                let player = &o.player;
+                match cmd {
                     Ok(Cmd::Queue(items, from)) => {
                         queue.items = items;
-                        queue.start(from, &player, &shared, &wake);
+                        queue.start(from, player, &shared, &wake);
                     }
-                    Ok(Cmd::Jump(i)) => queue.start(i, &player, &shared, &wake),
+                    Ok(Cmd::Jump(i)) => queue.start(i, player, &shared, &wake),
                     Ok(Cmd::Toggle) => {
                         if player.is_paused() { player.play() } else { player.pause() }
                     }
                     Ok(Cmd::Seek(to)) => {
                         let _ = player.try_seek(to);
                     }
-                    Ok(Cmd::Volume(v)) => player.set_volume(v),
+                    Ok(Cmd::Volume(v)) => {
+                        volume = v;
+                        player.set_volume(v);
+                    }
                     Ok(Cmd::Stop) => {
                         player.clear();
                         queue.live = false;
                         let index = shared.lock().unwrap().index;
                         *shared.lock().unwrap() = Status { index, ..Default::default() };
                     }
-                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
-                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return,
+                    Err(_) => {}
                 }
                 {
                     let mut st = shared.lock().unwrap();
                     st.paused = player.is_paused();
                     st.pos = player.get_pos();
                 }
-                if queue.live && player.empty() {
+                // A failed output stops taking samples without emptying: only a real end moves on.
+                if queue.live && player.empty() && !lost.load(Ordering::Relaxed) {
                     let next = shared.lock().unwrap().index.map_or(0, |i| i + 1);
-                    queue.start(next, &player, &shared, &wake);
+                    queue.start(next, player, &shared, &wake);
                 }
             }
         });
@@ -152,9 +248,11 @@ impl Audio {
         self.status.lock().unwrap().clone()
     }
 
-    /// How many queue entries were stepped over (undecodable, or failed to open) since last asked.
-    pub fn take_skipped(&self) -> usize {
-        std::mem::take(&mut self.status.lock().unwrap().skipped)
+    /// How many queue entries were stepped over (undecodable, or failed to open) since last
+    /// asked, and why the last one that was tried failed.
+    pub fn take_skipped(&self) -> (usize, Option<String>) {
+        let mut st = self.status.lock().unwrap();
+        (std::mem::take(&mut st.skipped), st.skip_reason.take())
     }
 
     /// Play `items` from position `from`, then the rest in order, without the UI's help.
@@ -203,7 +301,7 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        println!("{seen:?}, skipped {}", audio.take_skipped());
+        println!("{seen:?}, skipped {:?}", audio.take_skipped());
         assert!(seen.contains(&(Some(0), true)) && seen.contains(&(Some(2), true)), "played 0, stepped over 1, played 2");
         assert_eq!(seen.last(), Some(&(Some(2), false)), "then stopped at the end of the queue");
     }
