@@ -51,11 +51,24 @@ Every push and pull request is built and tested on macOS, Windows and Linux
 ([ci.yml](.github/workflows/ci.yml)); `main`, version tags and pull requests also get the
 packaged Mac app ([macos.yml](.github/workflows/macos.yml)).
 
-The dependencies are audited against the [RustSec advisories](https://rustsec.org) with
-`cargo audit` on every run, and every Monday on `main` (GitHub runs scheduled workflows from
-the default branch). A known vulnerability fails the build; crates that are only no longer
-maintained are reported as warnings. To check locally: `cargo install cargo-audit`, then
-`cargo audit`.
+The dependencies are checked with [cargo-deny](https://embarkstudios.github.io/cargo-deny/) on
+every run, and every Monday on `main` (GitHub runs scheduled workflows from the default branch),
+against the rules in [deny.toml](deny.toml):
+
+- a known vulnerability ([RustSec](https://rustsec.org)) fails the build; so does a crate no
+  longer maintained if it's one of ours, not one further down the tree;
+- so does a licence outside the list (permissive ones, MPL-2.0, and the fonts' licences), or a
+  crate from anywhere but crates.io;
+- the same crate in two versions is only a warning.
+
+To check locally: `cargo install cargo-deny`, then `cargo deny check`.
+
+Every `unsafe` block (they're all system calls: free space, drive letters, unlocking a file on
+the card) starts with a `// SAFETY:` comment saying why it's sound; the CI runs clippy's
+`undocumented_unsafe_blocks` on each platform and fails without one. For a fuller picture of the
+`unsafe` in the dependencies, `cargo install cargo-geiger` and `cargo geiger` now and then: it's
+slow and has no pass or fail, so it isn't part of the CI (its closing "Found … warnings" is
+about data files it can't read, not a problem).
 
 | Pushed to | Kept | For |
 |---|---|---|

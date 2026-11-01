@@ -344,7 +344,11 @@ fn unlock(path: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let Ok(flags) = fs::symlink_metadata(path).map(|m| m.st_flags()) else { return false };
     let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
-    flags & libc::UF_IMMUTABLE != 0 && unsafe { libc::chflags(c.as_ptr(), (flags & !libc::UF_IMMUTABLE) as _) } == 0
+    if flags & libc::UF_IMMUTABLE == 0 {
+        return false;
+    }
+    // SAFETY: `c` is a valid NUL-terminated path; the call only reads it.
+    unsafe { libc::chflags(c.as_ptr(), (flags & !libc::UF_IMMUTABLE) as _) == 0 }
 }
 
 #[cfg(not(target_os = "macos"))]

@@ -39,3 +39,7 @@ strip = true
 # Symphonia (FLAC/MP3 decoding) is painfully slow unoptimised; keep our own crate fast to rebuild.
 [profile.dev.package."*"]
 opt-level = 2
+
+# Every `unsafe` block says why it's sound (CI fails otherwise).
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
