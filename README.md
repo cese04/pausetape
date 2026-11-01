@@ -55,7 +55,7 @@ tried yet**. Details: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 | Platform | How to get it | State |
 |---|---|---|
-| macOS 12+ (Apple Silicon + Intel) | Build the DMG (below), or download from Releases once published | Works; not signed by a registered Apple developer yet |
+| macOS 12+ (Apple Silicon + Intel) | Build the DMG (below), or download from [Releases](https://github.com/cese04/pausetape/releases) once published | Works; not signed by a registered Apple developer yet |
 | Windows 10/11 | Build from source | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) |
 | Linux | Build from source | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) |
 

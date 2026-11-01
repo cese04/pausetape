@@ -12,7 +12,7 @@
 | Apple Developer Program | **Not yet**: ad-hoc signed builds; users approve the app once in System Settings |
 | Country (for Windows signing) | **Mexico**: Azure's individual tier is unavailable, so SignPath (free, needs a public open-source repo, which MIT qualifies for) or a Certum certificate, when Windows comes |
 | ffmpeg | **Bundled**, as a minimal LGPL build made from source |
-| Name | **Pausetape** (chosen 2026-11-01). Bundle identifier `io.github.pausetape.app`, to match the GitHub owner once the repository is public |
+| Name | **Pausetape** (chosen 2026-11-01), at [github.com/cese04/pausetape](https://github.com/cese04/pausetape). Bundle identifier `io.github.cese04.pausetape` |
 
 ## Status: macOS (done)
 
@@ -111,7 +111,7 @@ before use:
 ```toml
 [package.metadata.packager]
 product-name = "Pausetape"
-identifier = "io.github.<github-user>.pausetape"
+identifier = "io.github.cese04.pausetape"
 version = "0.1.0"
 icons = ["assets/icon/32x32.png", "assets/icon/128x128.png", "assets/icon/icon.icns", "assets/icon/icon.ico"]
 before-packaging-command = "cargo build --release"
@@ -292,9 +292,8 @@ the macOS build signed as soon as the Apple account exists.
 
 ## 10. Still open
 
-1. ~~**Final name**~~ *Pausetape, 2026-11-01.* The bundle identifier should follow the
-   repository's owner (`io.github.<owner>.pausetape`) before the first public release.
-2. **Public repository?** Needed for the free SignPath route on Windows, and the natural home
-   for releases and the macOS workflow.
+1. ~~**Final name**~~ *Pausetape, 2026-11-01; bundle identifier `io.github.cese04.pausetape`.*
+2. ~~**Public repository?**~~ *Public at github.com/cese04/pausetape since 2026-11-01:* the free
+   SignPath route on Windows is open, and releases and the macOS workflow have their home.
 3. **Apple Developer Program** when it makes sense (removes the first-launch approval; enables
    Homebrew cask and auto-updates).

@@ -13,7 +13,7 @@ set -euo pipefail
 
 # Placeholder name and identifier; change together with APP_NAME in src/main.rs.
 APP_NAME="Pausetape"
-BUNDLE_ID="io.github.pausetape.app"
+BUNDLE_ID="io.github.cese04.pausetape"
 MIN_MACOS=12.0
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)

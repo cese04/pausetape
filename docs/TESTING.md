@@ -67,9 +67,9 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ## 2. Build and run
 
 ```sh
-git clone https://github.com/<you>/<repo>.git
-cd <repo>
-cargo test                          # 35 tests should pass (9 more are skipped on purpose)
+git clone https://github.com/cese04/pausetape.git
+cd pausetape
+cargo test                          # 77 tests should pass (12 more are skipped on purpose)
 cargo run --release -- --version    # e.g. "Pausetape 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
