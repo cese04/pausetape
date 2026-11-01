@@ -23,28 +23,31 @@ pub fn ink(ui: &Ui) -> Ink {
     palette(ui.visuals().dark_mode)
 }
 
+/// Both themes are warm greys: the paper is a little dimmed and the ink is charcoal, not black,
+/// so text reads about 12:1 rather than glaring at 19:1. `muted` stays at 4.5:1 or more on every
+/// surface it's drawn on (page, hover, bar), and the accent is a brick red rather than a pure one.
 fn palette(dark: bool) -> Ink {
     if dark {
         Ink {
-            bg: Color32::from_rgb(0x15, 0x15, 0x15),
-            text: Color32::from_rgb(0xdd, 0xdd, 0xdd),
-            muted: Color32::from_rgb(0x8a, 0x8a, 0x8a),
-            faint: Color32::from_rgb(0x3a, 0x3a, 0x3a),
-            hover: Color32::from_rgb(0x1f, 0x1f, 0x1f),
-            accent: Color32::from_rgb(0xe0, 0x6c, 0x6c),
-            bar: Color32::from_rgb(0x1d, 0x1d, 0x1d),
-            chip: Color32::from_rgb(0x30, 0x30, 0x30),
+            bg: Color32::from_rgb(0x18, 0x17, 0x15),
+            text: Color32::from_rgb(0xe4, 0xe0, 0xd8),
+            muted: Color32::from_rgb(0x92, 0x8d, 0x84),
+            faint: Color32::from_rgb(0x3b, 0x38, 0x33),
+            hover: Color32::from_rgb(0x22, 0x1f, 0x1c),
+            accent: Color32::from_rgb(0xe4, 0x82, 0x70),
+            bar: Color32::from_rgb(0x1f, 0x1d, 0x1a),
+            chip: Color32::from_rgb(0x35, 0x32, 0x2c),
         }
     } else {
         Ink {
-            bg: Color32::from_rgb(0xff, 0xff, 0xf8),
-            text: Color32::from_rgb(0x11, 0x11, 0x11),
-            muted: Color32::from_rgb(0x77, 0x77, 0x70),
-            faint: Color32::from_rgb(0xdd, 0xdd, 0xd2),
-            hover: Color32::from_rgb(0xf4, 0xf4, 0xea),
-            accent: Color32::from_rgb(0xa0, 0x00, 0x00),
-            bar: Color32::from_rgb(0xf2, 0xf2, 0xe6),
-            chip: Color32::from_rgb(0xe2, 0xe2, 0xd4),
+            bg: Color32::from_rgb(0xfa, 0xf8, 0xf2),
+            text: Color32::from_rgb(0x33, 0x30, 0x2b),
+            muted: Color32::from_rgb(0x6b, 0x67, 0x5f),
+            faint: Color32::from_rgb(0xe0, 0xdb, 0xcf),
+            hover: Color32::from_rgb(0xf2, 0xef, 0xe7),
+            accent: Color32::from_rgb(0xa5, 0x40, 0x2f),
+            bar: Color32::from_rgb(0xf0, 0xec, 0xe2),
+            chip: Color32::from_rgb(0xe3, 0xde, 0xd1),
         }
     }
 }

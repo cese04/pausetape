@@ -67,6 +67,12 @@ impl Shooter {
             }) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
             }
+            // NEATLIBRARY_SHOT_THEME=light|dark, whatever the saved choice.
+            match std::env::var("NEATLIBRARY_SHOT_THEME").as_deref() {
+                Ok("light") => ctx.set_theme(egui::ThemePreference::Light),
+                Ok("dark") => ctx.set_theme(egui::ThemePreference::Dark),
+                _ => {}
+            }
             for a in &app.index.artists {
                 app.expanded.insert(crate::library::names::artist_key(&a.name));
             }

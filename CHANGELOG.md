@@ -548,3 +548,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   chosen, so a setup can't sync to another setup's card in the moments before the next look.
 - Songs with corrections not yet in the music files are copied to the card once, not at every
   Sync.
+
+### 42. Softer colours (2026-10-31)
+- The light theme no longer glares: charcoal text on slightly dimmed paper (about 12:1 instead of
+  19:1), so the Sync and play buttons and the progress bars are charcoal too, not black. The
+  warning red is a brick red instead of a pure one.
+- Grey secondary text is now readable on every surface it's drawn on (it fell just short of
+  4.5:1 on the tab bar and in panels).
+- The dark theme takes the same warm greys, so both themes feel like the same app.
