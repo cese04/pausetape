@@ -308,6 +308,8 @@ pub struct App {
     /// Inline rename on the card tab: ("artist"/"album", key, text).
     pub card_renaming: Option<(bool, String, String)>,
     pub audio: Audio,
+    /// Counts library rebuilds, so work derived from the library knows when to redo itself.
+    pub library_generation: u64,
     pub queue: Vec<usize>,
     pub qpos: usize,
     /// Waveform of the playing track, by track id.
@@ -395,6 +397,7 @@ impl App {
             card_expanded: HashSet::new(),
             card_renaming: None,
             audio,
+            library_generation: 0,
             queue: Vec::new(),
             qpos: 0,
             envelope: None,

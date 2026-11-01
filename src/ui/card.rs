@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use egui::{Align, Layout, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
 
@@ -33,7 +34,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         muted(ui, why);
         return;
     }
-    let sizes = Sizes::compute(app);
+    let sizes = Sizes::cached(app, ui);
     // Pinned while the rest scrolls: how full the card gets and what Sync changes, in view
     // while choosing music below.
     theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(18, 12)).show(ui, |ui| {
@@ -409,6 +410,30 @@ struct Sizes {
 }
 
 impl Sizes {
+    /// `compute`, redone only when something it depends on has changed: it works out every
+    /// song's size on the card, far too much for every frame of a large library (about 0.2 s
+    /// for 7,000 songs in a debug build).
+    fn cached(app: &App, ui: &Ui) -> Arc<Self> {
+        use std::hash::{Hash, Hasher};
+        let w = app.write();
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        app.library_generation.hash(&mut h);
+        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder)).unwrap_or_default().hash(&mut h);
+        for p in &app.saved.playlists {
+            (&p.name, &p.tracks).hash(&mut h);
+        }
+        let key = h.finish();
+        let id = egui::Id::unique("card sizes");
+        if let Some((k, s)) = ui.ctx().data(|d| d.get_temp::<(u64, Arc<Sizes>)>(id))
+            && k == key
+        {
+            return s;
+        }
+        let s = Arc::new(Self::compute(app));
+        ui.ctx().data_mut(|d| d.insert_temp(id, (key, s.clone())));
+        s
+    }
+
     fn compute(app: &App) -> Self {
         let w = app.write();
         let mut s = Sizes { artist: HashMap::new(), album: HashMap::new(), selected: 0, playlists: 0, songs: 0, cd_saving: 0, mp3_saving: 0, largest: Vec::new() };

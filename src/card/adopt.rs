@@ -478,7 +478,7 @@ pub fn undo_latest(id: &str, name: &str, dest: &Path) -> Result<(Vec<PathBuf>, u
             if let Some(p) = old.parent() {
                 fs::create_dir_all(p)?;
             }
-            unlocked(new, || fs::rename(new, old))?;
+            unlocked(new, || super::journal::move_back(new, old))?;
             Ok(())
         })();
         match res {

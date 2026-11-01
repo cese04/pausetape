@@ -49,6 +49,7 @@ impl App {
 
     pub fn rebuild(&mut self) {
         self.index = grouping::build(&self.tracks, &self.saved.prefs);
+        self.library_generation += 1;
         self.tidy_plan = None;
         self.write_preview = None;
         self.in_place = match &self.saved.source {

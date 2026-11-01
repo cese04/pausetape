@@ -1,7 +1,7 @@
 //! Undo journals for reorganising the music folder in place.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -36,6 +36,29 @@ pub fn latest_journal() -> Option<PathBuf> {
     files.pop()
 }
 
+/// Move a file back from `new` to `old`, unless something else has taken `old` since: a plain
+/// rename would replace it (on every system, Windows included, as Rust renames).
+pub(super) fn move_back(new: &Path, old: &Path) -> std::io::Result<()> {
+    if fs::symlink_metadata(old).is_ok() && !same_file(new, old) {
+        return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("{} is taken by another file now; left where it is", old.display())));
+    }
+    fs::rename(new, old)
+}
+
+/// Whether two paths name one file, as two spellings differing in case do on most Mac and
+/// Windows disks.
+fn same_file(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        matches!((fs::metadata(a), fs::metadata(b)), (Ok(x), Ok(y)) if (x.dev(), x.ino()) == (y.dev(), y.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        a.as_os_str().to_ascii_lowercase() == b.as_os_str().to_ascii_lowercase()
+    }
+}
+
 /// Reverse the most recent in-place move. Returns (restored, errors).
 pub fn undo_latest() -> Result<(usize, Vec<String>)> {
     let path = latest_journal().context("nothing to undo")?;
@@ -47,7 +70,7 @@ pub fn undo_latest() -> Result<(usize, Vec<String>)> {
             if let Some(p) = old.parent() {
                 fs::create_dir_all(p)?;
             }
-            fs::rename(new, old)?;
+            move_back(new, old)?;
             Ok(())
         })();
         match res {
@@ -57,4 +80,28 @@ pub fn undo_latest() -> Result<(usize, Vec<String>)> {
     }
     fs::rename(&path, path.with_extension("undone"))?;
     Ok((restored, errors))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn moving_back_never_replaces_a_file() {
+        let dir = std::env::temp_dir().join(format!("neatlibrary-move-back-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let (old, new) = (dir.join("song.flac"), dir.join("moved.flac"));
+        fs::write(&new, "moved").unwrap();
+        fs::write(&old, "added since").unwrap();
+        assert!(move_back(&new, &old).is_err(), "the old place is taken");
+        assert_eq!((fs::read_to_string(&old).unwrap(), fs::read_to_string(&new).unwrap()), ("added since".into(), "moved".into()));
+        fs::remove_file(&old).unwrap();
+        move_back(&new, &old).unwrap();
+        // Only the case differs: on a case-insensitive disk both names are this one file.
+        let upper = dir.join("Song.flac");
+        move_back(&old, &upper).unwrap();
+        assert_eq!(fs::read_to_string(&upper).unwrap(), "moved");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

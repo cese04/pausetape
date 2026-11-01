@@ -59,7 +59,18 @@ impl Default for WriteProfile {
 
 impl WriteProfile {
     pub fn plan(&self, tracks: &[Track], index: &Index) -> Vec<PlanItem> {
-        super::build_plan(tracks, index, &self.options, &self.custom)
+        let mut plan = super::build_plan(tracks, index, &self.options, &self.custom);
+        // Song folders keep clear of the folders the app keeps for itself on the card (an
+        // artist called "_Playlists"): they'd be taken for its playlist copies or test samples.
+        let own = [sanitize_component(&self.playlists_folder, 80).to_lowercase(), super::testcard::TEST_FOLDER.to_lowercase()];
+        for p in &mut plan {
+            let mut parts = p.rel.components();
+            let Some(first) = parts.next().map(|c| c.as_os_str().to_string_lossy().into_owned()) else { continue };
+            if parts.clone().next().is_some() && own.contains(&first.to_lowercase()) {
+                p.rel = PathBuf::from(format!("{first}_")).join(parts.as_path());
+            }
+        }
+        plan
     }
 
     pub fn chosen_playlists(&self, all: &[Playlist]) -> Vec<Playlist> {
@@ -340,6 +351,7 @@ mod tests {
         let Some(src) = std::env::var_os("NEATLIBRARY_CONVERT").map(PathBuf::from) else { return };
         let card = std::env::temp_dir().join(format!("neatlibrary-test-convert-{}", std::process::id()));
         let _ = fs::remove_dir_all(&card);
+        fs::create_dir_all(&card).unwrap();
         let (tracks, _) = crate::library::scan(&src, None, false, |_| {});
         let index = crate::library::grouping::build(&tracks, &Default::default());
         let mut w = WriteProfile::default();
@@ -389,6 +401,7 @@ mod tests {
         let Some(src) = std::env::var_os("NEATLIBRARY_CUE_ALBUM").map(PathBuf::from) else { return };
         let card = std::env::temp_dir().join(format!("neatlibrary-test-cue-card-{}", std::process::id()));
         let _ = fs::remove_dir_all(&card);
+        fs::create_dir_all(&card).unwrap();
         let (tracks, _) = crate::library::scan(&src, None, false, |_| {});
         assert!(tracks.iter().any(|t| t.cue.is_some()), "no album file with a CUE sheet in {}", src.display());
         let index = crate::library::grouping::build(&tracks, &Default::default());
@@ -485,6 +498,24 @@ mod tests {
         tracks[0].year = Some(2004);
         assert_eq!(sync(&mut w, &tracks), (1, 1));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn song_folders_keep_clear_of_the_apps_own() {
+        let root = std::env::temp_dir().join(format!("neatlibrary-test-own-folders-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for f in ["_Playlists/Mix Tape/01 - One.mp3", "NeatLibrary format test/Demo/01 - Two.mp3", "Muse/Absolution/01 - Intro.mp3"] {
+            fs::create_dir_all(root.join(f).parent().unwrap()).unwrap();
+            fs::write(root.join(f), f.as_bytes()).unwrap();
+        }
+        let (tracks, _) = scan(&root, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        // A setup whose playlist copies go in "Playlists", the name the first artist takes.
+        let w = WriteProfile { playlists_folder: "Playlists".into(), ..Default::default() };
+        let mut firsts: Vec<String> = w.plan(&tracks, &index).iter().map(|p| p.rel.components().next().unwrap().as_os_str().to_string_lossy().into_owned()).collect();
+        firsts.sort();
+        assert_eq!(firsts, ["Muse", "NeatLibrary format test_", "Playlists_"]);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
