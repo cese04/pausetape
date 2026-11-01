@@ -42,7 +42,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             ui.horizontal_wrapped(|ui| {
                 let on_card = app.test_card_on_card();
                 if app.write().dest.is_none() {
-                    ui.label(RichText::new("Choose the card first (destination, in the card tab).").color(ink.accent));
+                    ui.label(RichText::new("Choose the card first (destination, in the card tab).").color(ink.warn));
                 } else if widgets::primary_with(ui, Icon::Card, if on_card { "Write the test folder again" } else { "Write the test folder to the card" }).clicked() {
                     app.write_test_card();
                 }
@@ -51,7 +51,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                 }
             });
             if crate::audio::ffmpeg().is_none() {
-                ui.label(RichText::new("The samples are made with ffmpeg, which isn't installed (brew install ffmpeg).").size(13.0).color(ink.accent));
+                ui.label(RichText::new("The samples are made with ffmpeg, which isn't installed (brew install ffmpeg).").size(13.0).color(ink.warn));
             }
         }
         ui.add_space(10.0);
@@ -80,7 +80,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                         }
                     });
                     match made.as_ref().and_then(|m| m.iter().find(|(x, _)| *x == s)).map(|(_, r)| r) {
-                        Some(Err(why)) => ui.label(RichText::new("not written").size(12.5).color(ink.accent)).on_hover_text(why),
+                        Some(Err(why)) => ui.label(RichText::new("not written").size(12.5).color(ink.warn)).on_hover_text(why),
                         _ => ui.label(""),
                     };
                     ui.end_row();

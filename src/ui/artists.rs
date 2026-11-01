@@ -24,7 +24,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.horizontal(|ui| {
                 ui.label(&a.name);
                 muted(ui, format!("({})", count(a)));
-                ui.label(RichText::new("≈").color(ink.accent));
+                ui.label(RichText::new("≈").color(ink.warn));
                 ui.label(&b.name);
                 muted(ui, format!("({})", count(b)));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

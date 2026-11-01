@@ -5,7 +5,7 @@
 use egui::{Color32, FontId, Response, RichText, Sense, Stroke, Ui, vec2};
 
 use super::icons::{self, Icon};
-use super::theme::ink;
+use super::theme::{Ink, ink};
 
 /// A quiet text link: muted, darkening and underlined on hover.
 pub fn link(ui: &mut Ui, text: impl Into<String>) -> Response {
@@ -55,11 +55,12 @@ pub fn nav_tab(ui: &mut Ui, icon: Icon, text: &str, active: bool) -> Response {
     let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(15.0), Color32::PLACEHOLDER);
     let (icon_w, gap, pad) = (15.0, 7.0, vec2(12.0, 6.0));
     let (rect, resp) = ui.allocate_exact_size(vec2(icon_w + gap + galley.size().x, galley.size().y.max(icon_w)) + pad * 2.0, Sense::click());
-    let fill = if active { ink.chip } else if resp.hovered() { ink.hover } else { Color32::TRANSPARENT };
+    // The open tab's pill takes a hint of the accent, and its icon the accent itself.
+    let fill = if active { ink.chip.lerp_to_gamma(ink.accent, 0.12) } else if resp.hovered() { ink.hover } else { Color32::TRANSPARENT };
     ui.painter().rect_filled(rect, rect.height() / 2.0, fill);
     let color = if active || resp.hovered() { ink.text } else { ink.muted };
     let inner = rect.shrink2(pad);
-    icons::paint(ui.painter(), icons::slot(inner, icon_w), icon, color);
+    icons::paint(ui.painter(), icons::slot(inner, icon_w), icon, if active { ink.accent } else { color });
     ui.painter().galley(egui::pos2(inner.left() + icon_w + gap, inner.center().y - galley.size().y / 2.0), galley, color);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
@@ -118,7 +119,7 @@ pub fn tab(ui: &mut Ui, text: &str, active: bool) -> Response {
     let color = if active || resp.hovered() { ink.text } else { ink.muted };
     ui.painter().galley(rect.min, galley, color);
     if active {
-        ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1.0, ink.text));
+        ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1.5, ink.accent));
     }
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
@@ -161,7 +162,7 @@ fn framed(ui: &mut Ui, icon: Option<Icon>, text: String, primary: bool) -> Respo
     let pad = if primary { vec2(14.0, 7.0) } else { vec2(12.0, 6.0) };
     let (rect, resp) = ui.allocate_exact_size(vec2(icon_w + gap + galley.size().x, galley.size().y) + pad * 2.0, Sense::click());
     let fg = if primary {
-        ui.painter().rect_filled(rect, 5.0, if resp.hovered() { ink.muted } else { ink.text });
+        ui.painter().rect_filled(rect, 5.0, if resp.hovered() { pressed(&ink) } else { ink.accent });
         ink.bg
     } else {
         let stroke = if resp.hovered() { ink.text } else { ink.muted };
@@ -194,8 +195,8 @@ pub fn media_button(ui: &mut Ui, icon: Media, size: f32, slot: f32, primary: boo
     let c = rect.center();
     let r = size / 2.0 - 1.0;
     let (bg, fg) = match (primary, resp.hovered()) {
-        (true, false) => (ink.text, ink.bg),
-        (true, true) => (ink.muted, ink.bg),
+        (true, false) => (ink.accent, ink.bg),
+        (true, true) => (pressed(&ink), ink.bg),
         (false, false) => (Color32::TRANSPARENT, ink.text),
         (false, true) => (ink.hover, ink.text),
     };
@@ -243,7 +244,25 @@ pub fn hairline_progress(ui: &mut Ui, frac: f32, width: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(width, 10.0), Sense::hover());
     let y = rect.center().y;
     ui.painter().hline(rect.x_range(), y, Stroke::new(1.0, ink.faint));
-    ui.painter().hline(rect.left()..=rect.left() + width * frac.clamp(0.0, 1.0), y, Stroke::new(1.5, ink.text));
+    ui.painter().hline(rect.left()..=rect.left() + width * frac.clamp(0.0, 1.0), y, Stroke::new(1.5, ink.accent));
+}
+
+/// A colour to choose: a filled dot, ringed when it's the chosen one.
+pub fn swatch(ui: &mut Ui, colour: Color32, chosen: bool) -> Response {
+    let ink = ink(ui);
+    let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+    let c = rect.center();
+    ui.painter().circle_filled(c, 8.0, colour);
+    if chosen || resp.hovered() {
+        ui.painter().circle_stroke(c, 11.0, Stroke::new(1.5, if chosen { ink.text } else { ink.faint }));
+    }
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A filled button under the pointer: the accent a step towards the ink, so its words stay as
+/// readable as before (graphite, already the ink, steps towards grey instead).
+fn pressed(ink: &Ink) -> Color32 {
+    if ink.accent == ink.text { ink.muted } else { ink.accent.lerp_to_gamma(ink.text, 0.25) }
 }
 
 pub fn truncated(ui: &Ui, text: String, font: FontId, color: Color32, max_w: f32) -> std::sync::Arc<egui::Galley> {

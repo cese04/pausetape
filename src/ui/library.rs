@@ -51,8 +51,8 @@ impl Mark {
                 p.circle_stroke(at, r, Stroke::new(1.2, ink.text));
             }
             Mark::Removing => {
-                p.circle_stroke(at, r, Stroke::new(1.2, ink.accent));
-                p.hline(at.x - r - 1.5..=at.x + r + 1.5, at.y, Stroke::new(1.2, ink.accent));
+                p.circle_stroke(at, r, Stroke::new(1.2, ink.warn));
+                p.hline(at.x - r - 1.5..=at.x + r + 1.5, at.y, Stroke::new(1.2, ink.warn));
             }
         }
     }
@@ -91,14 +91,14 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: 
     p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, text::duration(t.duration), font.clone(), ink.muted);
     x -= 56.0;
     if repeat {
-        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(12.0), ink.accent);
+        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(12.0), ink.warn);
     } else if !device.plays(t) {
         // A small outlined badge: the format, and what it means for the player.
         let label = text::format_badge(t, device);
-        let g = ui.painter().layout_no_wrap(label, FontId::proportional(11.5), ink.accent);
+        let g = ui.painter().layout_no_wrap(label, FontId::proportional(11.5), ink.warn);
         let badge = egui::Rect::from_min_size(egui::pos2(x - g.size().x - 8.0, y - g.size().y / 2.0 - 2.0), g.size() + vec2(8.0, 4.0));
-        p.rect_stroke(badge, 3.0, Stroke::new(0.8, ink.accent), egui::StrokeKind::Inside);
-        p.galley(badge.min + vec2(4.0, 2.0), g, ink.accent);
+        p.rect_stroke(badge, 3.0, Stroke::new(0.8, ink.warn), egui::StrokeKind::Inside);
+        p.galley(badge.min + vec2(4.0, 2.0), g, ink.warn);
     } else if t.dirty {
         p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "edited", FontId::proportional(12.0), ink.muted);
     }
@@ -147,7 +147,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             app.scan();
         }
         if app.source_missing {
-            ui.label(RichText::new("can't reach this folder: is its drive connected? It's read again once it's back").color(ink.accent));
+            ui.label(RichText::new("can't reach this folder: is its drive connected? It's read again once it's back").color(ink.warn));
         }
         if app.busy.is_none() && widgets::icon_link(ui, Icon::Add, "add music").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
             app.picker = Some(crate::ui::folders::Picker::AddFrom(crate::ui::navigator::Navigator::new(crate::ui::folders::dirs_downloads().as_deref())));
@@ -202,7 +202,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         // Files a failing card or disk left blank: nothing here or on the card can use them.
         let damaged: std::collections::HashSet<&std::path::Path> = app.tracks.iter().filter(|t| t.damaged).map(|t| t.path.as_path()).collect();
         if !damaged.is_empty()
-            && widgets::chip(ui, Icon::Remove, format!("{} damaged", plural(damaged.len(), "file")), ink.accent)
+            && widgets::chip(ui, Icon::Remove, format!("{} damaged", plural(damaged.len(), "file")), ink.warn)
                 .on_hover_text("These files start blank where their audio should be, as files a failing card or disk lost do. They can't be played or written to the card; replace them from a backup or the original. Click to show their albums.")
                 .clicked()
         {
@@ -230,7 +230,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         theme::warning_frame(ui).show(ui, |ui| {
             ui.set_max_width(ui.available_width() - RAIL_W - 40.0);
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(format!("{} in formats {} can't play: {formats}", plural(n, "song"), device.short())).color(ink.accent));
+                ui.label(RichText::new(format!("{} in formats {} can't play: {formats}", plural(n, "song"), device.short())).color(ink.warn));
                 if link(ui, if collapsed { "why?" } else { "hide" }).clicked() {
                     app.saved.format_note_collapsed = !collapsed;
                 }
@@ -426,12 +426,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 r.on_hover_text(format!("{}\nThe card gets one edition; choose which in the card tab.", e.label));
                             }
                             if off > 0 {
-                                ui.label(RichText::new(off_text).size(12.5).color(ink.accent));
+                                ui.label(RichText::new(off_text).size(12.5).color(ink.warn));
                             }
                             if let Some(m) = mark {
                                 let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                                 m.paint(ui.painter(), rect.center(), 3.5, &ink);
-                                ui.label(RichText::new(&status).size(13.0).color(if m == Mark::Removing { ink.accent } else { ink.muted }));
+                                ui.label(RichText::new(&status).size(13.0).color(if m == Mark::Removing { ink.warn } else { ink.muted }));
                             }
                             let chosen = app.write().custom.includes(ck, al, &artist.albums);
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -639,7 +639,7 @@ fn repeats_note(ui: &mut Ui, app: &App, al: &crate::library::grouping::AlbumNode
     ui.horizontal_wrapped(|ui| {
         ui.add_space(52.0);
         let songs = if n == 1 { "1 song is".to_string() } else { format!("{n} songs are") };
-        ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(12.5).italics().color(ink.accent));
+        ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(12.5).italics().color(ink.warn));
         let hint = "Moves the extra copies to the Trash, each only if it's still the same file as the copy that stays (the one with the shorter name). You can put them back from the Trash.";
         if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, "move the extra copies to the Trash").on_hover_text(hint).clicked() {
             actions.push(Action::TrashRepeats(al.repeats.clone()));

@@ -62,6 +62,7 @@ pub struct Saved {
     pub playlists: Vec<Playlist>,
     pub volume: f32,
     pub theme: ThemePref,
+    pub accent: crate::ui::theme::Accent,
     /// The library's format warning is collapsed to one line.
     pub format_note_collapsed: bool,
     /// The library shows a table of albums rather than the list by artist.
@@ -83,6 +84,7 @@ impl Default for Saved {
             playlists: Vec::new(),
             volume: 0.8,
             theme: ThemePref::System,
+            accent: Default::default(),
             format_note_collapsed: false,
             album_table: false,
             searches: Vec::new(),
@@ -414,6 +416,7 @@ impl App {
             ThemePref::Light => egui::ThemePreference::Light,
             ThemePref::Dark => egui::ThemePreference::Dark,
         });
+        crate::ui::theme::set_accent(&self.ctx, self.saved.accent);
     }
 
     /// Keep the errors of a card operation for the card tab, saved to a file too, and return the

@@ -23,7 +23,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         "The Echo Mini has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is exported as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware.",
     );
     if device.browses_by_tags() {
-        ui.label(RichText::new(playlist_copies_warning(device)).size(13.0).color(ink.accent));
+        ui.label(RichText::new(playlist_copies_warning(device)).size(13.0).color(ink.warn));
     }
     ui.add_space(8.0);
     // Playlists hold track ids: a song inside an album file has its own ("…/Album.flac#03").
@@ -93,11 +93,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 ui.label(t.display_title());
                                 muted(ui, t.artist.as_deref().unwrap_or(""));
                                 if let Some(note) = text::format_note(t, device) {
-                                    ui.label(RichText::new(text::format_badge(t, device)).size(12.0).color(ink.accent)).on_hover_text(note);
+                                    ui.label(RichText::new(text::format_badge(t, device)).size(12.0).color(ink.warn)).on_hover_text(note);
                                 }
                             }
                             None => {
-                                ui.label(RichText::new(path.display().to_string()).color(ink.accent)).on_hover_text("file not found in library");
+                                ui.label(RichText::new(path.display().to_string()).color(ink.warn)).on_hover_text("file not found in library");
                             }
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

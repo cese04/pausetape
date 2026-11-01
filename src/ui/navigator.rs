@@ -165,7 +165,7 @@ impl Navigator {
         };
         muted(ui, here);
         if let Some(e) = &l.error {
-            ui.label(RichText::new(e).color(ink.accent).size(12.5));
+            ui.label(RichText::new(e).color(ink.warn).size(12.5));
         }
         ui.add_space(4.0);
         let row_h = 26.0;

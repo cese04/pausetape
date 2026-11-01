@@ -40,7 +40,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         });
     }
     if !query.unknown.is_empty() {
-        ui.label(RichText::new(format!("not understood: {} (hover over the search box for what works)", query.unknown.join(" "))).size(13.0).color(ink.accent));
+        ui.label(RichText::new(format!("not understood: {} (hover over the search box for what works)", query.unknown.join(" "))).size(13.0).color(ink.warn));
     }
     let width = ui.available_width() - 14.0;
     let fixed: f32 = FIXED.iter().map(|c| c.2).sum::<f32>() + MARK_W;
@@ -113,7 +113,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             let title = if row.edited { format!("{} · edited", row.title) } else { row.title.clone() };
             text_at(2, title, &font, ink.text);
             text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &font, ink.muted);
-            text_at(4, row.format.clone(), &small, if row.plays_on_device { ink.muted } else { ink.accent });
+            text_at(4, row.format.clone(), &small, if row.plays_on_device { ink.muted } else { ink.warn });
             let right = |k: usize, s: String| {
                 p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, small.clone(), ink.muted);
             };
@@ -125,11 +125,11 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
                 Some(Mark::Adding) => "at next sync".into(),
                 Some(Mark::Removing) => "coming off".into(),
             };
-            text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.accent } else { ink.muted });
+            text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
             if row.cover {
                 icons::paint(&p, egui::Rect::from_center_size(egui::pos2(cell(8) + 8.0, y), vec2(14.0, 14.0)), Icon::Image, ink.muted);
             } else {
-                text_at(8, "none".into(), &small, ink.accent);
+                text_at(8, "none".into(), &small, ink.warn);
             }
             let resp = if status.is_empty() { resp } else { resp.on_hover_text(status) };
             if resp.double_clicked() {

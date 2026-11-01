@@ -3,7 +3,7 @@
 use egui::{RichText, Ui};
 
 use super::icons::Icon;
-use super::theme::ink;
+use super::theme::{Accent, ink};
 use super::widgets::{self, help, icon_link, setting};
 use crate::app::{App, ThemePref};
 
@@ -21,6 +21,21 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     app.apply_theme();
                 }
             });
+        });
+        setting(ui, "Accent", |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                let dark = ui.visuals().dark_mode;
+                for accent in Accent::ALL {
+                    if widgets::swatch(ui, accent.colour(dark), app.saved.accent == accent).on_hover_text(accent.name()).clicked() {
+                        app.saved.accent = accent;
+                        app.apply_theme();
+                    }
+                }
+                ui.add_space(4.0);
+                ui.label(RichText::new(app.saved.accent.name()).color(ink(ui).muted));
+            });
+            help(ui, "Marks the open tab, the main button, progress and what's playing. Warnings stay red.");
         });
 
         ui.add_space(10.0);
@@ -77,12 +92,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     ui.label(
                         RichText::new("This ffmpeg can't make MP3s (no LAME encoder): lossless songs are still converted to FLAC for the card, but AAC, Dolby and other lossy ones are left out.")
                             .size(13.0)
-                            .color(ink(ui).accent),
+                            .color(ink(ui).warn),
                     );
                 }
             }
             None => {
-                ui.label(RichText::new("not found").color(ink(ui).accent));
+                ui.label(RichText::new("not found").color(ink(ui).warn));
                 help(ui, "Install it (brew install ffmpeg) to play Dolby, Opus, APE, WavPack and WMA files here, and to convert songs the card's player can't play when writing to it.");
             }
         });

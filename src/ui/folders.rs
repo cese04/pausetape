@@ -137,14 +137,14 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                 ui.label(RichText::new(title).size(20.0).strong());
                 match crate::card::space(d) {
                     _ if !d.exists() => {
-                        ui.label(RichText::new("Not connected right now. Insert the card to write to it.").color(ink.accent));
+                        ui.label(RichText::new("Not connected right now. Insert the card to write to it.").color(ink.warn));
                     }
                     Some(info) => {
                         space_bar(ui, &info, 320.0);
                         let fs = info.fs_name().map(|f| format!(" · {f}")).unwrap_or_default();
                         muted(ui, format!("{} free of {}{fs}", text::bytes(info.free), text::bytes(info.total)));
                         if info.is_fat() == Some(false) {
-                            ui.label(RichText::new("This drive isn't formatted FAT32/exFAT, so it's probably not the player's card.").color(ink.accent));
+                            ui.label(RichText::new("This drive isn't formatted FAT32/exFAT, so it's probably not the player's card.").color(ink.warn));
                         }
                     }
                     // Connected, but this OS doesn't report space yet (Windows, for now).
@@ -338,7 +338,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
     let Some(plan) = &app.tidy_plan else { return };
     let src = app.saved.source.clone().unwrap_or_default();
     let moving = plan.iter().filter(|p| src.join(&p.rel) != app.tracks[p.track].path).count();
-    ui.label(RichText::new(format!("{moving} of {} files would move. RECHO's resume position may point at a moved file afterwards.", plan.len())).color(ink.accent).size(13.0));
+    ui.label(RichText::new(format!("{moving} of {} files would move. RECHO's resume position may point at a moved file afterwards.", plan.len())).color(ink.warn).size(13.0));
     plan_list(ui, plan, 320.0);
 }
 
@@ -354,7 +354,7 @@ pub fn plan_list(ui: &mut Ui, plan: &[crate::card::PlanItem], max_height: f32) {
                 ui.label(RichText::new(format!("{dir}/")).color(ink.muted).size(13.0));
                 ui.label(RichText::new(file).size(13.0).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
                 if let Some(why) = p.skip {
-                    ui.label(RichText::new(format!("   {why}")).size(12.0).color(ink.accent));
+                    ui.label(RichText::new(format!("   {why}")).size(12.0).color(ink.warn));
                 }
             });
         }
@@ -402,7 +402,7 @@ pub fn add_dialog(app: &mut App, ui: &mut Ui) {
                 .on_hover_text("Same artist and title, a different file: an MP3 where you have FLAC, another rip… They'd show up as another edition of the album.");
         }
         if !fits {
-            ui.label(RichText::new("Not enough room on your music folder's drive for them.").color(ink.accent));
+            ui.label(RichText::new("Not enough room on your music folder's drive for them.").color(ink.warn));
         }
         ui.add_space(12.0);
         ui.horizontal(|ui| {

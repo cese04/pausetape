@@ -21,7 +21,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let st = app.audio.status();
     if let Some(e) = &st.error {
-        ui.label(RichText::new(e).color(ink.accent).size(12.0));
+        ui.label(RichText::new(e).color(ink.warn).size(12.0));
     }
     let Some(ti) = app.current() else {
         muted(ui, "Nothing playing. Click a track in the library.");
@@ -76,7 +76,7 @@ fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
         if st.converting {
             ui.label(RichText::new("converting with ffmpeg…").size(12.5).color(ink.muted));
         } else if let Some(note) = text::format_note(t, app.player()) {
-            ui.label(RichText::new(text::format_badge(t, app.player())).size(12.5).color(ink.accent)).on_hover_text(note);
+            ui.label(RichText::new(text::format_badge(t, app.player())).size(12.5).color(ink.warn)).on_hover_text(note);
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             muted(ui, format!("{} / {}", text::duration(st.pos), text::duration(len)));
@@ -108,7 +108,7 @@ fn scrubber(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
         }
         _ => {
             p.hline(rect.x_range(), mid, Stroke::new(1.0, ink.faint));
-            p.hline(rect.left()..=playhead_x, mid, Stroke::new(1.5, ink.text));
+            p.hline(rect.left()..=playhead_x, mid, Stroke::new(1.5, ink.accent));
         }
     }
     p.circle_filled(pos2(playhead_x, mid), 2.5, ink.accent);

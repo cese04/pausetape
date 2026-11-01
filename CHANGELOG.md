@@ -556,3 +556,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Grey secondary text is now readable on every surface it's drawn on (it fell just short of
   4.5:1 on the tab bar and in panels).
 - The dark theme takes the same warm greys, so both themes feel like the same app.
+- An accent colour to choose in settings, as in Calibre: brick (as before), ochre, moss, teal,
+  blue, plum or graphite (no colour). It marks the open tab, the main button (Sync, play),
+  progress bars, the playhead and what's playing. Warnings stay brick red whatever the accent.
+  Every preset reads at 4.5:1 or more in both themes.

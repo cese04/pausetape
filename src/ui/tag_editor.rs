@@ -82,7 +82,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         });
         ui.add_space(10.0);
         if let Some(p) = edit.problem() {
-            ui.label(RichText::new(p).size(13.0).color(ink.accent));
+            ui.label(RichText::new(p).size(13.0).color(ink.warn));
         }
         let cue = edit.tracks.iter().any(|&i| app.tracks[i].cue.is_some());
         help(

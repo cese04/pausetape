@@ -73,6 +73,11 @@ impl Shooter {
                 Ok("dark") => ctx.set_theme(egui::ThemePreference::Dark),
                 _ => {}
             }
+            // NEATLIBRARY_SHOT_ACCENT=teal (any name from the settings tab).
+            if let Some(a) = std::env::var("NEATLIBRARY_SHOT_ACCENT").ok().and_then(|n| crate::ui::theme::Accent::ALL.into_iter().find(|a| a.name() == n)) {
+                app.saved.accent = a;
+                crate::ui::theme::set_accent(ctx, a);
+            }
             for a in &app.index.artists {
                 app.expanded.insert(crate::library::names::artist_key(&a.name));
             }
