@@ -9,7 +9,7 @@ labels: testing
 
 **How it was built:** <!-- cargo run --release from commit abc1234, or CI artifact from run #N -->
 
-**`pausetape --version`:**
+**`pausetape --version`:** <!-- Windows PowerShell: pausetape --version | Out-Host -->
 ```
 <paste>
 ```

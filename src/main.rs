@@ -2,6 +2,9 @@
 //! folders a portable player browses (the Snowsky Echo Mini, with RECHO or its own firmware),
 //! and listen to it on the way.
 
+// Windows: no console window behind the app (debug builds keep it, for errors while developing).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod audio;
 mod card;
@@ -39,6 +42,7 @@ fn adopt_former_data() {
 }
 
 fn main() -> eframe::Result {
+    platform::attach_console();
     // Headless dry run: `pausetape --plan <music folder>` prints the layout without touching files.
     let args: Vec<String> = std::env::args().collect();
     // `--version`: what's running and which ffmpeg it uses (handy for bug reports).

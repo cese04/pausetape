@@ -77,6 +77,10 @@ cargo run --release                 # the app
 The first build takes several minutes (it compiles ~300 crates and SQLite). Later builds are
 quick. Run the app **from a terminal** during testing: errors and panics are printed there.
 
+On Windows, the downloaded `pausetape.exe` doesn't hold up the terminal, so its output would
+arrive after the prompt. In PowerShell, add `| Out-Host` to wait for it:
+`.\pausetape.exe --version | Out-Host`.
+
 A dry run that changes nothing, useful as a first check on real music:
 
 ```sh
@@ -92,7 +96,7 @@ cargo run --release -- --plan ~/Music           # Linux
 |---|---|---|---|
 | 1 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* drives are now listed by letter and label ("NO NAME (E:)"). | To check it: the card dialog lists the card; Windows' own drive isn't listed. If no drive shows, use **Use a folder on a card…** → **system picker…** and say so. |
 | 2 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* free space, filesystem and the "not FAT" warning. | To check it: the card tab shows the size bar and "FAT32"/"exFAT". |
-| 3 | **Windows** | A **console window** opens next to the app; closing it closes the app. | Leave it open (it also shows errors, which helps testing). |
+| 3 | **Windows** | *Fixed 2026-11-01, run on Windows 11:* no **console window** opens behind the app. Started from a terminal, it prints there; but the terminal doesn't wait for it. | Use `cargo run`, or add `\| Out-Host` in PowerShell: `pausetape --version \| Out-Host`. Debug builds keep their console. |
 | 4 | **Windows** | The in-app browser can't reach other drives except through **system picker…**; there's no "Drives" button. | Use **system picker…**. |
 | 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9` can't be written to the card. | Rename it for that write in the card tab. Rare. |
 | 6 | **Windows** | Card paths can exceed 260 characters with very long names; the app copes, but Explorer may not open them. | Rename long albums for the card. |
