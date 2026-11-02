@@ -13,6 +13,6 @@ labels: bug
 1.
 2.
 
-**System and version:** <!-- OS + output of `pausetape --version` -->
+**System and version:** <!-- OS + output of `pausetape --version` (Windows PowerShell: `pausetape --version | Out-Host`) -->
 
 **Error text or screenshots** <!-- run the app from a terminal to see errors -->

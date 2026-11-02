@@ -689,3 +689,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
   buttons. Palatino Linotype has a line gap of a third of its size, which egui puts below each
   line. The app now drops a font's line gap when it loads it, so text is centred and lines are
   as close as on macOS. Seen in the first run on Windows.
+
+### 54. No console window on Windows (2026-11-01)
+- Release builds on Windows are a windowed program, so no console opens behind the app.
+  Started from a terminal, they attach to it: `--version`, `--plan` and errors print there.
+  Terminals don't wait for a windowed program, so in PowerShell add `| Out-Host`; `cargo run`
+  waits by itself. Debug builds keep their console. Run on Windows 11.

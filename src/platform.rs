@@ -22,6 +22,18 @@ pub fn reveal(path: &Path) {
     let _ = std::process::Command::new(cmd).arg(path).spawn();
 }
 
+/// Windows release builds have no console of their own (so none opens behind the app). Started
+/// from a terminal, they print `--version`, `--plan` and errors there instead; started from
+/// Explorer, there's nothing to attach to and output goes nowhere, as before.
+pub fn attach_console() {
+    #[cfg(all(windows, not(debug_assertions)))]
+    {
+        use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+        // SAFETY: takes a process id and touches no memory of ours; failure is harmless.
+        unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    }
+}
+
 /// A command for a console program (ffmpeg) that, on Windows, runs without opening a console
 /// window of its own: the app has none to lend it, so each run would flash one up.
 pub fn quiet_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
