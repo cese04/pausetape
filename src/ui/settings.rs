@@ -141,7 +141,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
             None => {
                 ui.label(RichText::new("not found").color(ink(ui).warn));
-                help(ui, "Install it (brew install ffmpeg) to play Dolby, Opus, APE, WavPack and WMA files here, and to convert songs the card's player can't play when writing to it.");
+                help(
+                    ui,
+                    format!(
+                        "Install it ({}) to play Dolby, Opus, APE, WavPack and WMA files here, and to convert songs the card's player can't play when writing to it.",
+                        crate::platform::FFMPEG_INSTALL
+                    ),
+                );
             }
         });
 

@@ -44,7 +44,7 @@ pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> 
     Some(match (t.native(), crate::audio::ffmpeg().is_some()) {
         (true, _) => format!("{label}: plays here, but not on {on}, so a card write converts it. {}", device.plays_text()),
         (false, true) => format!("{label}: plays here by converting it with ffmpeg first (surround is mixed down to stereo). It won't play on {on} as it is, so a card write converts it."),
-        (false, false) => format!("{label}: needs ffmpeg to play here (brew install ffmpeg). It won't play on {on} either."),
+        (false, false) => format!("{label}: needs ffmpeg to play here ({}). It won't play on {on} either.", crate::platform::FFMPEG_INSTALL),
     })
 }
 

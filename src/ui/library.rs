@@ -11,12 +11,12 @@ use super::actions::{Action, apply};
 use super::icons::{self, Icon};
 use super::text::{self, plural};
 use super::theme::{self, ink};
-use super::widgets::{self, caps, link, muted, truncated};
+use super::widgets::{self, caps, muted, truncated};
 use super::ROW_H;
 use crate::app::{App, Lookup};
 use crate::card::Player;
 use crate::library::Track;
-use super::layout::{ICON, S1, S2, S4, S5, S6, row, row_wrapped};
+use super::layout::{ICON, S1, S2, S4, S6, row, row_wrapped};
 
 /// Longest folder path shown before it's shortened with "…" in the middle.
 const FOLDER_CHARS: usize = 60;
@@ -233,33 +233,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             app.duplicates_only = false;
         }
     });
-    if let Some((n, formats)) = crate::library::unplayable_summary(&app.tracks, |t| device.plays(t)) {
-        ui.add_space(S1);
-        let collapsed = app.saved.format_note_collapsed;
-        theme::warning_frame(ui).show(ui, |ui| {
-            ui.set_max_width(ui.available_width() - RAIL_W - S5);
-            row_wrapped(ui, |ui| {
-                ui.label(RichText::new(format!("{} in formats {} can't play: {formats}", plural(n, "song"), device.short())).color(ink.warn));
-                if link(ui, if collapsed { "why?" } else { "hide" }).clicked() {
-                    app.saved.format_note_collapsed = !collapsed;
-                }
-            });
-            if !collapsed {
-                let here = if crate::audio::ffmpeg().is_some() {
-                    "Here, AAC, ALAC, AIFF and Ogg play directly; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA by converting with ffmpeg first, in stereo; Dolby AC-4 has no decoder yet."
-                } else {
-                    "AAC, ALAC, AIFF and Ogg still play here; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg (brew install ffmpeg)."
-                };
-                muted(
-                    ui,
-                    format!(
-                        "{} {here} On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab, where the player can be changed too.",
-                        device.plays_text()
-                    ),
-                );
-            }
-        });
-    }
+    // Songs the card's player can't play are said in their rows (a badge) and dealt with in the
+    // card tab, where converting them is chosen.
     ui.add_space(S2);
     if app.tracks.is_empty() {
         // An unreachable folder is said in red above.

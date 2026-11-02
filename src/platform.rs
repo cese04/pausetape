@@ -34,6 +34,15 @@ pub fn attach_console() {
     }
 }
 
+/// How to install ffmpeg here, for messages that ask for it.
+pub const FFMPEG_INSTALL: &str = if cfg!(target_os = "macos") {
+    "brew install ffmpeg"
+} else if cfg!(windows) {
+    "winget install Gyan.FFmpeg"
+} else {
+    "sudo apt install ffmpeg, or your system's package manager"
+};
+
 /// A command for a console program (ffmpeg) that, on Windows, runs without opening a console
 /// window of its own: the app has none to lend it, so each run would flash one up.
 pub fn quiet_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {

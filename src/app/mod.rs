@@ -63,8 +63,6 @@ pub struct Saved {
     pub volume: f32,
     pub theme: ThemePref,
     pub accent: crate::ui::theme::Accent,
-    /// The library's format warning is collapsed to one line.
-    pub format_note_collapsed: bool,
     /// The library shows a table of albums rather than the list by artist.
     pub album_table: bool,
     /// Searches kept for reuse ("quality:lossless jazz").
@@ -85,7 +83,6 @@ impl Default for Saved {
             volume: 0.8,
             theme: ThemePref::System,
             accent: Default::default(),
-            format_note_collapsed: false,
             album_table: false,
             searches: Vec::new(),
         }
