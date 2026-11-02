@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pausetape · mixtapes for your music player</title>
+<meta name="description" content="Pausetape puts your music on an SD card the way your player likes it: tidy folders, the right names, only the songs you choose. Made for the Snowsky Echo Mini. Free for macOS, Windows and Linux.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#faf8f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#181715" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pausetape · mixtapes for your music player">
+<meta property="og:description" content="Tidy names, the right folders, only the songs you choose. Made for the Snowsky Echo Mini.">
+<meta property="og:url" content="https://cese04.github.io/pausetape/">
+<meta property="og:image" content="https://cese04.github.io/pausetape/img/library-light.webp">
+<link rel="icon" type="image/png" href="img/favicon-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preload" href="fonts/caveat-bold.woff" as="font" type="font/woff" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script>document.documentElement.classList.add("js")</script>
+<script src="main.js" defer></script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="brand" href="#top" aria-label="Pausetape, back to the top">
+      <img src="img/icon-256.png" alt="" width="32" height="32">
+      <span>Pausetape</span>
+    </a>
+    <ul>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#download">Download</a></li>
+      <li><a href="#questions">Questions</a></li>
+      <li><a href="https://github.com/cese04/pausetape">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+
+<section class="hero wrap" id="top">
+  <div class="hero-text">
+    <p class="hand eyebrow">Side A · for the Snowsky Echo Mini</p>
+    <h1>Your music, taped onto a card.</h1>
+    <p class="lead">Remember sitting by the radio, finger on the pause button, waiting for your
+      song? Pausetape brings that back for an SD card: you choose the albums, and it fixes
+      the names and copies them in the layout your player browses best.</p>
+    <p class="actions">
+      <a class="button primary" href="#download" data-download-hero>Download</a>
+      <a class="button" href="#how">See how it works</a>
+    </p>
+    <p class="small muted">Free and open source · macOS, Windows and Linux</p>
+  </div>
+
+  <svg class="cassette" viewBox="0 0 320 204" role="img" aria-label="A cassette, its label written by hand: Pausetape">
+    <rect class="shell" x="4" y="4" width="312" height="196" rx="14"/>
+    <circle class="screw" cx="20" cy="20" r="4"/><circle class="screw" cx="300" cy="20" r="4"/>
+    <circle class="screw" cx="20" cy="184" r="4"/><circle class="screw" cx="300" cy="184" r="4"/>
+    <rect class="label" x="26" y="18" width="268" height="122" rx="6"/>
+    <rect class="stripe" x="26" y="36" width="268" height="6"/>
+    <text class="label-text" x="44" y="69">Pausetape</text>
+    <text class="label-side" x="270" y="69" text-anchor="end">A</text>
+    <rect class="window" x="78" y="80" width="164" height="48" rx="24"/>
+    <path class="tape" d="M 106 104 L 214 104" />
+    <g class="reel reel-left">
+      <circle class="pack" cx="106" cy="104" r="20"/>
+      <circle class="hub" cx="106" cy="104" r="10"/>
+      <path class="teeth" d="M106 95v5M106 108v5M97 104h5M110 104h5"/>
+    </g>
+    <g class="reel reel-right">
+      <circle class="pack" cx="214" cy="104" r="14"/>
+      <circle class="hub" cx="214" cy="104" r="10"/>
+      <path class="teeth" d="M214 95v5M214 108v5M205 104h5M218 104h5"/>
+    </g>
+    <path class="bottom" d="M 70 200 L 84 158 L 236 158 L 250 200 Z"/>
+    <circle class="hole" cx="110" cy="182" r="5"/><circle class="hole" cx="210" cy="182" r="5"/>
+  </svg>
+</section>
+
+<section class="wrap shot-hero" data-reveal>
+  <figure class="screen">
+    <picture>
+      <source srcset="img/library-dark.webp" media="(prefers-color-scheme: dark)">
+      <img src="img/library-light.webp" width="1600" height="1161" alt="Pausetape's library: Radiohead's OK Computer, with genres and links to buy or listen to more of their music, a correction suggested by MusicBrainz, and the player at the bottom.">
+    </picture>
+  </figure>
+</section>
+
+<section class="story" data-reveal>
+  <div class="wrap story-grid">
+    <div class="deck" aria-hidden="true">
+      <span class="key"><span class="rec-light"></span>rec</span>
+      <span class="key">play</span>
+      <span class="key is-down">pause</span>
+      <span class="counter"><span>0</span><span>2</span><span>7</span></span>
+    </div>
+    <div>
+      <h2>Pause. Record. Pause.</h2>
+      <p>In the 90s a mixtape took an afternoon. You waited for the DJ to stop talking, let go of
+        pause, and caught it again before the ads. Then you wrote the track list by hand on
+        the little card inside the case.</p>
+      <p>Pausetape keeps the part you liked, the choosing, and does the rest: finding the files,
+        putting the names right, fitting it all on the card, and remembering what's already there
+        for next time.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap jcard-section" data-reveal>
+  <h2 class="visually-hidden">What Pausetape does, and what it won't do</h2>
+  <div class="jcard">
+    <div class="side">
+      <h3 class="hand">Side A · what it does</h3>
+      <ol>
+        <li><b>Reads your music where it is.</b> Tidy or not: tags first, folder names when
+          there are none.</li>
+        <li><b>Puts the names right.</b> “Bjork” and “Björk”, “Beatles, The” and “The Beatles”
+          become one artist. MusicBrainz, the open music encyclopedia, suggests the rest.</li>
+        <li><b>Lays out the card the way the player browses it.</b>
+          <code>Artist / 1997 - Album / 01 - Title</code>.</li>
+        <li><b>Copies only what changed.</b> Add an album and only that album is copied.</li>
+        <li><b>Converts what won't play.</b> ALAC, AIFF and APE become FLAC with nothing lost;
+          AAC and Dolby become MP3.</li>
+        <li><b>Makes playlists for a player without them:</b> folders of numbered copies.</li>
+        <li><b>Leads to more music.</b> Each artist's links to buy (Bandcamp, Qobuz, Discogs)
+          or to listen first (Spotify, Tidal…).</li>
+      </ol>
+    </div>
+    <div class="side">
+      <h3 class="hand">Side B · what it won't do</h3>
+      <ol>
+        <li><b>Touch your music folder unless you ask.</b> Corrections stay in the app until you
+          choose to write them into the files.</li>
+        <li><b>Delete what it didn't put there.</b> On the card it only ever removes its own
+          copies.</li>
+        <li><b>Ask for an account.</b> No sign-up, no cloud, no tracking. It goes online only to
+          look things up on MusicBrainz and its Cover Art Archive.</li>
+        <li><b>Cost anything.</b> It's free and open source.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="how" data-reveal>
+  <p class="hand eyebrow">How it works</p>
+  <h2>Five steps, one tape</h2>
+  <p class="lead">The first time takes a few minutes. After that it's steps 4 and 5 only: tick,
+    and press Sync.</p>
+
+  <div class="tour" data-tour>
+    <ol class="tour-steps">
+      <li data-shot="step-music"
+          data-marks="27.4 57.2 45.2 3.6 | 27.4 63 14.8 3.6"
+          data-notes="Open folders until you're in the one that holds your music… | …then use it. Nothing is moved or changed.">
+        <button type="button"><span class="num">1</span><span><b>Show it your music</b>
+          <small>Any folder, tidy or not.</small></span></button>
+      </li>
+      <li data-shot="step-card"
+          data-marks="3.25 36.3 54.75 20.5 | 27.9 60.4 11.8 3.6"
+          data-notes="Plug in the card and choose it. Pausetape checks it's formatted the way the player needs. | All set: on to choosing what goes on it.">
+        <button type="button"><span class="num">2</span><span><b>Choose the card</b>
+          <small>FAT32 or exFAT, as the player wants.</small></span></button>
+      </li>
+      <li data-shot="step-tidy"
+          data-marks="3.1 35.3 15 3.6 | 4 70.6 50.4 10.5 | 3.25 40.3 73.1 20.7"
+          data-notes="“Bjork” and “Björk” were two artists. Now they're one. | MusicBrainz suggests the right spelling. Nothing changes until you accept it. | And if you like what you hear: where to buy it, or listen to more first.">
+        <button type="button"><span class="num">3</span><span><b>Let it tidy up</b>
+          <small>Names, years, track numbers.</small></span></button>
+      </li>
+      <li data-shot="step-choose"
+          data-marks="3.1 63.3 92.5 10.3 | 87.1 15.7 7 3.4"
+          data-notes="Tick the artists and albums that go on this card. On the right, how their folders will be named. | Press Sync.">
+        <button type="button"><span class="num">4</span><span><b>Pick the songs</b>
+          <small>Whole artists, albums, playlists.</small></span></button>
+      </li>
+      <li data-shot="step-record"
+          data-marks="3.1 5.9 53.1 3.3 | 89.9 6.2 6.8 3.5"
+          data-notes="It's recording. The time left is counted as it goes. | Stop whenever you like: what's copied stays, and the next Sync carries on.">
+        <button type="button"><span class="num">5</span><span><b>Press record</b>
+          <small>Then eject, and press play.</small></span></button>
+      </li>
+    </ol>
+
+    <figure class="screen tour-screen">
+      <div class="tour-frame">
+        <div class="tour-zoom">
+        <picture class="tour-shot is-active">
+          <source srcset="img/step-music-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/step-music-light.webp" width="1600" height="1161" alt="The folder chooser, open on a folder named Music that holds 40 songs.">
+        </picture>
+        <picture class="tour-shot">
+          <source srcset="img/step-card-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/step-card-light.webp" width="1600" height="1161" loading="lazy" alt="The folders tab: the music folder, and the card ECHO MINI, with 34 GB free.">
+        </picture>
+        <picture class="tour-shot">
+          <source srcset="img/step-tidy-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/step-tidy-light.webp" width="1600" height="1161" loading="lazy" alt="The library: Björk, two albums, with genres, links, and MusicBrainz suggesting Björk for an album tagged Bjork.">
+        </picture>
+        <picture class="tour-shot">
+          <source srcset="img/step-choose-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/step-choose-light.webp" width="1600" height="1161" loading="lazy" alt="The card tab: Björk's two albums ticked, each with the folder name it gets on the card, and the Sync button.">
+        </picture>
+        <picture class="tour-shot">
+          <source srcset="img/step-record-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/step-record-light.webp" width="1600" height="1161" loading="lazy" alt="A write under way: 1204 of 2466 songs, about 5 minutes left, and a Stop button.">
+        </picture>
+        <div class="mark" aria-hidden="true"></div>
+        </div>
+      </div>
+      <figcaption class="tour-note" aria-live="polite"></figcaption>
+    </figure>
+
+    <div class="tour-deck" aria-label="Tour controls">
+      <button type="button" class="deck-button" data-tour-prev aria-label="Previous step">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6v12l-8-6zM21 6v12l-8-6z"/></svg></button>
+      <button type="button" class="deck-button" data-tour-play aria-label="Pause the tour">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="icon-pause" d="M6 5h4v14H6zM14 5h4v14h-4z"/><path class="icon-play" d="M7 4l13 8-13 8z"/></svg></button>
+      <button type="button" class="deck-button" data-tour-next aria-label="Next step">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6v12l8-6zM13 6v12l8-6z"/></svg></button>
+      <div class="tour-tape" aria-hidden="true"><span></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="download" data-reveal>
+  <p class="hand eyebrow">Download</p>
+  <h2>Get Pausetape</h2>
+  <p class="lead" data-release-status>The first release is on its way. Until then, the app can be
+    built from its <a href="https://github.com/cese04/pausetape#build-from-source-any-platform">source code</a>.</p>
+
+  <div class="platforms">
+    <article class="platform" data-os="mac">
+      <h3>macOS</h3>
+      <p class="muted small">macOS 12 or later · Apple Silicon and Intel</p>
+      <a class="button primary" data-asset="\.dmg$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <details>
+        <summary>Opening it the first time</summary>
+        <ol>
+          <li>Open the disk image and drag Pausetape to Applications.</li>
+          <li>Open it. macOS says it can't check the developer: click <b>Done</b>.</li>
+          <li>Go to System Settings › Privacy &amp; Security and click <b>Open Anyway</b>.</li>
+        </ol>
+        <p class="small muted">Only needed once: Pausetape isn't signed by a registered Apple
+          developer yet.</p>
+      </details>
+    </article>
+
+    <article class="platform" data-os="windows">
+      <h3>Windows</h3>
+      <p class="muted small">Windows 10 or 11 · one file, nothing to install</p>
+      <a class="button primary" data-asset="Windows\.exe$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <details>
+        <summary>Opening it the first time</summary>
+        <ol>
+          <li>Run the file you downloaded.</li>
+          <li>If Windows says it protected your PC, click <b>More info</b>, then
+            <b>Run anyway</b>.</li>
+          <li>For the rarer formats (Dolby, Opus, APE, WavPack, WMA), install ffmpeg: in a
+            terminal, <code>winget install Gyan.FFmpeg</code>.</li>
+        </ol>
+      </details>
+    </article>
+
+    <article class="platform" data-os="linux">
+      <h3>Linux</h3>
+      <p class="muted small">x86-64 · one file</p>
+      <a class="button primary" data-asset="Linux$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <details>
+        <summary>Opening it the first time</summary>
+        <ol>
+          <li>Make the file executable: <code>chmod +x pausetape-*-Linux</code>.</li>
+          <li>Run it.</li>
+          <li>For the rarer formats (Dolby, Opus, APE, WavPack, WMA), install ffmpeg from your
+            distribution, e.g. <code>sudo apt install ffmpeg</code>.</li>
+        </ol>
+      </details>
+    </article>
+  </div>
+  <p class="small muted">Pausetape is young: it's been used most on macOS, and Windows and Linux
+    are newer. If something doesn't work, <a href="https://github.com/cese04/pausetape/issues">tell us
+    about it</a>.</p>
+</section>
+
+<section class="wrap" id="players" data-reveal>
+  <h2>Which players?</h2>
+  <div class="players">
+    <div>
+      <h3>Snowsky Echo Mini · <a href="https://recho.atzkey.workers.dev/">RECHO firmware</a></h3>
+      <p>Browses folders in name order, so album folders start with the year. Plays FLAC, MP3 and
+        WAV; anything else is converted as it's copied.</p>
+    </div>
+    <div>
+      <h3>Snowsky Echo Mini · its own firmware</h3>
+      <p>Builds its library from the songs' tags and shows covers. It's said to list at most
+        8,192 songs, so Pausetape warns before a card goes past that.</p>
+    </div>
+    <div>
+      <h3>Anything that reads a card by folder</h3>
+      <p>The same tidy layout suits most players and car stereos that browse folders, though
+        only the Echo Mini has been tested.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="questions" data-reveal>
+  <h2>Questions</h2>
+  <div class="faq">
+    <details>
+      <summary>Will it change or delete my music?</summary>
+      <p>No. Pausetape reads your music folder and copies from it. Corrections to names and
+        tags stay in the app (and reach the card) until you choose to write them into your files.
+        Reorganising the folder itself is optional, and can be undone.</p>
+    </details>
+    <details>
+      <summary>What about the music already on my card?</summary>
+      <p>It stays. Pausetape only removes files it put there itself. If the card already has your
+        music, copied by hand, it can check those files against your library and take them over
+        instead of copying them again.</p>
+    </details>
+    <details>
+      <summary>My player has no playlists. Can I still have one?</summary>
+      <p>Yes: a playlist goes on the card as a folder of numbered copies, so it plays in order
+        from the folder view. A <code>.m3u8</code> list goes along for players that read them.</p>
+    </details>
+    <details>
+      <summary>Some of my songs won't play on the Echo Mini.</summary>
+      <p>Pausetape marks them, and converts them as they're copied: lossless files (ALAC, AIFF,
+        APE…) become FLAC with nothing lost, and lossy ones (AAC, Dolby…) become MP3 at 320 kbps.
+        Your originals stay as they are.</p>
+    </details>
+    <details>
+      <summary><span>My album is one big file and a <code>.cue</code>.</span></summary>
+      <p>Pausetape shows its songs separately, and on the card each one becomes its own FLAC
+        file.</p>
+    </details>
+    <details>
+      <summary>Does it need the internet?</summary>
+      <p>Only to look up names, covers and artists on MusicBrainz and its Cover Art Archive. Everything
+        else works offline, and nothing is sent anywhere else.</p>
+    </details>
+    <details>
+      <summary>Is it really free?</summary>
+      <p>Yes, with nothing to unlock. It's open source under the MIT licence, so anyone can read,
+        change or share it.</p>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p class="hand foot-sign">Pausetape</p>
+    <p class="small muted">An independent project, not affiliated with Snowsky or RECHO.
+      <a href="https://github.com/cese04/pausetape">Source code</a> under the MIT licence.
+      Handwriting in Caveat (<a href="fonts/OFL.txt">SIL Open Font License</a>).
+      The screenshots show a made-up music library.</p>
+  </div>
+</footer>
+
+</body>
+</html>

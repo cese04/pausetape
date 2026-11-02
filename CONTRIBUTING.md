@@ -49,7 +49,8 @@ A hotfix goes the same way, from `main` (`hotfix/0.2.1`), back into both `main` 
 
 Every push and pull request is built and tested on macOS, Windows and Linux
 ([ci.yml](.github/workflows/ci.yml)); `main`, version tags and pull requests also get the
-packaged Mac app ([macos.yml](.github/workflows/macos.yml)).
+packaged Mac app ([macos.yml](.github/workflows/macos.yml)). The website in `site/` is published from `main`
+([pages.yml](.github/workflows/pages.yml); see [WEBSITE](docs/WEBSITE.md)).
 
 The dependencies are checked with [cargo-deny](https://embarkstudios.github.io/cargo-deny/) on
 every run, and every Monday on `main` (GitHub runs scheduled workflows from the default branch),
