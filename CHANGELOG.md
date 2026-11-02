@@ -695,3 +695,8 @@ Calibre's device view, for music: the library is where you choose what goes on t
   Started from a terminal, they attach to it: `--version`, `--plan` and errors print there.
   Terminals don't wait for a windowed program, so in PowerShell add `| Out-Host`; `cargo run`
   waits by itself. Debug builds keep their console. Run on Windows 11.
+
+### 55. Track numbers clear of the card mark (2026-11-01)
+- On albums of several discs, a number such as "2-10" ran into the ring at the left that says
+  whether the song is on the card. The number column now fits the album's widest number, the
+  same for all its songs, so their titles still line up. Seen on macOS and Windows.
