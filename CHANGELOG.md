@@ -683,3 +683,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
   a curly apostrophe: the library's search and the card tab's filter drop the accents of Latin
   letters, on both sides, before comparing. Other scripts are compared as they are, so "кино"
   still finds Кино.
+
+### 53. Text centred on Windows too (2026-11-01)
+- On Windows, words sat a few points above the icons beside them and above the middle of
+  buttons. Palatino Linotype has a line gap of a third of its size, which egui puts below each
+  line. The app now drops a font's line gap when it loads it, so text is centred and lines are
+  as close as on macOS. Seen in the first run on Windows.

@@ -134,6 +134,25 @@ const FALLBACK: &[(&str, u32)] = &[
     ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
 ];
 
+/// egui puts a font's line gap below each line, so text sits that much above the middle of its
+/// row, and above the icons beside it. Windows' Palatino Linotype has a gap of a third of its
+/// size; without it, text is centred as on macOS. Only plain font files: collections are left
+/// as they are.
+fn without_line_gap(mut font: Vec<u8>) -> Vec<u8> {
+    let at = |b: &[u8], i: usize, n: usize| b.get(i..i + n).map(|s| s.iter().fold(0usize, |v, &x| v << 8 | x as usize));
+    if !matches!(font.get(..4), Some([0, 1, 0, 0] | b"true" | b"OTTO")) {
+        return font;
+    }
+    let tables = at(&font, 4, 2).unwrap_or(0);
+    let hhea = (0..tables).map(|t| 12 + 16 * t).find(|&r| font.get(r..r + 4) == Some(b"hhea"));
+    if let Some(gap) = hhea.and_then(|r| at(&font, r + 8, 4)).map(|offset| offset + 8)
+        && let Some(b) = font.get_mut(gap..gap + 2)
+    {
+        b.fill(0);
+    }
+    font
+}
+
 pub fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     let mut load = |list: &[(&str, u32)], first_only: bool| -> Vec<String> {
@@ -141,7 +160,7 @@ pub fn install(ctx: &egui::Context) {
         for (path, index) in list {
             if let Ok(bytes) = std::fs::read(path) {
                 let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_string();
-                fonts.font_data.insert(name.clone(), Arc::new(FontData::from_blob(Arc::new(bytes), *index)));
+                fonts.font_data.insert(name.clone(), Arc::new(FontData::from_blob(Arc::new(without_line_gap(bytes)), *index)));
                 names.push(name);
                 if first_only {
                     break;
@@ -226,4 +245,23 @@ pub fn dialog_frame(ui: &Ui) -> egui::Frame {
 pub fn warning_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
     egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn line_gap_is_dropped_from_plain_fonts_only() {
+        // A font file with one table, `hhea`: ascender 1499, descender -582, line gap 682.
+        let mut font = vec![0, 1, 0, 0, 0, 1, 0, 16, 0, 0, 0, 0];
+        font.extend(b"hhea");
+        font.extend([0, 0, 0, 0, 0, 0, 0, 28, 0, 0, 0, 36]);
+        font.extend([0, 1, 0, 0, 0x05, 0xdb, 0xfd, 0xba, 0x02, 0xaa]);
+        font.resize(28 + 36, 0);
+        let fixed = super::without_line_gap(font.clone());
+        assert_eq!(fixed[28 + 4..28 + 10], [0x05, 0xdb, 0xfd, 0xba, 0, 0], "ascender and descender kept, gap gone");
+        let mut collection = font;
+        collection[..4].copy_from_slice(b"ttcf");
+        assert_eq!(super::without_line_gap(collection.clone()), collection);
+        assert!(super::without_line_gap(vec![0, 1, 0, 0, 0, 9]).len() == 6, "a truncated file is left alone");
+    }
 }
