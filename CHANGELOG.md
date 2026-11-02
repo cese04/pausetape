@@ -700,3 +700,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - On albums of several discs, a number such as "2-10" ran into the ring at the left that says
   whether the song is on the card. The number column now fits the album's widest number, the
   same for all its songs, so their titles still line up. Seen on macOS and Windows.
+
+### 56. The format note moves to the card tab (2026-11-01)
+- The library no longer opens with a red box about songs the card's player can't play: the
+  app converts them on the way, so it wasn't a problem to act on. Each such song keeps its
+  badge ("M4A · not on RECHO"), and the card tab's *Formats RECHO can't play* says what plays
+  in the app, what needs ffmpeg, and what each song becomes. Red stays for songs that would be
+  left out.
+- Messages that ask for ffmpeg say how to install it on the system in use (`winget install
+  Gyan.FFmpeg` on Windows), not `brew install ffmpeg` everywhere.

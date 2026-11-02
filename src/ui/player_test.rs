@@ -52,7 +52,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                 }
             });
             if crate::audio::ffmpeg().is_none() {
-                ui.label(RichText::new("The samples are made with ffmpeg, which isn't installed (brew install ffmpeg).").size(13.0).color(ink.warn));
+                ui.label(RichText::new(format!("The samples are made with ffmpeg, which isn't installed ({}).", crate::platform::FFMPEG_INSTALL)).size(13.0).color(ink.warn));
             }
         }
         ui.add_space(S2);

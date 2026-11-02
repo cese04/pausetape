@@ -830,6 +830,18 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     if let Some((n, formats)) = &unplayable {
         widgets::setting(ui, &format!("Formats {} can't play", device.short()), |ui| {
             ui.label(RichText::new(format!("{}: {formats}", plural(*n, "song"))).color(ink.text));
+            widgets::help(
+                ui,
+                format!(
+                    "{} In this app, AAC, ALAC, AIFF and Ogg play as they are; {}; Dolby AC-4 has no decoder yet.",
+                    device.plays_text(),
+                    if crate::audio::ffmpeg().is_some() {
+                        "Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA through ffmpeg, in stereo".to_string()
+                    } else {
+                        format!("Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg ({})", crate::platform::FFMPEG_INSTALL)
+                    }
+                ),
+            );
             changed |= ui
                 .radio_value(&mut w.options.unplayable, Unplayable::Convert, "convert them")
                 .on_hover_text("Takes a while the first time; later writes keep what's already on the card.")
