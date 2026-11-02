@@ -132,8 +132,8 @@ Per platform:
 - **macOS.** Build `aarch64-apple-darwin` and `x86_64-apple-darwin`, merge them with `lipo` into
   one universal binary, then package. A DMG with the usual "drag to Applications" window.
 - **Windows.** NSIS installer: per-user install (no admin rights), Start-menu shortcut,
-  uninstaller. Icon and version info embedded in the .exe (`winresource` or
-  `embed-resource`). MSI only if someone asks for it.
+  uninstaller. MSI only if someone asks for it. *Done 2026-11-02:* the icon and version info
+  are built into the .exe (`build.rs`, with `winresource`).
 - **Linux.** Build on Ubuntu 22.04 so the binary runs on older distributions too (glibc
   2.35). The AppImage bundles everything except system audio (ALSA/PipeWire) and graphics
   drivers. The .deb declares its dependencies. A `.desktop` file and icons go in both. The
@@ -142,8 +142,10 @@ Per platform:
   dependency. **Flatpak/Flathub later:** its sandbox needs explicit access to `/media` and
   `/run/media` for SD cards, and ffmpeg via the `org.freedesktop.Platform.ffmpeg-full` extension.
 
-**App icon:** one 1024×1024 master turned into `.icns`, `.ico` and PNG sizes. In keeping with
-the look: a serif "N" or a small folder on warm paper.
+**App icon:** a cassette with "Pausetape" written on its label, on warm paper. One 1024×1024
+master (`assets/icon/icon-1024.png`, from `scripts/make-icon.py`) is turned into the Mac's
+`.icns` by `scripts/package-macos.sh`, and into the window's PNG and the Windows `.ico` by
+`build.rs`. Linux's `.desktop` icons are still to do.
 
 ---
 

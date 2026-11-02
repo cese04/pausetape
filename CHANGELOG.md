@@ -717,3 +717,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
   an album unticked without touching its other files, AAC was converted, `.pausetape` is
   hidden, and the Trash leaves files on cards alone. Reserved names and a 374-character path
   were written and read back. What still needs the app in hand is listed.
+
+### 58. The cassette on Windows too (2026-11-02)
+- The window and the taskbar show the cassette instead of egui's icon, and on Windows the
+  .exe carries it too, for Explorer and the Start menu, with the app's name and version in
+  its properties. `build.rs` makes them from the one drawing, `assets/icon/icon-1024.png`, so
+  nothing derived is kept in the repository.

@@ -43,3 +43,8 @@ opt-level = 2
 # Every `unsafe` block says why it's sound (CI fails otherwise).
 [lints.clippy]
 undocumented_unsafe_blocks = "warn"
+
+[build-dependencies]
+# build.rs: the app icon for the window, and built into the Windows .exe. Not shipped.
+image ={ version = "0.25.10", default-features = false, features = ["png", "ico"] }
+winresource = "0.1.34"
