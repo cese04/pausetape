@@ -59,10 +59,18 @@ impl Mark {
     }
 }
 
+/// Where an album's track numbers end: clear of the card mark at the left even for "2-10", and
+/// the same for every song of the album, so their titles line up.
+fn number_column(ui: &Ui, numbers: &[String]) -> f32 {
+    let widest = numbers.iter().map(|n| ui.painter().layout_no_wrap(n.clone(), FontId::proportional(14.5), egui::Color32::PLACEHOLDER).size().x).fold(0.0, f32::max);
+    (14.0 + widest).max(30.0)
+}
+
 /// A track row painted directly so columns line up like a table without any grid lines.
+/// `number`: the track number, and where the album's numbers end (`number_column`).
 /// `repeat`: an extra copy of a song the album already has. `selected`: chosen for editing tags.
 #[allow(clippy::too_many_arguments)]
-fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str, f32), show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -75,7 +83,7 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: 
     let y = rect.center().y;
     let font = FontId::proportional(14.5);
     let num_color = if playing { ink.accent } else { ink.muted };
-    p.text(egui::pos2(rect.left() + 30.0, y), Align2::RIGHT_CENTER, if playing { "▸" } else { number }, font.clone(), num_color);
+    p.text(egui::pos2(rect.left() + number_end, y), Align2::RIGHT_CENTER, if playing { "▸" } else { number }, font.clone(), num_color);
     if let Some(m) = mark {
         m.paint(&p, egui::pos2(rect.left() + 6.0, y), 2.4, &ink);
     }
@@ -85,8 +93,9 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: 
         title = format!("{title}  ·  {a}");
     }
     let right_cols = if device.plays(t) && !repeat { 130.0 } else { 250.0 };
-    let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - 44.0 - right_cols);
-    p.galley(egui::pos2(rect.left() + 44.0, y - galley.size().y / 2.0), galley, ink.text);
+    let title_x = number_end + 14.0;
+    let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - title_x - right_cols);
+    p.galley(egui::pos2(rect.left() + title_x, y - galley.size().y / 2.0), galley, ink.text);
 
     let mut x = rect.right() - 28.0;
     p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, text::duration(t.duration), font.clone(), ink.muted);
@@ -522,19 +531,27 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                     let album_name = al.title.as_deref().unwrap_or("");
                     let every_song = query.names_match(&artist.name, album_name);
+                    let numbers: Vec<String> = al
+                        .tracks
+                        .iter()
+                        .map(|&ti| {
+                            let t = &app.tracks[ti];
+                            match (t.track, al.multi_disc) {
+                                (Some(n), true) => format!("{}-{n}", t.disc.unwrap_or(1)),
+                                (Some(n), false) => n.to_string(),
+                                (None, _) => String::new(),
+                            }
+                        })
+                        .collect();
+                    let number_end = number_column(ui, &numbers);
                     for (pos, &ti) in al.tracks.iter().enumerate() {
                         let t = &app.tracks[ti];
                         if !every_song && !query.song_matches(&artist.name, album_name, &t.display_title()) {
                             continue;
                         }
-                        let num = match (t.track, al.multi_disc) {
-                            (Some(n), true) => format!("{}-{n}", t.disc.unwrap_or(1)),
-                            (Some(n), false) => n.to_string(),
-                            (None, _) => String::new(),
-                        };
                         let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
                         let selected = app.selected.contains(&ti);
-                        let (r, add) = track_row(ui, t, device, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
+                        let (r, add) = track_row(ui, t, device, (&numbers[pos], number_end), al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
                         if r.clicked() && mods.command {
                             actions.push(Action::Select(ti));
                         } else if r.clicked() && mods.shift {
