@@ -147,6 +147,11 @@ impl Shooter {
             if std::env::var_os("PAUSETAPE_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();
             }
+            // PAUSETAPE_SHOT_CARD=<folder>: the card this write goes to (only read; the website's
+            // shots use an empty FAT32 disk image).
+            if let Some(card) = std::env::var_os("PAUSETAPE_SHOT_CARD") {
+                app.write_mut().dest = Some(card.into());
+            }
             // PAUSETAPE_SHOT_ROOM=<GB>: pretend the card (an empty temporary folder) has this
             // much room, to show what the card tab offers when the choice doesn't fit.
             if let Some(gb) = std::env::var("PAUSETAPE_SHOT_ROOM").ok().and_then(|v| v.parse::<f64>().ok()) {
@@ -203,6 +208,10 @@ impl Shooter {
                 let other = crate::card::Label::of(&app.saved.writes[1]);
                 app.select_write(0);
                 app.dest_label.get_or_insert(other);
+            }
+            // PAUSETAPE_SHOT_QUIET=1: no notice above the page (the scan's "40 songs…").
+            if std::env::var_os("PAUSETAPE_SHOT_QUIET").is_some() {
+                app.notices.clear();
             }
             app.filter = if TABS[n].1 == "covers" { "cover:no".into() } else { filter };
             if TABS[n].1 == "albums" {

@@ -667,3 +667,13 @@ Calibre's device view, for music: the library is where you choose what goes on t
   are on separate rows. The player's cover is exactly as tall as the title, sparkline and
   buttons beside it.
 
+### 51. A website (2026-11-01)
+- `site/`, published on GitHub Pages from `main`: what Pausetape is for, in the spirit of the
+  pause-button tapes of the 90s; a five-step tour (choose the music, the card, tidy, pick,
+  record) whose ring moves over real screenshots, closing in on a phone; downloads from the
+  latest release, with how to open the app the first time on each system; questions.
+  Light and dark like the app, no outside fonts or tracking; motion stops under *Reduce
+  motion*. How it's made and kept up: [docs/WEBSITE.md](docs/WEBSITE.md).
+- `scripts/site-shots.py` takes its screenshots from a made-up library and an empty FAT32
+  disk image, in the app's own screenshot demo, which gains `PAUSETAPE_SHOT_CARD` and
+  `PAUSETAPE_SHOT_QUIET`.

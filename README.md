@@ -9,6 +9,8 @@ A desktop app that organises your music for the **Snowsky Echo Mini** running th
 [RECHO](https://recho.atzkey.workers.dev/) firmware, and plays it on your computer in a quiet,
 Tufte-inspired player.
 
+**Website, with a step-by-step tour and downloads:** <https://cese04.github.io/pausetape/>
+
 RECHO is fast, but it reads the SD card as it is: it browses folders sorted by name, has no
 playlists, and plays only FLAC, MP3 and WAV. Pausetape turns a music folder (organised or not)
 into exactly the layout RECHO browses well:
@@ -99,6 +101,7 @@ ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt 
 | [docs/TESTING.md](docs/TESTING.md) | Testing on Windows and Linux, step by step, and how to report results |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging, signing and releases for macOS, Windows and Linux |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How work is done: git flow branches, versions, what the CI keeps, open feature branches |
+| [docs/WEBSITE.md](docs/WEBSITE.md) | The website (`site/`): its screenshots, the tour, publishing it |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the code fits together, where data is stored |
 | [CHANGELOG.md](CHANGELOG.md) | Everything done so far, in order |
 
