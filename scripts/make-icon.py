@@ -3,6 +3,9 @@
 
     python3 scripts/make-icon.py [handwriting.ttf]   ->  assets/icon/icon-1024.png
 
+The Mac app's icon is made from it by package-macos.sh; the window's and the Windows .exe's by
+build.rs, at each build.
+
 The handwriting is Caveat Bold (SIL Open Font License, from Google Fonts), as with a pen on a
 tape's label; it's downloaded into target/ the first time, and only the drawing is kept, the
 font isn't shipped. Needs Pillow.
