@@ -677,3 +677,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - `scripts/site-shots.py` takes its screenshots from a made-up library and an empty FAT32
   disk image, in the app's own screenshot demo, which gains `PAUSETAPE_SHOT_CARD` and
   `PAUSETAPE_SHOT_QUIET`.
+
+### 52. Search ignores accents (2026-11-01)
+- "bjork" finds Björk, "sigur ros" Sigur Rós, "strasse" Straße, and "don't" a title spelt with
+  a curly apostrophe: the library's search and the card tab's filter drop the accents of Latin
+  letters, on both sides, before comparing. Other scripts are compared as they are, so "кино"
+  still finds Кино.

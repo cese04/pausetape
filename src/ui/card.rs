@@ -17,6 +17,7 @@ use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
 use crate::card::pattern::{Field, Pattern, default_for};
 use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
+use crate::library::search::fold;
 use super::layout::{S1, S2, S3, row, row_wrapped};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -967,14 +968,14 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     });
     ui.add_space(S1);
     let w = app.write();
-    let needle = app.card_filter.to_lowercase();
+    let needle = fold(&app.card_filter);
     let pattern = w.options.pattern();
     let custom_order = pattern.uses(Field::Position);
     for (ai, artist) in app.index.artists.iter().enumerate() {
         let ck = &app.index.clusters[artist.cluster].key;
         if !needle.is_empty()
-            && !artist.name.to_lowercase().contains(&needle)
-            && !artist.albums.iter().any(|a| a.title.as_deref().is_some_and(|t| t.to_lowercase().contains(&needle)))
+            && !fold(&artist.name).contains(&needle)
+            && !artist.albums.iter().any(|a| a.title.as_deref().is_some_and(|t| fold(t).contains(&needle)))
         {
             continue;
         }

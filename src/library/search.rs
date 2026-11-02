@@ -2,6 +2,8 @@
 //! narrow albums by what they are ("format:m4a", "quality:lossy", "card:on", "cover:no",
 //! "year:1979..1985", "edited:yes", "damaged:yes"); a leading "-" turns a term around ("-format:mp3").
 
+use deunicode::deunicode_char;
+
 use super::Track;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,7 +46,7 @@ pub enum OnCard {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Query {
-    /// Lowercased; each must appear in the artist, the album or a song title.
+    /// Folded (`fold`); each must appear in the artist, the album or a song title.
     pub words: Vec<String>,
     /// (filter, wanted): false for a "-" term.
     pub filters: Vec<(Filter, bool)>,
@@ -89,7 +91,7 @@ impl Query {
                 _ => (true, term),
             };
             let Some((field, value)) = body.split_once(':') else {
-                q.words.push(term.to_lowercase());
+                q.words.push(fold(term));
                 continue;
             };
             let value = value.to_lowercase();
@@ -138,13 +140,13 @@ impl Query {
 
     /// Every word is in the artist or album name: then all its songs are shown.
     pub fn names_match(&self, artist: &str, album: &str) -> bool {
-        let (artist, album) = (artist.to_lowercase(), album.to_lowercase());
+        let (artist, album) = (fold(artist), fold(album));
         self.words.iter().all(|w| artist.contains(w) || album.contains(w))
     }
 
     /// Every word is in the artist, the album or this song's title.
     pub fn song_matches(&self, artist: &str, album: &str, title: &str) -> bool {
-        let (artist, album, title) = (artist.to_lowercase(), album.to_lowercase(), title.to_lowercase());
+        let (artist, album, title) = (fold(artist), fold(album), fold(title));
         self.words.iter().all(|w| artist.contains(w) || album.contains(w) || title.contains(w))
     }
 
@@ -175,6 +177,22 @@ impl Filter {
             Filter::Damaged(d) => a.tracks.iter().any(|t| t.damaged) == *d,
         }
     }
+}
+
+/// Lowercased, with Latin letters' accents dropped and curly quotes made straight, so that
+/// "bjork" finds "Björk", "strasse" "Straße" and "don't" "Don’t". Other scripts are kept as they
+/// are: spelt in Latin letters they'd match too much ("lin" in "林檎", read "Lin Qin").
+/// The card tab's filter folds the same way.
+pub fn fold(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        let latin = matches!(c, '\u{c0}'..='\u{24f}' | '\u{1e00}'..='\u{1eff}' | '\u{2010}'..='\u{201f}');
+        match deunicode_char(c).filter(|_| latin) {
+            Some(plain) => out.push_str(plain),
+            None => out.push(c),
+        }
+    }
+    out.to_lowercase()
 }
 
 /// "1979" → 1979..=1979, "1979..1985", "..1990", "2000..".
@@ -228,5 +246,14 @@ mod tests {
         assert!(!m("edited:yes", &mixed));
         let q = Query::parse("joy candidate");
         assert!(!q.names_match("Joy Division", "Unknown Pleasures") && q.song_matches("Joy Division", "Unknown Pleasures", "Candidate"));
+    }
+
+    #[test]
+    fn ignores_accents_and_curly_quotes() {
+        let names = |q: &str, artist: &str| Query::parse(q).names_match(artist, "");
+        assert!(names("bjork", "Björk") && names("björk", "Bjork") && names("BJÖRK", "björk"));
+        assert!(names("sigur ros", "Sigur Rós") && names("motorhead", "Motörhead") && names("strasse", "Straße"));
+        assert!(Query::parse("don't").song_matches("Oasis", "", "Don’t Look Back in Anger"));
+        assert!(names("кино", "Кино") && names("林檎", "椎名林檎") && !names("lin", "椎名林檎"));
     }
 }
