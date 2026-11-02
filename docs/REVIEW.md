@@ -215,7 +215,8 @@ Once the app runs without its own console (DISTRIBUTION §1 #4), each ffmpeg it 
 console window for as long as it runs: one per converted song on the card.
 
 **Fixed 2026-10-31.** Every ffmpeg run goes through `platform::quiet_command`, which sets
-`CREATE_NO_WINDOW` on Windows. Type-checked for Windows; not yet run there.
+`CREATE_NO_WINDOW` on Windows. On Windows 11 (2026-11-01), 92 songs were converted with no
+console window, from a test run; not yet watched from the app.
 
 ### R13
 **Plugging in a card doesn't bring up its setup.** (Windows)
@@ -227,7 +228,8 @@ setup's card once its folder is chosen by hand. Fixed by the same work as #1.
 
 **Fixed 2026-10-31** (with DISTRIBUTION §1 #1 and #2). On Windows, drive letters are listed
 (not Windows' own drive, network or CD drives) with their label, filesystem and free space,
-through `windows-sys`. Type-checked for Windows; not yet run there.
+through `windows-sys`. Seen listing drives on Windows 11 (2026-11-01); a card bringing up its
+setup when plugged in is still to be seen.
 
 ### R25
 **Playback can stutter while the music drive is busy.**
@@ -354,7 +356,7 @@ Tested.
 A leading dot hides a file on macOS and Linux only.
 
 **Fixed 2026-10-31.** On Windows it's written with the hidden attribute (which Windows also
-needs given to write over it). Type-checked for Windows; not yet run there.
+needs given to write over it). Seen hidden on Windows 11 (2026-11-01).
 
 ### R24
 **The card tab recomputes sizes on every frame.**

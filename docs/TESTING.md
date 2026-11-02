@@ -1,9 +1,10 @@
 # Testing on Windows and Linux
 
-*Written 2026-10-27, before the app had ever been built on either system.*
+*Written 2026-10-27, before the app had ever been built on either system. First run on Windows
+11 on 2026-11-01: §3 says what was seen.*
 
-Pausetape was developed and tested only on macOS. The code is meant to be portable, but
-nobody has compiled or run it on Windows or Linux yet. This guide takes you from a fresh machine
+Pausetape was developed on macOS. It was first built and run on Windows 11 on 2026-11-01; nobody
+has tried it on Linux yet. This guide takes you from a fresh machine
 to a full test pass, says what to expect (including the gaps already known), and how to report
 results.
 
@@ -18,7 +19,7 @@ portability fixes) · [REVIEW](REVIEW.md) (bugs found by a code review, 2026-10-
 Once the repository is on GitHub, every push runs `.github/workflows/ci.yml`. It builds and
 tests on **macOS, Windows and Linux**. Check the **Actions** tab first:
 
-- **Green on all three:** it compiles and the 35 tests pass everywhere. Go on to the hands-on
+- **Green on all three:** it compiles and the tests pass everywhere. Go on to the hands-on
   test below.
 - **Red on Windows or Linux:** open the failed step's log; that's the first thing to fix. A
   compile error there is likely, since this code has never met those compilers.
@@ -69,7 +70,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/cese04/pausetape.git
 cd pausetape
-cargo test                          # 77 tests should pass (12 more are skipped on purpose)
+cargo test                          # 78 tests pass on Windows, 79 elsewhere; 12 are skipped on purpose
 cargo run --release -- --version    # e.g. "Pausetape 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -90,22 +91,26 @@ cargo run --release -- --plan ~/Music           # Linux
 
 ---
 
-## 3. Known gaps (found by reading the code; not yet seen on a real machine)
+## 3. Known gaps
+
+Found by reading the code. The Windows rows say what was seen on Windows 11 (2026-11-01), on two
+SD cards (FAT32 and exFAT, only read) and a FAT32 USB stick (written). Linux rows are still
+unchecked.
 
 | # | System | What you'll see | Workaround for now |
 |---|---|---|---|
-| 1 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* drives are now listed by letter and label ("NO NAME (E:)"). | To check it: the card dialog lists the card; Windows' own drive isn't listed. If no drive shows, use **Use a folder on a card…** → **system picker…** and say so. |
-| 2 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* free space, filesystem and the "not FAT" warning. | To check it: the card tab shows the size bar and "FAT32"/"exFAT". |
+| 1 | **Windows** | *Fixed 2026-10-31, seen working on Windows 11:* drives are listed by letter and label ("DATA (D:)"; "Drive (G:)" without a label). Windows' own drive and empty card readers aren't listed. Other internal drives are, under "other drives". | — |
+| 2 | **Windows** | *Fixed 2026-10-31, seen working on Windows 11:* free space and filesystem ("FAT32", "exFAT", "NTFS"); NTFS counts as not FAT. | — |
 | 3 | **Windows** | *Fixed 2026-11-01, run on Windows 11:* no **console window** opens behind the app. Started from a terminal, it prints there; but the terminal doesn't wait for it. | Use `cargo run`, or add `\| Out-Host` in PowerShell: `pausetape --version \| Out-Host`. Debug builds keep their console. |
 | 4 | **Windows** | The in-app browser can't reach other drives except through **system picker…**; there's no "Drives" button. | Use **system picker…**. |
-| 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9` can't be written to the card. | Rename it for that write in the card tab. Rare. |
-| 6 | **Windows** | Card paths can exceed 260 characters with very long names; the app copes, but Explorer may not open them. | Rename long albums for the card. |
+| 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9`. *On Windows 11 the app writes and reads them* (`Aux\`, `CON.mp3`, `COM1` were tried); Windows 10 and Explorer may not open them. | Rename it for that write in the card tab. Rare. |
+| 6 | **Windows** | Card paths can exceed 260 characters with very long names. *On Windows 11 the app wrote and read a 374-character path;* Explorer may not open it. | Rename long albums for the card. |
 | 7 | **Linux** | **Every** mounted drive under `/media/$USER` or `/run/media/$USER` is listed as a possible card, and the "not FAT32/exFAT" warning never appears (filesystem type isn't read on Linux yet). | Pick the right one by name and size. |
 | 8 | **Linux** | Fonts: the serif look depends on DejaVu Serif at the Debian/Ubuntu path. On Fedora/Arch the app falls back to a sans font, and Chinese/Japanese/Korean names may show as boxes. | Cosmetic only. |
 | 9 | Both | ffmpeg isn't bundled (only the Mac app includes it). | Install it as in §1. |
 | 10 | All | *Fixed 2026-10-31:* starting with the music folder's drive unplugged used to empty the library database, and a Sync with an empty library removed the setup's songs from the card ([REVIEW](REVIEW.md) R1, R2). Now the library says it can't reach the folder and keeps everything. | To check it: start the app with the music drive unplugged, plug it in, and see it read again by itself. |
-| 11 | **Windows** | *Fixed 2026-10-31, not yet run on Windows:* plugging in a labelled card brings up its setup, and converting songs no longer flashes console windows ([REVIEW](REVIEW.md) R12, R13). The card's `.pausetape` file is hidden (R23). | To check it: unplug and plug the card back in with another setup open; Sync a few songs that need converting and watch for console windows; the card's root in Explorer shows no `.pausetape` (unless hidden files are shown). |
-| 12 | **Windows**, **Linux** | *Fixed on Windows 2026-10-31:* **Move to the Trash** leaves files on USB sticks, SD cards and network drives where they are, as they'd be deleted for good there. **Linux:** files should go to a `.Trash-<uid>` folder on the drive ([REVIEW](REVIEW.md) R10). | To check it on Linux: move one covered copy to the Trash on an external drive and find it in the file manager's Trash. |
+| 11 | **Windows** | *Fixed 2026-10-31:* plugging in a labelled card brings up its setup, and converting songs no longer flashes console windows ([REVIEW](REVIEW.md) R12, R13). The card's `.pausetape` file is hidden (R23). *Seen on Windows 11:* `.pausetape` is hidden; 92 AAC songs were converted to MP3 on a FAT32 stick. Not yet seen in the app: the card bringing up its setup, and no console windows while it converts. | To check the rest: unplug and plug the card back in with another setup open; Sync a few songs that need converting and watch for console windows. |
+| 12 | **Windows**, **Linux** | *Fixed on Windows 2026-10-31, seen working on Windows 11:* **Move to the Trash** leaves files on USB sticks and SD cards where they are, as they'd be deleted for good there; on internal drives they go to the Recycle Bin. **Linux:** files should go to a `.Trash-<uid>` folder on the drive ([REVIEW](REVIEW.md) R10). | To check it on Linux: move one covered copy to the Trash on an external drive and find it in the file manager's Trash. |
 | 13 | **Linux** | *Fixed 2026-10-31:* folders linked into the music folder are followed ([REVIEW](REVIEW.md) R20). | To check it: link a folder of music in and rescan. |
 
 \#1–9 have planned fixes in [DISTRIBUTION §1](DISTRIBUTION.md#1-code-changes-needed-first); \#10–13

@@ -709,3 +709,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   left out.
 - Messages that ask for ffmpeg say how to install it on the system in use (`winget install
   Gyan.FFmpeg` on Windows), not `brew install ffmpeg` everywhere.
+
+### 57. First run on Windows, written down (2026-11-01)
+- [TESTING](docs/TESTING.md) §3, [REVIEW](docs/REVIEW.md), [DISTRIBUTION](docs/DISTRIBUTION.md)
+  and [PROGRESS](docs/PROGRESS.md) say what was seen on Windows 11 instead of "not yet run":
+  drives and free space are listed, a FAT32 stick was written, rewritten ("0 copied") and had
+  an album unticked without touching its other files, AAC was converted, `.pausetape` is
+  hidden, and the Trash leaves files on cards alone. Reserved names and a 374-character path
+  were written and read back. What still needs the app in hand is listed.
