@@ -65,10 +65,13 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 - **Writing tags into real audio files** (*write corrected tags*, *write … to source files*).
   The code uses `lofty`, but no test writes to a real FLAC/MP3 and reads it back.
 - **Click-through of the dialogs.** The screenshots open them programmatically.
-- **Windows and Linux: never built or run there.** The code is written to be portable, and two
-  tests that assumed `/` as the path separator were fixed, but an audit found real gaps (no SD
-  card detection on Windows, for one). [TESTING](TESTING.md) lists them with workarounds and is
-  the step-by-step guide for trying it.
+- **Windows: first run on Windows 11 (2026-11-01).** It built and passed its tests unchanged;
+  drives, free space, a FAT32 write and rewrite, unticking an album, ffmpeg conversion and the
+  Trash on cards worked. Text sat high and a console opened behind the app; both are fixed.
+  Still to see in the app: a card bringing up its setup, Stop during a write, taking over a
+  card, and scaled displays. [TESTING](TESTING.md) §3 has the details.
+- **Linux: never built or run there.** The code is written to be portable, but an audit found
+  gaps; [TESTING](TESTING.md) lists them with workarounds and is the step-by-step guide.
 - **The Mac app on Intel** (no Rosetta on the build Mac), the **first-launch approval** of a
   downloaded copy, and both **GitHub Actions workflows** (no GitHub repository yet).
 

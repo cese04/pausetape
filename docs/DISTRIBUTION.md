@@ -67,7 +67,7 @@ card step no longer says "not connected" where free space can't be read.
 
 | # | Issue | Affects | Fix | Effort |
 |---|---|---|---|---|
-| 1 | ~~**No drives found.**~~ *Done 2026-10-31 (type-checked, not yet run on Windows):* drive letters with label, filesystem and free space through `windows-sys`, skipping Windows' own drive and network/CD drives. | Windows | — | — |
+| 1 | ~~**No drives found.**~~ *Done 2026-10-31, seen working on Windows 11 2026-11-01:* drive letters with label, filesystem and free space through `windows-sys`, skipping Windows' own drive and network/CD drives. | Windows | — | — |
 | 2 | ~~**No free space or filesystem type.**~~ *Done with #1.* | Windows | — | — |
 | 3 | **Filesystem type unknown**, so the "not FAT32/exFAT" warning never shows. | Linux | `statfs` gives `f_type`: `0x4d44` = FAT, `0x2011BAB0` = exFAT. | S |
 | 4 | ~~**A console window opens behind the app.**~~ *Done 2026-11-01, run on Windows 11:* release builds are a windowed program and attach to the terminal they were started from. Shells don't wait for a windowed program, so `--version` and `--plan` need `\| Out-Host` (PowerShell); `cargo run` waits by itself. | Windows | — | — |
