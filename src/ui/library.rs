@@ -11,7 +11,7 @@ use super::actions::{Action, apply};
 use super::icons::{self, Icon};
 use super::text::{self, plural};
 use super::theme::{self, ink};
-use super::widgets::{self, caps, muted, truncated};
+use super::widgets::{self, caps, link, muted, truncated};
 use super::ROW_H;
 use crate::app::{App, Lookup};
 use crate::card::Player;
@@ -714,59 +714,124 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                 });
             }
             Lookup::Ready { label, changes } => {
-                row_wrapped(ui, |ui| {
-                    caps(ui, "musicbrainz");
-                    ui.label(RichText::new(label.as_str()).color(ink.text));
-                });
-                if changes.is_empty() {
-                    row(ui, |ui| {
-                        muted(ui, "tags already agree.");
-                        if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
-                            actions.push(Action::Dismiss(id.to_string()));
+                let n = changes.iter().filter(|c| c.accept).count();
+                let card = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
+                card.show(ui, |ui| {
+                    row_wrapped(ui, |ui| {
+                        widgets::icon(ui, Icon::Search, ink.accent);
+                        caps(ui, "musicbrainz suggests");
+                        ui.label(RichText::new(label.as_str()).color(ink.text));
+                        if !changes.is_empty() {
+                            muted(ui, format!("· {n} of {} chosen", changes.len()));
                         }
                     });
-                    return;
-                }
-                let mut groups: BTreeMap<(usize, String, String), Vec<usize>> = BTreeMap::new();
-                let mut order = Vec::new();
-                for (i, c) in changes.iter().enumerate() {
-                    let key = (c.field as usize, c.old.clone(), c.new.clone());
-                    if !groups.contains_key(&key) {
-                        order.push(key.clone());
+                    if changes.is_empty() {
+                        row(ui, |ui| {
+                            widgets::icon(ui, Icon::Check, ink.muted);
+                            muted(ui, "Your tags already agree.");
+                            if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
+                                actions.push(Action::Dismiss(id.to_string()));
+                            }
+                        });
+                        return;
                     }
-                    groups.entry(key).or_default().push(i);
-                }
-                for key in order {
-                    let idxs = &groups[&key];
-                    let first = changes[idxs[0]].clone();
-                    let mut on = idxs.iter().all(|&i| changes[i].accept);
-                    row(ui, |ui| {
-                        if ui.checkbox(&mut on, "").changed() {
+                    let mut groups: BTreeMap<(usize, String, String), Vec<usize>> = BTreeMap::new();
+                    let mut order = Vec::new();
+                    for (i, c) in changes.iter().enumerate() {
+                        let key = (c.field as usize, c.old.clone(), c.new.clone());
+                        if !groups.contains_key(&key) {
+                            order.push(key.clone());
+                        }
+                        groups.entry(key).or_default().push(i);
+                    }
+                    ui.add_space(S1 / 2.0);
+                    for key in order {
+                        let idxs = &groups[&key];
+                        let first = &changes[idxs[0]];
+                        let on = idxs.iter().all(|&i| changes[i].accept);
+                        let scope = if idxs.len() > 1 { format!("{} songs", idxs.len()) } else { tracks[first.track].display_title() };
+                        if suggestion_row(ui, first, &scope, on).clicked() {
                             for &i in idxs {
-                                changes[i].accept = on;
+                                changes[i].accept = !on;
                             }
                         }
-                        let scope = if idxs.len() > 1 { format!("{} tracks", idxs.len()) } else { tracks[first.track].display_title() };
-                        ui.add_sized([150.0, 18.0], egui::Label::new(RichText::new(format!("{} · {scope}", first.field.label())).size(12.5).color(ink.muted)).truncate());
-                        if !first.old.is_empty() {
-                            ui.label(RichText::new(&first.old).strikethrough().color(ink.muted));
-                            muted(ui, "→");
+                    }
+                    ui.add_space(S1);
+                    row(ui, |ui| {
+                        ui.add_enabled_ui(n > 0, |ui| {
+                            let text = if n == 0 { "apply".to_string() } else { format!("apply {}", plural(n, "change")) };
+                            if widgets::primary_with(ui, Icon::Check, text).on_hover_text("Corrects these tags in the library; the files change when you write the corrected tags.").clicked() {
+                                actions.push(Action::ApplyLookup(id.to_string()));
+                            }
+                        });
+                        if widgets::button_with(ui, Icon::Close, "dismiss").on_hover_text("Keeps your tags as they are.").clicked() {
+                            actions.push(Action::Dismiss(id.to_string()));
                         }
-                        ui.label(&first.new);
+                        ui.add_space(S1);
+                        if n < changes.len() && link(ui, "choose all").clicked() {
+                            changes.iter_mut().for_each(|c| c.accept = true);
+                        }
+                        if n > 0 && link(ui, "none").clicked() {
+                            changes.iter_mut().for_each(|c| c.accept = false);
+                        }
                     });
-                }
-                row(ui, |ui| {
-                    if widgets::icon_link(ui, Icon::Check, "apply selected").clicked() {
-                        actions.push(Action::ApplyLookup(id.to_string()));
-                    }
-                    if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
-                        actions.push(Action::Dismiss(id.to_string()));
-                    }
                 });
             }
         }
     });
     ui.add_space(S1);
+}
+
+/// One suggested change, a click turning it on or off. What the tag will be once applied is in
+/// ink, what goes is struck through: chosen, the old value goes and the new one comes, ticked;
+/// left out, the old value stays and the new one is struck.
+fn suggestion_row(ui: &mut Ui, c: &crate::musicbrainz::FieldChange, scope: &str, on: bool) -> egui::Response {
+    let ink = ink(ui);
+    let width = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    let p = ui.painter_at(rect);
+    if resp.hovered() {
+        p.rect_filled(rect, 4.0, ink.hover);
+    }
+    let y = rect.center().y;
+    // The tick: filled in the accent when chosen, an empty ring when not.
+    let at = egui::pos2(rect.left() + S1 + ICON / 2.0, y);
+    if on {
+        p.circle_filled(at, ICON / 2.0, ink.accent);
+        icons::paint(&p, egui::Rect::from_center_size(at, vec2(ICON, ICON)).shrink(4.0), Icon::Check, ink.bg);
+    } else {
+        p.circle_stroke(at, ICON / 2.0 - 0.6, Stroke::new(1.2, if resp.hovered() { ink.text } else { ink.muted }));
+    }
+    let small = FontId::proportional(12.5);
+    let font = FontId::proportional(14.5);
+    let mut x = rect.left() + S1 + ICON + S2;
+    let what = truncated(ui, format!("{} · {scope}", c.field.label()), small.clone(), ink.muted, 160.0);
+    p.galley(egui::pos2(x, y - what.size().y / 2.0), what, ink.muted);
+    x += 160.0 + S2;
+    let room = (rect.right() - x - S1).max(0.0);
+    let struck = |text: &str, color, max_w| {
+        let mut job = egui::text::LayoutJob::default();
+        job.append(text, 0.0, egui::TextFormat { font_id: font.clone(), color, strikethrough: Stroke::new(1.0, color), ..Default::default() });
+        job.wrap = egui::text::TextWrapping::truncate_at_width(max_w);
+        ui.painter().layout_job(job)
+    };
+    let plain = |text: &str, color, max_w| truncated(ui, text.to_string(), font.clone(), color, max_w);
+    let arrow_w = S1 + ICON + S1;
+    let (old, new) = if c.old.is_empty() {
+        let empty = plain("empty", ink.faint, room / 2.0);
+        (empty, if on { plain(&c.new, ink.text, room / 2.0) } else { struck(&c.new, ink.muted, room / 2.0) })
+    } else if on {
+        (struck(&c.old, ink.muted, (room - arrow_w) / 2.0), plain(&c.new, ink.text, (room - arrow_w) / 2.0))
+    } else {
+        (plain(&c.old, ink.text, (room - arrow_w) / 2.0), struck(&c.new, ink.muted, (room - arrow_w) / 2.0))
+    };
+    let old_w = old.size().x;
+    p.galley(egui::pos2(x, y - old.size().y / 2.0), old, ink.text);
+    x += old_w + S1;
+    icons::paint(&p, egui::Rect::from_min_size(egui::pos2(x, y - ICON / 2.0), vec2(ICON, ICON)).shrink(2.0), Icon::Forward, if on { ink.accent } else { ink.faint });
+    x += ICON + S1;
+    p.galley(egui::pos2(x, y - new.size().y / 2.0), new, ink.text);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(if on { "Chosen: click to keep your tag" } else { "Left out: click to take this one" })
 }
 
 /// Search terms worth a click, toggled in the search box.

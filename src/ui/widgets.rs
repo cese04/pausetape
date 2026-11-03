@@ -50,6 +50,12 @@ pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// An icon on its own, not a control, in a row beside words.
+pub fn icon(ui: &mut Ui, icon: Icon, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ICON, ROW), Sense::hover());
+    icon_at(ui, rect.left(), rect.center().y, 1.5, icon, color);
+}
+
 /// Just an icon, for compact commands (move up, remove from list); give it a hover text.
 pub fn icon_button(ui: &mut Ui, icon: Icon) -> Response {
     let ink = ink(ui);
