@@ -762,3 +762,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   while they listen, and then they turn the tape over to side B. A cat sleeps on the sill.
   Afternoon in a light theme, night in a dark one; one still picture under *Reduce motion*.
   Drawn in code (`site/pixel.js`), no image files.
+- It draws only when its picture changes (15 times a second, not at every screen refresh),
+  and sits centred in its column when whole pixels leave room beside it, as on a phone.
+- The foot of the page is signed, as a tape's label would be: *made by Emiliano Solórzano*,
+  the name by hand. The handwriting font now has accented letters (Latin-1), 9 KB more.

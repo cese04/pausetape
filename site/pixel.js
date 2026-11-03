@@ -676,11 +676,16 @@
   const asked = Number(new URLSearchParams(location.search).get("room"));
   const frozen = Number.isFinite(asked) && asked > 0 ? asked : null;
   const start = performance.now();
-  let visible = true, running = false;
+  let visible = true, running = false, drawn = null;
   const now = () => frozen ?? (still.matches ? STILL : Math.floor(((performance.now() - start) / 1000) * 15) / 15);
 
+  // The screen refreshes four times or more per frame of the picture: draw only when it changes.
   function frame() {
-    draw(now());
+    const t = now();
+    if (t !== drawn) {
+      draw(t);
+      drawn = t;
+    }
     if (visible && !still.matches && frozen === null) requestAnimationFrame(frame);
     else running = false;
   }
@@ -692,7 +697,7 @@
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) go(); }).observe(canvas);
   }
-  dark.addEventListener("change", () => { P = dark.matches ? NIGHT : DAY; go(); });
+  dark.addEventListener("change", () => { P = dark.matches ? NIGHT : DAY; drawn = null; go(); });
   still.addEventListener("change", go);
   go();
 })();
