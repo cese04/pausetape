@@ -14,7 +14,7 @@ JavaScript: nothing to install or build.
 | `site/main.js` | Sections fading in, the tour, the download links from the latest release |
 | `site/pixel.js` | The pixel room beside "Pause. Record. Pause." (§6) |
 | `site/img/` | Screenshots (`*-light.webp`, `*-dark.webp`), icon, favicon |
-| `site/fonts/` | Caveat Bold, the handwriting on the labels (latin subset), and its licence |
+| `site/fonts/` | Caveat Bold, the handwriting on the labels (basic Latin and its accented letters, as in "Solórzano"), and its licence |
 | `scripts/site-shots.py` | Takes the screenshots again |
 | `.github/workflows/pages.yml` | Publishes `site/` |
 
@@ -145,7 +145,7 @@ through `develop` and reaches `main` with the next release, as the app does.
 
 - **The app's look:** its paper and ink in both themes, its serif, red only for what to do
   next. Handwriting (Caveat) only where a tape would have it: the label, side A and B, the
-  track numbers.
+  track numbers, the author's name at the foot.
 - **The 90s, lightly:** a cassette whose reels turn, a J-card listing what it does (side A)
   and won't do (side B), a tape running under the tour.
 - **A pixel room** (`site/pixel.js`) beside the story: sitting beside a boombox, someone in a

@@ -155,7 +155,7 @@ section { padding: var(--s12) 0 0; }
 /* The pixel room (pixel.js): drawn at 160 × 120, scaled up by whole pixels so they stay square.
    Without scripts there's nothing to draw, and the story reads on its own. */
 .pixel-room { margin: 0; min-width: 0; }
-.pixel-room canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; border-radius: 12px; box-shadow: var(--shadow); background: var(--bar); }
+.pixel-room canvas { display: block; margin-inline: auto; width: 100%; height: auto; image-rendering: pixelated; border-radius: 12px; box-shadow: var(--shadow); background: var(--bar); }
 html:not(.js) .pixel-room { display: none; }
 html:not(.js) .story-grid { grid-template-columns: 1fr; }
 
@@ -267,6 +267,10 @@ details > :not(summary) { animation: unfold 300ms ease; }
 /* Footer */
 .foot { margin-top: var(--s12); padding: var(--s6) 0; border-top: 1px solid var(--faint); background: var(--bar); }
 .foot-sign { font-size: 36px; color: var(--accent); margin: 0 0 var(--s1); line-height: 1; }
+/* Signed like a tape's label: the name by hand, after a quiet "made by". */
+.foot-by { margin: 0 0 var(--s2); color: var(--muted); }
+.foot-by a { font-size: 26px; color: var(--ink); text-decoration: none; }
+.foot-by a:hover { text-decoration: underline; text-decoration-thickness: 1px; }
 
 /* Sections fade up as they come into view (only with scripts, so nothing stays hidden). */
 .js [data-reveal] { opacity: 0; transform: translateY(16px); transition: opacity 700ms ease, transform 700ms ease; }
