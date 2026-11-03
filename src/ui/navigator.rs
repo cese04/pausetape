@@ -1,6 +1,6 @@
 //! An in-app folder browser: shortcuts, a clickable breadcrumb, and the subfolders of the
 //! current folder with how many audio files each holds directly, which shows at a glance
-//! whether a tree is already organised.
+//! whether a tree is already organised. On Windows, "Computer" above the drives lists them.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,10 +20,36 @@ const COUNT_BUDGET: usize = 3000;
 
 struct Listing {
     dir: PathBuf,
-    folders: Vec<(String, PathBuf, Option<(usize, bool)>)>,
+    folders: Vec<Entry>,
     audio: usize,
     other: usize,
     error: Option<String>,
+}
+
+/// A folder, or on Windows a drive, to open.
+struct Entry {
+    name: String,
+    path: PathBuf,
+    /// Songs inside it, and whether counting stopped early.
+    songs: Option<(usize, bool)>,
+    /// Said at the right instead of the songs: a drive's free space.
+    note: Option<String>,
+}
+
+/// Where "Computer" is: the drives' list on Windows, which has no folder of its own.
+fn is_computer(dir: &Path) -> bool {
+    cfg!(windows) && dir.as_os_str().is_empty()
+}
+
+/// Where the "Drives" shortcut goes.
+fn drives_place() -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::new()
+    } else if cfg!(target_os = "macos") {
+        PathBuf::from("/Volumes")
+    } else {
+        PathBuf::from("/media")
+    }
 }
 
 pub struct Navigator {
@@ -57,6 +83,11 @@ fn audio_files_in(dir: &Path) -> (usize, bool) {
 
 fn list(dir: &Path) -> Listing {
     let mut l = Listing { dir: dir.to_path_buf(), folders: Vec::new(), audio: 0, other: 0, error: None };
+    #[cfg(windows)]
+    if is_computer(dir) {
+        l.folders = crate::card::drives().into_iter().map(|v| Entry { note: v.info.as_ref().map(describe_space), name: v.name, path: v.path, songs: None }).collect();
+        return l;
+    }
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(e) => {
@@ -71,17 +102,17 @@ fn list(dir: &Path) -> Listing {
         }
         let path = e.path();
         if path.is_dir() {
-            l.folders.push((name, path, None));
+            l.folders.push(Entry { name, path, songs: None, note: None });
         } else if is_audio(&path) {
             l.audio += 1;
         } else {
             l.other += 1;
         }
     }
-    l.folders.sort_by_key(|(n, _, _)| n.to_lowercase());
+    l.folders.sort_by_key(|f| f.name.to_lowercase());
     if l.folders.len() <= COUNT_LIMIT {
         for f in &mut l.folders {
-            f.2 = Some(audio_files_in(&f.1));
+            f.songs = Some(audio_files_in(&f.path));
         }
     }
     l
@@ -97,13 +128,35 @@ impl Navigator {
         Navigator { dir, listing: None }
     }
 
+    /// Opened on the drives: /Volumes, /media, or Windows' "Computer".
+    pub fn on_drives() -> Self {
+        let dir = drives_place();
+        if is_computer(&dir) || dir.is_dir() { Navigator { dir, listing: None } } else { Navigator::new(None) }
+    }
+
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
+    /// Whether the current place is a folder that can be chosen (not Windows' list of drives).
+    pub fn can_choose(&self) -> bool {
+        !is_computer(&self.dir)
+    }
+
     /// Display name of the current folder.
     pub fn name(&self) -> String {
+        if is_computer(&self.dir) {
+            return "Computer".into();
+        }
         self.dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| self.dir.display().to_string())
+    }
+
+    /// One level up; from a drive's top folder on Windows, the list of drives.
+    fn up(&self) -> Option<PathBuf> {
+        if is_computer(&self.dir) {
+            return None;
+        }
+        self.dir.parent().map(Path::to_path_buf).or_else(|| cfg!(windows).then(PathBuf::new))
     }
 
     fn go(&mut self, dir: PathBuf) {
@@ -126,26 +179,39 @@ impl Navigator {
                 places.push(("Music", h.join("Music")));
                 places.push(("Downloads", h.join("Downloads")));
             }
-            places.push(("Drives", PathBuf::from(if cfg!(target_os = "macos") { "/Volumes" } else { "/media" })));
+            places.push(("Drives", drives_place()));
             for (label, p) in places {
-                if p.is_dir() && widgets::button(ui, label).clicked() {
+                if (is_computer(&p) || p.is_dir()) && widgets::button(ui, label).clicked() {
                     go = Some(p);
                 }
             }
+            let picker = if is_computer(&self.dir) { rfd::FileDialog::new() } else { rfd::FileDialog::new().set_directory(&self.dir) };
             if link(ui, "system picker…").clicked()
-                && let Some(p) = rfd::FileDialog::new().set_directory(&self.dir).pick_folder()
+                && let Some(p) = picker.pick_folder()
             {
                 go = Some(p);
             }
         });
         ui.add_space(S1);
 
-        // Breadcrumb: every ancestor is a link.
+        // Breadcrumb: every ancestor is a link; on Windows, "Computer" comes first.
         row_wrapped(ui, |ui| {
             caps(ui, "in");
+            if is_computer(&self.dir) {
+                ui.label(RichText::new("Computer").strong().color(ink.text));
+                return;
+            }
+            if cfg!(windows) {
+                if link(ui, "Computer").clicked() {
+                    go = Some(PathBuf::new());
+                }
+                muted(ui, "›");
+            }
             let ancestors: Vec<&Path> = self.dir.ancestors().collect();
             for (i, a) in ancestors.iter().rev().enumerate() {
-                let name = a.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Computer".into());
+                // A top folder has no name: "/" is the computer; on Windows, "D:\" is "D:".
+                let top = || if cfg!(windows) { a.display().to_string().trim_end_matches('\\').to_string() } else { "Computer".into() };
+                let name = a.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(top);
                 if i + 1 == ancestors.len() {
                     ui.label(RichText::new(name).strong().color(ink.text));
                 } else {
@@ -159,6 +225,7 @@ impl Navigator {
 
         let l = self.listing.as_ref().unwrap();
         let here = match (l.audio, l.folders.len()) {
+            (_, n) if is_computer(&l.dir) => format!("{} on this computer.", text::plural(n, "drive")),
             (0, 0) => "This folder is empty.".to_string(),
             (0, n) => format!("{n} folders, no songs directly in here."),
             (a, n) => format!("{a} songs directly in here, {n} folders."),
@@ -170,7 +237,7 @@ impl Navigator {
         ui.add_space(S1);
         let row_h = 26.0;
         ScrollArea::vertical().id_salt("nav").max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
-            let row = |ui: &mut Ui, label: String, count: Option<(usize, bool)>, folder: bool| -> bool {
+            let row = |ui: &mut Ui, label: String, right: Option<String>, folder: bool| -> bool {
                 let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::click());
                 if resp.hovered() {
                     ui.painter().rect_filled(rect, 4.0, ink.faint);
@@ -183,20 +250,20 @@ impl Navigator {
                     ui.painter().text(icon.center(), egui::Align2::CENTER_CENTER, "↑", egui::FontId::proportional(15.0), ink.muted);
                 }
                 ui.painter().text(egui::pos2(rect.left() + 32.0, y), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(15.0), ink.text);
-                if let Some((n, more)) = count.filter(|(n, _)| *n > 0) {
-                    let text = format!("{n}{} songs", if more { "+" } else { "" });
+                if let Some(text) = right {
                     ui.painter().text(egui::pos2(rect.right() - 8.0, y), egui::Align2::RIGHT_CENTER, text, egui::FontId::proportional(12.5), ink.muted);
                 }
                 resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
             };
-            if let Some(parent) = self.dir.parent()
+            if let Some(up) = self.up()
                 && row(ui, "back up".into(), None, false)
             {
-                go = Some(parent.to_path_buf());
+                go = Some(up);
             }
-            for (name, path, audio) in &l.folders {
-                if row(ui, text::shorten(name, 70), *audio, true) {
-                    go = Some(path.clone());
+            for f in &l.folders {
+                let songs = f.songs.filter(|(n, _)| *n > 0).map(|(n, more)| format!("{n}{} songs", if more { "+" } else { "" }));
+                if row(ui, text::shorten(&f.name, 70), f.note.clone().or(songs), true) {
+                    go = Some(f.path.clone());
                 }
             }
         });
@@ -213,4 +280,27 @@ pub fn describe_space(info: &crate::card::SpaceInfo) -> String {
         s.push_str(&format!(" · {fs}"));
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    use super::Navigator;
+
+    #[test]
+    fn up_from_a_drive_is_the_computer() {
+        let nav = |p: &str| Navigator { dir: PathBuf::from(p), listing: None };
+        if cfg!(windows) {
+            assert_eq!(nav(r"D:\Music").up(), Some(PathBuf::from(r"D:\")));
+            assert_eq!(nav(r"D:\").up(), Some(PathBuf::new()), "a drive's top folder goes up to the drives");
+            let computer = nav("");
+            assert_eq!((computer.up(), computer.can_choose(), computer.name().as_str()), (None, false, "Computer"));
+            assert!(nav(r"D:\").can_choose());
+        } else {
+            assert_eq!(nav("/").up(), None);
+            assert_eq!(nav("/Volumes").up().as_deref(), Some(Path::new("/")));
+            assert!(nav("/").can_choose());
+        }
+    }
 }
