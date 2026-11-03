@@ -108,6 +108,7 @@ def library():
 
 def mount_card():
     image = DEMO / "echo-mini.sparseimage"
+    DEMO.mkdir(parents=True, exist_ok=True)
     if not image.exists():
         run("hdiutil", "create", "-quiet", "-size", "32g", "-fs", "MS-DOS FAT32", "-volname", "ECHO MINI", "-type", "SPARSE", str(image.with_suffix("")))
     if not CARD.exists():

@@ -766,3 +766,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
   and sits centred in its column when whole pixels leave room beside it, as on a phone.
 - The foot of the page is signed, as a tape's label would be: *made by Emiliano Solórzano*,
   the name by hand. The handwriting font now has accented letters (Latin-1), 9 KB more.
+
+### 63. The website's screenshots taken again (2026-11-02)
+- The tour and the top of the page show the app as it is now: the card tab's marks and views,
+  MusicBrainz suggestions with their ticks, no format note above the library. The marks of
+  steps 3 and 4 moved to fit, and step 4's note says what the marks beside the ticks mean.
+- `scripts/site-shots.py` makes its demo folder first, as it failed once that was deleted.
