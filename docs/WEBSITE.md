@@ -12,6 +12,7 @@ JavaScript: nothing to install or build.
 | `site/index.html` | The page, and the tour's steps: their marks and notes (below) |
 | `site/style.css` | The app's palette and serif, an 8 px grid, the animations |
 | `site/main.js` | Sections fading in, the tour, the download links from the latest release |
+| `site/pixel.js` | The pixel room beside "Pause. Record. Pause." (§6) |
 | `site/img/` | Screenshots (`*-light.webp`, `*-dark.webp`), icon, favicon |
 | `site/fonts/` | Caveat Bold, the handwriting on the labels (latin subset), and its licence |
 | `scripts/site-shots.py` | Takes the screenshots again |
@@ -145,10 +146,21 @@ through `develop` and reaches `main` with the next release, as the app does.
 - **The app's look:** its paper and ink in both themes, its serif, red only for what to do
   next. Handwriting (Caveat) only where a tape would have it: the label, side A and B, the
   track numbers.
-- **The 90s, lightly:** a cassette whose reels turn, a tape deck with REC blinking, a J-card
-  listing what it does (side A) and won't do (side B), a tape running under the tour.
-- **Motion that explains or welcomes,** nothing more: reels, sections fading up once, the
-  tour's ring, its pictures fading into each other. All of it stops under *Reduce motion*.
+- **The 90s, lightly:** a cassette whose reels turn, a J-card listing what it does (side A)
+  and won't do (side B), a tape running under the tour.
+- **A pixel room** (`site/pixel.js`) beside the story: sitting beside a boombox, someone in a
+  grey hoodie opens its deck, puts in the tape from their lap, closes it and presses play; the
+  reels turn and notes float up while they listen, and then they turn the tape over to side B.
+  About 16 seconds, then again. Their arms bend at the elbow and keep their length: to reach
+  the deck they lean in. It's drawn in code at 160 × 120 pixels
+  (no image files) and scaled up by whole pixels, so they stay square; the window shows an
+  afternoon in a light theme and the night in a dark one. It runs only while it's on screen.
+  To look at one moment, add `?room=7.5` to the address (seconds into the loop): it stops
+  there. How it's drawn, where everything is and how to change the story are explained at
+  the top of `site/pixel.js`.
+- **Motion that explains or welcomes,** nothing more: reels, the pixel room, sections fading
+  up once, the tour's ring, its pictures fading into each other. All of it stops under
+  *Reduce motion*; the room is then one picture, of the song playing.
 - **Works without JavaScript:** every section is visible and the tour reads as a list beside
   its first screen; the download buttons go to the Releases page.
 - **Nothing from elsewhere:** no web fonts from Google, no analytics, no cookies. The only

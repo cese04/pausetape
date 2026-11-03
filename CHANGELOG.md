@@ -754,3 +754,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   place instead of copying them again.
 - The screenshot demo gets `PAUSETAPE_SHOT_EMPTY=1` (nothing chosen, as for a new card), and its
   take-over shot compares and checks the card again first, so the dialog shows.
+
+### 62. A pixel room on the website (2026-11-02)
+- Beside "Pause. Record. Pause.", in place of the little tape deck: an 8-bit room where,
+  sitting beside a boombox, someone in a grey hoodie opens its deck, puts in the tape from
+  their lap, closes it and presses play; the reels turn, the speaker pumps, notes float up
+  while they listen, and then they turn the tape over to side B. A cat sleeps on the sill.
+  Afternoon in a light theme, night in a dark one; one still picture under *Reduce motion*.
+  Drawn in code (`site/pixel.js`), no image files.

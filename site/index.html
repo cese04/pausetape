@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="style.css">
 <script>document.documentElement.classList.add("js")</script>
 <script src="main.js" defer></script>
+<script src="pixel.js" defer></script>
 </head>
 <body>
 
@@ -91,12 +92,13 @@
 
 <section class="story" data-reveal>
   <div class="wrap story-grid">
-    <div class="deck" aria-hidden="true">
-      <span class="key"><span class="rec-light"></span>rec</span>
-      <span class="key">play</span>
-      <span class="key is-down">pause</span>
-      <span class="counter"><span>0</span><span>2</span><span>7</span></span>
-    </div>
+    <figure class="pixel-room">
+      <canvas width="160" height="120" data-pixel-room></canvas>
+      <figcaption class="visually-hidden">Pixel art: in a cosy room, someone in a grey hoodie sits
+        beside a boombox, opens its deck, puts in the tape from their lap, closes it and presses
+        play. The reels turn and notes float up while they listen; then they take the tape out
+        and turn it over to side B.</figcaption>
+    </figure>
     <div>
       <h2>Pause. Record. Pause.</h2>
       <p>In the 90s a mixtape took an afternoon. You waited for the DJ to stop talking, let go of

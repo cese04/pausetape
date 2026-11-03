@@ -148,21 +148,16 @@ section { padding: var(--s12) 0 0; }
 .shot-hero { padding-top: var(--s8); }
 
 /* The 90s story */
-.story-grid { display: grid; grid-template-columns: 300px 1fr; gap: var(--s6); align-items: center; }
+.story-grid { display: grid; grid-template-columns: minmax(0, 480px) 1fr; gap: var(--s6); align-items: center; }
 .story-grid p { max-width: 36em; }
-@media (max-width: 760px) { .story-grid { grid-template-columns: 1fr; gap: var(--s4); } }
+@media (max-width: 860px) { .story-grid { grid-template-columns: 1fr; gap: var(--s4); } }
 
-.deck { display: flex; flex-wrap: wrap; gap: var(--s1); padding: var(--s2); border-radius: 12px; background: var(--shell); box-shadow: var(--shadow); }
-.key {
-  flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 6px; height: 48px;
-  border-radius: 6px; background: #d8d2c4; color: #33302b; font: 600 13px/1 system-ui, sans-serif;
-  text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 4px 0 #8a8273;
-}
-.key.is-down { transform: translateY(3px); box-shadow: 0 1px 0 #8a8273; background: #cdc6b6; }
-.rec-light { width: 10px; height: 10px; border-radius: 50%; background: #c8402c; animation: blink 1.6s steps(1) infinite; }
-@keyframes blink { 50% { background: #5a2a22; } }
-.counter { flex-basis: 100%; display: flex; justify-content: center; gap: 4px; margin-top: var(--s1); }
-.counter span { width: 28px; height: 36px; display: grid; place-items: center; background: var(--window); color: #f3ecd9; border-radius: 4px; font: 20px/1 ui-monospace, Menlo, monospace; }
+/* The pixel room (pixel.js): drawn at 160 × 120, scaled up by whole pixels so they stay square.
+   Without scripts there's nothing to draw, and the story reads on its own. */
+.pixel-room { margin: 0; min-width: 0; }
+.pixel-room canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; border-radius: 12px; box-shadow: var(--shadow); background: var(--bar); }
+html:not(.js) .pixel-room { display: none; }
+html:not(.js) .story-grid { grid-template-columns: 1fr; }
 
 /* J-card: what it does / won't do */
 .jcard {
