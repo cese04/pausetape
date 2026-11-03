@@ -4,7 +4,8 @@
 #
 # What's kept (see CONTRIBUTING.md): a build of `main` stays 90 days, the most GitHub allows;
 # one of `develop` or a feature branch 7 days; pull requests keep none. A version tag (`v*`)
-# attaches each platform's binary to its GitHub Release, which is kept for good.
+# attaches the Windows and Linux binaries to its GitHub Release, which is kept for good (macOS's
+# disk image comes from macos.yml).
 #
 # The dependencies are checked with cargo-deny (deny.toml) on every run, and every Monday too:
 # advisories appear whether or not anything is pushed. That weekly run only checks them.
@@ -77,8 +78,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: ${{ github.ref == 'refs/heads/main' && 90 || 7 }}
 
-      # A version: the binary goes on its release, named for its platform.
-      - if: startsWith(github.ref, 'refs/tags/v')
+      # A version: the binary goes on its release, named for its platform. Not macOS's: its
+      # release file is the app in a disk image (macos.yml), and a bare binary there would only
+      # open in Terminal.
+      - if: startsWith(github.ref, 'refs/tags/v') && runner.os != 'macOS'
         shell: bash
         run: |
           mkdir -p dist
@@ -87,7 +90,7 @@ jobs:
           else
             cp target/release/pausetape "dist/pausetape-${{ github.ref_name }}-${{ runner.os }}"
           fi
-      - if: startsWith(github.ref, 'refs/tags/v')
+      - if: startsWith(github.ref, 'refs/tags/v') && runner.os != 'macOS'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/pausetape-*

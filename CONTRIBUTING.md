@@ -73,7 +73,7 @@ about data files it can't read, not a problem).
 
 | Pushed to | Kept | For |
 |---|---|---|
-| a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image and each platform's binary | Versions people download |
+| a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image, and the Windows and Linux binaries | Versions people download |
 | `main` | 90 days (GitHub's most): binaries and the disk image, as artifacts | The latest release build |
 | `develop`, `feature/*` | 7 days: binaries, as artifacts | Trying a build out |
 | a pull request | nothing; it's only checked | — |

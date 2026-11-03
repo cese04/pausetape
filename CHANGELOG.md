@@ -772,3 +772,8 @@ Calibre's device view, for music: the library is where you choose what goes on t
   MusicBrainz suggestions with their ticks, no format note above the library. The marks of
   steps 3 and 4 moved to fit, and step 4's note says what the marks beside the ticks mean.
 - `scripts/site-shots.py` makes its demo folder first, as it failed once that was deleted.
+
+### 64. Releases without a bare Mac binary (2026-11-02)
+- A version's release gets the Mac disk image (macos.yml) and the Windows and Linux programs
+  (ci.yml), no longer also the Mac program on its own, which only opens in Terminal and would
+  confuse someone choosing what to download.
