@@ -11,6 +11,7 @@ use super::navigator::describe_space;
 use super::text::{self, ago, plural};
 use super::theme::{self, ink};
 use super::icons::Icon;
+use super::library::{Mark, album_status};
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
 use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
@@ -628,7 +629,7 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
         return;
     }
     // The comparison it rests on went stale (options changed, another write chosen).
-    if app.write_preview.is_none() && app.busy.is_none() {
+    if app.write_preview.is_none() && app.card_survey.is_none() && app.busy.is_none() {
         app.take_over_open = false;
         return;
     }
@@ -658,8 +659,8 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
 
 fn take_over_steps(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let Some((id, p)) = &app.write_preview else { return };
-    let (foreign, foreign_bytes) = (p.foreign, p.foreign_bytes);
+    let id = &app.write().id;
+    let (foreign, foreign_bytes) = app.write_preview.as_ref().map_or((0, 0), |(_, p)| (p.foreign, p.foreign_bytes));
     // Counts and sizes, copied out so the buttons below can change the app.
     let surveyed = app.card_survey.as_ref().filter(|(n, _)| n == id).map(|(_, s)| {
         let c = |l: &[(PathBuf, u64)]| (l.len(), Survey::bytes(l));
@@ -695,9 +696,37 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
         }
         None => {}
         Some(((used, used_bytes), (spare, spare_bytes), (versions, versions_bytes), (unknown, unknown_bytes), (other, other_bytes))) => {
-            let what = if used == 1 { "is an exact copy of a song" } else { "are exact copies of songs" };
-            ui.label(RichText::new(format!("{} on the card {what} this write needs ({}).", plural(used, "song"), text::bytes(used_bytes))).color(ink.text));
-            muted(ui, "They're moved into place (renamed on the card, instant) instead of copied again.");
+            // Albums the card has (some songs of, at least) that this write doesn't choose: one
+            // click chooses them, so the write starts from what the card holds.
+            let found: Vec<(usize, usize)> = app
+                .index
+                .artists
+                .iter()
+                .enumerate()
+                .flat_map(|(ai, a)| a.albums.iter().enumerate().map(move |(bi, al)| (ai, bi, al)))
+                .filter(|(_, _, al)| al.tracks.iter().any(|t| app.card_state.by_hand.contains(t)) && !al.tracks.iter().any(|t| app.card_state.planned.contains(t)))
+                .map(|(ai, bi, _)| (ai, bi))
+                .collect();
+            let to_tick = !found.is_empty();
+            if to_tick {
+                ui.label(RichText::new(format!("{} from your library {} on the card, not ticked in this write.", plural(found.len(), "album"), if found.len() == 1 { "is" } else { "are" })).color(ink.text));
+                muted(ui, "Tick them, and this write starts from what the card holds: taking the card over then moves their songs into place instead of copying them again.");
+                ui.add_space(S1);
+                row(ui, |ui| {
+                    if app.busy.is_none() && widgets::primary_with(ui, Icon::Check, "Tick them").clicked() {
+                        for (ai, bi) in found {
+                            app.card_album(ai, bi, true);
+                        }
+                        app.survey_card();
+                    }
+                });
+                ui.add_space(S1);
+            }
+            if used > 0 || !to_tick {
+                let what = if used == 1 { "is an exact copy of a song" } else { "are exact copies of songs" };
+                ui.label(RichText::new(format!("{} on the card {what} this write needs ({}).", plural(used, "song"), text::bytes(used_bytes))).color(ink.text));
+                muted(ui, "They're moved into place (renamed on the card, instant) instead of copied again.");
+            }
             if spare > 0 {
                 let what = if spare == 1 { "is a copy of a library song" } else { "are copies of library songs" };
                 muted(ui, format!("{} {what} this write leaves out or converts ({}).", plural(spare, "file"), text::bytes(spare_bytes)));
@@ -748,7 +777,9 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
             }
             ui.add_space(S1);
             row(ui, |ui| {
-                if app.busy.is_none() && used + spare + versions + unknown + other > 0 && widgets::primary_with(ui, Icon::Card, "Take over the card").on_hover_text("only moves files on the card; undo puts everything back").clicked() {
+                // With albums still to tick, ticking them is the step to take first.
+                let take_over = |ui: &mut Ui| if to_tick { widgets::button_with(ui, Icon::Card, "Take over the card") } else { widgets::primary_with(ui, Icon::Card, "Take over the card") };
+                if app.busy.is_none() && used + spare + versions + unknown + other > 0 && take_over(ui).on_hover_text("only moves files on the card; undo puts everything back").clicked() {
                     app.take_over_card();
                 }
                 if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
@@ -965,7 +996,26 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     let ink = ink(ui);
     let mut edits = Vec::new();
     widgets::section(ui, Icon::Library, "What goes on the card");
-    widgets::help(ui, "Tick what goes on the card, here or in the library; Sync copies it. On the right, the folder names on the card; rename changes them for this write only.");
+    widgets::help(ui, "A tick means it's on the card after the next Sync; the mark beside it says what Sync does to get there. On the right, the folder names on the card; rename changes them for this write only.");
+    ui.add_space(S1);
+    legend(ui, !app.card_state.by_hand.is_empty());
+    ui.add_space(S1);
+    let changes = app.card_state.added + app.card_state.replaced + app.card_state.removed;
+    if changes == 0 {
+        app.card_changes_only = false;
+    }
+    row(ui, |ui| {
+        if widgets::tab(ui, "everything", !app.card_changes_only).clicked() {
+            app.card_changes_only = false;
+        }
+        ui.add_space(S2);
+        let label = format!("what the next Sync changes ({changes})");
+        if changes > 0 && widgets::tab(ui, &label, app.card_changes_only).on_hover_text("Only the albums Sync adds or takes off, to look over before it runs.").clicked() {
+            app.card_changes_only = true;
+        } else if changes == 0 {
+            muted(ui, "no album changes at the next Sync");
+        }
+    });
     ui.add_space(S1);
     row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
@@ -991,12 +1041,19 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         {
             continue;
         }
+        // Where each album stands with the card: the mark beside its tick, and in the artist's row
+        // how many are where.
+        let status: Vec<(Option<Mark>, String)> = artist.albums.iter().map(|al| album_status(app, ck, artist, al)).collect();
+        let changing = |m: &Option<Mark>| matches!(m, Some(Mark::Adding | Mark::Removing));
+        if app.card_changes_only && !status.iter().any(|(m, _)| changing(m)) {
+            continue;
+        }
         // Ticked when everything goes, half when some does.
         let chosen: Vec<bool> = artist.albums.iter().map(|al| w.custom.includes(ck, al, &artist.albums)).collect();
         let (any, all) = (chosen.iter().any(|&c| c), chosen.iter().all(|&c| c));
         let whole = w.custom.whole_artist(ck);
         let card_name = w.custom.artist_names.get(ck).cloned().unwrap_or_else(|| artist.name.clone());
-        let open = app.card_expanded.contains(ck);
+        let open = app.card_changes_only || app.card_expanded.contains(ck);
         row(ui, |ui| {
             let mut on = all && any;
             let hint = if whole { "the whole artist goes on the card, albums added later too" } else { "tick to put the whole artist on the card, albums added later too" };
@@ -1010,6 +1067,13 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                 edits.push(Edit::Expand(ck.clone()));
             }
             muted(ui, text::bytes(sizes.artist.get(ck).copied().unwrap_or(0)));
+            for (kind, words) in [(Mark::On, "on card"), (Mark::ByHand, "copied by hand"), (Mark::Adding, "added"), (Mark::Removing, "taken off")] {
+                let n = status.iter().filter(|(m, _)| *m == Some(kind)).count();
+                if n > 0 {
+                    ui.add_space(S1);
+                    mark_words(ui, kind, &format!("{n} {words}"));
+                }
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 // Clear of the scrollbar.
                 ui.add_space(S2);
@@ -1034,6 +1098,10 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             let mut on = w.custom.includes(ck, al, &artist.albums);
             let on_card = on;
             let bi = artist.albums.iter().position(|a| std::ptr::eq(a, *al)).unwrap_or_default();
+            let (mark, said) = &status[bi];
+            if app.card_changes_only && !changing(mark) {
+                continue;
+            }
             row(ui, |ui| {
                 ui.add_space(S3);
                 let hint = if al.edition.is_some() { "One edition of this album goes on the card; ticking this one replaces the other." } else { "" };
@@ -1042,9 +1110,15 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     edits.push(Edit::Album(ai, bi, on));
                 }
                 let shown = al.title.as_deref().unwrap_or("Loose tracks");
-                let title_text = RichText::new(shown).italics().color(if on_card { ink.text } else { ink.muted });
-                let title_w = ui.available_width() * if al.edition.is_some() { 0.25 } else { 0.45 };
+                let mut title_text = RichText::new(shown).italics().color(if on_card { ink.text } else { ink.muted });
+                if *mark == Some(Mark::Removing) {
+                    title_text = title_text.strikethrough();
+                }
+                let title_w = ui.available_width() * if al.edition.is_some() { 0.25 } else { 0.4 };
                 widgets::fitted(ui, title_text, title_w, Sense::hover()).on_hover_text(shown);
+                if let Some(m) = mark {
+                    mark_words(ui, *m, said);
+                }
                 if let Some(e) = &al.edition {
                     let mut hover = format!("edition {} of {}: {} · {}", e.rank + 1, e.count, e.label, e.format);
                     if let Some(s) = &e.superseded {
@@ -1133,6 +1207,35 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     if touched_layout {
         app.chosen_changed();
     }
+}
+
+/// What the marks mean, as in the library: there already, coming, going.
+fn legend(ui: &mut Ui, by_hand: bool) {
+    row_wrapped(ui, |ui| {
+        mark_words(ui, Mark::On, "on the card");
+        ui.add_space(S2);
+        if by_hand {
+            mark_words(ui, Mark::ByHand, "on the card, copied by hand");
+            ui.add_space(S2);
+        }
+        mark_words(ui, Mark::Adding, "added at the next Sync");
+        ui.add_space(S2);
+        mark_words(ui, Mark::Removing, "taken off at the next Sync");
+    });
+}
+
+/// A card mark and its words, coloured by what it says: muted for what stays, ink for what's
+/// coming, the warning colour for what goes.
+fn mark_words(ui: &mut Ui, m: Mark, words: &str) {
+    let ink = ink(ui);
+    let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+    m.paint(ui.painter(), rect.center(), 3.5, &ink);
+    let color = match m {
+        Mark::On => ink.muted,
+        Mark::Adding | Mark::ByHand => ink.text,
+        Mark::Removing => ink.warn,
+    };
+    ui.label(RichText::new(words).size(13.0).color(color));
 }
 
 /// "rename" link, or the inline editor when this row is being renamed.

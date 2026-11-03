@@ -205,7 +205,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     whether this ffmpeg can make MP3s (the Windows `winget` and Linux distribution builds can).
 18c. On a stick that already has music copied by hand, never written to: **Compare with the
     card** opens *Music already on the card* by itself (once; later, **go through them**);
-    **Check them against the library** sorts them; **Take
+    **Check them against the library** sorts them, and the card tab marks the albums found
+    there *on the card, copied by hand*; with a new setup (nothing ticked), **Tick them** ticks
+    just those; **Take
     over the card** moves the copies into the layout (and, if ticked, the rest into
     `_Before Pausetape`; with **delete clutter** ticked, iTunes data, `desktop.ini`/`Thumbs.db`
     and rip logs are deleted); **undo taking over the card** puts everything back (except deleted
@@ -240,6 +242,10 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 19e. Start a long write: the line under the tab bar counts files and, after a few seconds, the
     time left. **Stop**: it says "stopping…", then the message says what was copied. **Sync**
     again: it carries on (what's done is unchanged) and finishes with the playlists.
+19f. Card tab › *What goes on the card*: beside each album's tick, a mark and words say what
+    the next Sync does (● on the card, ○ added, struck red ring taken off, its title struck
+    through); each artist counts them. **what the next Sync changes** lists only those albums,
+    opened; once Sync is done it goes back to **everything**.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 20a. Card tab › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
     converted (AAC, APE, WMA and Ogg go as they are), and the library's format note and badges

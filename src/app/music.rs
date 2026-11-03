@@ -106,7 +106,11 @@ impl App {
         for &(i, j) in &renamed {
             on_card.entry(plan[j].track).or_insert(w.manifest[i].size);
         }
-        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), renamed: renamed.len(), ..Default::default() };
+        let by_hand = match &self.card_found {
+            Some((id, dest, found)) if *id == w.id && w.dest.as_ref() == Some(dest) => found.iter().copied().filter(|t| !on_card.contains_key(t)).collect(),
+            _ => HashSet::new(),
+        };
+        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), by_hand, renamed: renamed.len(), ..Default::default() };
         s.planned_bytes = planned.values().map(|p| card::card_size(&self.tracks[p.track], p.target)).sum();
         let ids: Vec<PathBuf> = self.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&self.tracks).collect();

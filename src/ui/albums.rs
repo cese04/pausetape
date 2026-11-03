@@ -124,6 +124,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
                 None => String::new(),
                 Some(Mark::On) => "on card".into(),
                 Some(Mark::Adding) => "at next sync".into(),
+                Some(Mark::ByHand) => "by hand".into(),
                 Some(Mark::Removing) => "coming off".into(),
             };
             text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
