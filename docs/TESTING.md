@@ -248,8 +248,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     opened; once Sync is done it goes back to **everything**.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 20a. Card tab › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
-    converted (AAC, APE, WMA and Ogg go as they are), and the library's format note and badges
-    say "the Echo Mini" instead of "RECHO". Switch back to RECHO and the counts return.
+    converted (AAC, APE, WMA and Ogg go as they are), and the library's badges and the card
+    tab's *Formats … can't play* say "the Echo Mini" instead of "RECHO". Switch back to RECHO
+    and the counts return.
 20b. **test it on the player** › **Write the test folder to the card**: the card gets
     `Pausetape format test/` (17 samples, or 16 without an APE song in the library) and
     `Pausetape format test.m3u8`. The card tab doesn't count them as music the write didn't put
