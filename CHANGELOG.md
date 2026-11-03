@@ -737,3 +737,20 @@ Calibre's device view, for music: the library is where you choose what goes on t
   through, so a chosen change strikes the old value and a left-out one the suggestion.
 - The header counts what's chosen; **apply N changes** is the main button (greyed out with
   none), beside **dismiss**, *choose all* and *none*.
+
+### 61. The card tab says what's there and what's changing (2026-11-02)
+- A tick only said what the card would have after Sync, so a ticked album could be on the card
+  already or about to be copied, and an unticked one absent or about to be taken off. Each
+  album now has the library's mark beside its tick, with words: ● *on card*, ○ *added at the
+  next sync* (or *3 of 4 on card, the rest at the next sync*), and a struck red ring *taken off
+  at the next sync*, its title struck through. Each artist counts its albums on the card, added
+  and taken off; a legend above the list says what the marks mean.
+- **what the next Sync changes (N)**, beside **everything**, lists only the albums Sync adds or
+  takes off, their artists opened, to look over before it runs.
+- **A card with music copied by hand**, before Pausetape has written to it: once *Check them
+  against the library* has run, albums it found there show *on the card, copied by hand*, with
+  their own mark (a ring with a dot), even unticked. The dialog offers **Tick them**, first, so
+  a new setup starts from what the card holds; *Take over the card* then moves those songs into
+  place instead of copying them again.
+- The screenshot demo gets `PAUSETAPE_SHOT_EMPTY=1` (nothing chosen, as for a new card), and its
+  take-over shot compares and checks the card again first, so the dialog shows.

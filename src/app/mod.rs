@@ -209,6 +209,9 @@ pub struct CardState {
     pub on_card: HashSet<usize>,
     /// Tracks the write puts on the card as chosen now.
     pub planned: HashSet<usize>,
+    /// Tracks copied onto the card by hand, as the last check of the card found them; until
+    /// the card is taken over, Sync doesn't count them as there.
+    pub by_hand: HashSet<usize>,
     /// Albums Sync adds (or completes), swaps for another copy, and takes off.
     pub added: usize,
     pub replaced: usize,
@@ -292,6 +295,9 @@ pub struct App {
     pub card_state: CardState,
     /// The card surveyed for taking over, by setup id.
     pub card_survey: Option<(String, card::adopt::Survey)>,
+    /// The library songs that check found copied onto the card by hand, by setup id and card
+    /// folder. Kept while the selection changes (the survey isn't), for the card tab's marks.
+    pub card_found: Option<(String, PathBuf, HashSet<usize>)>,
     /// The room a running write started with: its new files fill the card before the manifest
     /// counts them, so the live figure would shrink as it goes.
     pub room_while_writing: Option<u64>,
@@ -312,6 +318,8 @@ pub struct App {
     /// The label on the active setup's card, as of the last look.
     pub dest_label: Option<card::Label>,
     pub card_filter: String,
+    /// The card tab lists only the albums the next Sync adds or takes off.
+    pub card_changes_only: bool,
     pub card_expanded: HashSet<String>,
     /// Inline rename on the card tab: ("artist"/"album", key, text).
     pub card_renaming: Option<(bool, String, String)>,
@@ -393,6 +401,7 @@ impl App {
             in_place: 0,
             write_preview: None,
             card_survey: None,
+            card_found: None,
             room_while_writing: None,
             card_state: CardState::default(),
             gather_on_take_over: true,
@@ -405,6 +414,7 @@ impl App {
             last_watch: None,
             dest_label: None,
             card_filter: String::new(),
+            card_changes_only: false,
             card_expanded: HashSet::new(),
             card_renaming: None,
             audio,

@@ -52,6 +52,9 @@ pub struct Survey {
     pub unknown: Vec<(PathBuf, u64)>,
     /// Everything else: covers, logs, playlists, other devices' data…
     pub other: Vec<(PathBuf, u64)>,
+    /// The library songs found among `used` and `spare`, by index: what the card has already,
+    /// put there by hand.
+    pub found: Vec<usize>,
 }
 
 impl Survey {
@@ -169,6 +172,7 @@ pub fn survey(tracks: &[Track], plan: &[PlanItem], manifest: &[Written], dest: &
             elsewhere(&mut s, rel);
             continue;
         }
+        s.found.extend(&copies);
         // Several identical library files (the same song kept twice): any the write still needs.
         match copies.iter().find_map(|i| wanted.remove(i)) {
             Some(to) => s.used.push((rel, to, size)),
@@ -623,6 +627,7 @@ mod tests {
         let mut s = survey(&tracks, &plan, &[], &card, |_, _| {});
         assert_eq!(s.used.len(), 2, "both Absolution songs are exact copies the write wants");
         assert_eq!(s.spare.len(), 1, "the M4A is a copy of a song this write leaves out");
+        assert_eq!(s.found.len(), 3, "the library songs found, used or spare: what the card tab marks as copied by hand");
         assert_eq!((s.unknown.len(), s.other.len()), (1, 5), "the unknown song; the cover and four files of clutter");
         let kinds: Vec<(&str, usize)> = s.clutter().iter().map(|(k, n, _)| (*k, *n)).collect();
         assert!(kinds.contains(&("iTunes library data", 2)) && kinds.contains(&("Windows and macOS system files", 1)) && kinds.contains(&("rip logs and checksums", 1)), "{kinds:?}");

@@ -28,6 +28,8 @@ pub(super) enum Mark {
     On,
     /// Chosen; the next Sync copies it (for an album, some of it may be there already).
     Adding,
+    /// On the card, copied there by hand: taking the card over moves it into place.
+    ByHand,
     /// On the card; the next Sync takes it off.
     Removing,
 }
@@ -50,6 +52,10 @@ impl Mark {
             }
             Mark::Adding => {
                 p.circle_stroke(at, r, Stroke::new(1.2, ink.text));
+            }
+            Mark::ByHand => {
+                p.circle_stroke(at, r, Stroke::new(1.2, ink.text));
+                p.circle_filled(at, r * 0.45, ink.text);
             }
             Mark::Removing => {
                 p.circle_stroke(at, r, Stroke::new(1.2, ink.warn));
@@ -576,6 +582,12 @@ pub(super) fn album_status(app: &App, ck: &str, artist: &crate::library::groupin
     let planned = al.tracks.iter().filter(|i| cs.planned.contains(i)).count();
     let there = al.tracks.iter().filter(|i| cs.on_card.contains(i)).count();
     let staying = al.tracks.iter().filter(|i| cs.planned.contains(i) && cs.on_card.contains(i)).count();
+    let hand = al.tracks.iter().filter(|i| cs.by_hand.contains(i)).count();
+    if hand > 0 && there == 0 {
+        let what = if hand == al.tracks.len() { "on the card".to_string() } else { format!("{hand} of {} on the card", al.tracks.len()) };
+        let then = if planned > 0 { "; Take over moves it into place" } else { "" };
+        return (Some(Mark::ByHand), format!("{what}, copied by hand{then}"));
+    }
     match (planned, there) {
         (0, 0) => (None, String::new()),
         (0, _) => {

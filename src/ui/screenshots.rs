@@ -152,6 +152,10 @@ impl Shooter {
             if let Some(card) = std::env::var_os("PAUSETAPE_SHOT_CARD") {
                 app.write_mut().dest = Some(card.into());
             }
+            // PAUSETAPE_SHOT_EMPTY=1: nothing chosen, as in a new setup for a card.
+            if std::env::var_os("PAUSETAPE_SHOT_EMPTY").is_some() {
+                app.write_mut().custom.chosen = Some(Default::default());
+            }
             // PAUSETAPE_SHOT_ROOM=<GB>: pretend the card (an empty temporary folder) has this
             // much room, to show what the card tab offers when the choice doesn't fit.
             if let Some(gb) = std::env::var("PAUSETAPE_SHOT_ROOM").ok().and_then(|v| v.parse::<f64>().ok()) {
@@ -222,6 +226,15 @@ impl Shooter {
                 "job" => {
                     app.tag_edit = None;
                     app.busy = Some(crate::app::Busy::pretend("writing “Echo Mini”", 1204, 2466, 300));
+                }
+                "takeover" => {
+                    app.tag_edit = None;
+                    app.busy = None;
+                    // The card's own label again, not the one the "cardowner" shot pretended, and
+                    // the comparison (and check) that switching setups since has dropped.
+                    app.refresh_label();
+                    app.preview_write();
+                    self.survey = std::env::var_os("PAUSETAPE_SHOT_SURVEY").is_some();
                 }
                 _ => {
                     app.tag_edit = None;

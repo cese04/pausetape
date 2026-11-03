@@ -131,7 +131,11 @@ impl App {
                 Msg::Surveyed(id, s) => {
                     self.busy = None;
                     if self.write().id == id {
+                        if let Some(dest) = self.write().dest.clone() {
+                            self.card_found = Some((id.clone(), dest, s.found.iter().copied().collect()));
+                        }
                         self.card_survey = Some((id, *s));
+                        self.refresh_on_card();
                     }
                 }
                 Msg::TookOver(id, mut out) => {
