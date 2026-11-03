@@ -26,6 +26,8 @@ pub enum Icon {
     Sync,
     Compare,
     Back,
+    /// What a value becomes (MusicBrainz suggestions).
+    Forward,
     Close,
     Info,
     Up,
@@ -152,6 +154,10 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Back => {
             p.add(line(&[(0.88, 0.5), (0.14, 0.5)]));
             p.add(line(&[(0.4, 0.24), (0.14, 0.5), (0.4, 0.76)]));
+        }
+        Icon::Forward => {
+            p.add(line(&[(0.12, 0.5), (0.86, 0.5)]));
+            p.add(line(&[(0.6, 0.24), (0.86, 0.5), (0.6, 0.76)]));
         }
         Icon::Close => {
             p.add(line(&[(0.22, 0.22), (0.78, 0.78)]));

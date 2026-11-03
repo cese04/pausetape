@@ -729,3 +729,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   label with its free space, Windows' own and network drives too. "back up" from a drive's
   top folder and the breadcrumb lead there, and **Use a folder on a card…** starts there, so
   **system picker…** isn't needed to reach another drive. Seen on Windows 11.
+
+### 60. MusicBrainz suggestions easier to read (2026-11-02)
+- An album's suggestions sit in a frame headed *MusicBrainz suggests*, one change per row:
+  a tick in the accent colour when it's chosen, an empty ring when it's left out. A click
+  anywhere on the row switches it. What the tag will be is in ink and what goes is struck
+  through, so a chosen change strikes the old value and a left-out one the suggestion.
+- The header counts what's chosen; **apply N changes** is the main button (greyed out with
+  none), beside **dismiss**, *choose all* and *none*.

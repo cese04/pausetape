@@ -160,8 +160,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     can undo it. Open an artist: after a moment its genres, country and years show, with links
     to buy (Bandcamp, Qobuz, …), listen and discover; each opens in the browser. **rename**
     changes the artist in its songs' tags, as corrections.
-14. Library › an album › **look up**: MusicBrainz suggestions appear; **apply selected** marks
-    tracks as edited. Quit and reopen: the edits are still there (library database).
+14. Library › an album › **look up**: MusicBrainz suggestions appear, each ticked; a click on
+    one leaves it out (its new value struck through), and **apply N changes** marks the chosen
+    ones on the tracks as edited. Quit and reopen: the edits are still there (library database).
 14a. If the same album is in two folders: the library shows "edition 1 of 2" and "2 of 2" with
     their formats; the card tab ticks one, and ticking the other switches. If one copy has the
     same songs in the same or lower quality, it says "this copy could go", and the library's
