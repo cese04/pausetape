@@ -723,3 +723,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
   .exe carries it too, for Explorer and the Start menu, with the app's name and version in
   its properties. `build.rs` makes them from the one drawing, `assets/icon/icon-1024.png`, so
   nothing derived is kept in the repository.
+
+### 59. Drives in the in-app browser on Windows (2026-11-02)
+- On Windows, **Drives** in the folder browser opens "Computer": every drive by letter and
+  label with its free space, Windows' own and network drives too. "back up" from a drive's
+  top folder and the breadcrumb lead there, and **Use a folder on a card…** starts there, so
+  **system picker…** isn't needed to reach another drive. Seen on Windows 11.

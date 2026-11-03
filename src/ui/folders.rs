@@ -184,7 +184,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 nav.show(ui);
                 ui.add_space(S2);
                 row(ui, |ui| {
-                    if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
+                    if nav.can_choose() && primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_source = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
@@ -199,7 +199,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 nav.show(ui);
                 ui.add_space(S2);
                 row(ui, |ui| {
-                    if primary_button(ui, format!("Check “{}”", nav.name())).clicked() {
+                    if nav.can_choose() && primary_button(ui, format!("Check “{}”", nav.name())).clicked() {
                         chosen_add = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
@@ -214,7 +214,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 nav.show(ui);
                 ui.add_space(S2);
                 row(ui, |ui| {
-                    if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
+                    if nav.can_choose() && primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_dest = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
@@ -264,8 +264,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     if link(ui, "Use a folder on a card…").clicked() {
-                        let start = app.write().dest.clone().unwrap_or_else(|| PathBuf::from("/Volumes"));
-                        *browse = Some(Navigator::new(Some(&start)));
+                        *browse = Some(match &app.write().dest {
+                            Some(dest) => Navigator::new(Some(dest)),
+                            None => Navigator::on_drives(),
+                        });
                     }
                 });
                 ui.add_space(S1);

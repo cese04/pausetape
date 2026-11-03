@@ -74,9 +74,9 @@ card step no longer says "not connected" where free space can't be read.
 | 5 | **Reserved names.** Windows can't open files or folders named `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9` (with any extension). An artist called "Aux" would break the card write. | Windows (and cards later read on Windows) | `sanitize_component` appends `_` to those names. Add a test. | S |
 | 6 | **Long paths.** Card paths can reach ~305 characters (80 + 100 + 120 per part), above Windows' traditional 260. Rust's file functions already handle long paths, but Explorer and other tools may not. | Windows | Make the per-write name-length cap from PROGRESS.md §3 #2 the default (e.g. 60/60/80). | S |
 | 7 | **Fonts differ per OS.** The look depends on Palatino (macOS), Palatino Linotype (Windows) or DejaVu Serif (Linux). | All | Embed one serif font in the binary (`include_bytes!`): ET Book (check its licence) or an OFL face such as EB Garamond or Source Serif 4. Keep system fonts only as fallbacks for Chinese/Japanese/Korean, adding Windows (Yu Gothic, Malgun Gothic) and more Linux Noto paths, or evaluate eframe's `system_fonts` feature. | S |
-| 8 | **Folder shortcuts assume macOS.** "Drives" and the card-folder browser start at `/Volumes`. | Windows, Linux | Per-OS start points: drive list on Windows, `/media`/`/run/media` on Linux. | S |
+| 8 | **Folder shortcuts assume macOS.** "Drives" and the card-folder browser start at `/Volumes`. *Windows done 2026-11-02:* both open "Computer", the list of drives. Linux goes to `/media`, not yet `/media/$USER` or `/run/media/$USER`. | Linux | `/media/$USER`, then `/run/media/$USER`. | S |
 | 9 | **Unused microphone code.** rodio's default `recording` feature links audio-input code that is never used. | All | `rodio = { default-features = false, features = ["playback", "symphonia-all", …] }`. | S |
-| 10 | **Install hints for ffmpeg** mention only `brew`. | Windows, Linux | Per-OS hint: `winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`, etc. | S |
+| 10 | ~~**Install hints for ffmpeg** mention only `brew`.~~ *Done 2026-11-01:* `platform::FFMPEG_INSTALL` names `winget install Gyan.FFmpeg` on Windows and `sudo apt install ffmpeg` on Linux. | Windows, Linux | — | — |
 
 macOS-specific additions to the app bundle (no code changes):
 

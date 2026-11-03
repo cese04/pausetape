@@ -62,7 +62,7 @@ pub fn space(path: &Path) -> Option<SpaceInfo> {
 }
 
 #[cfg(windows)]
-pub use windows::{space, volumes};
+pub use windows::{drives, space, volumes};
 
 #[cfg(not(any(unix, windows)))]
 pub fn space(_path: &Path) -> Option<SpaceInfo> {
@@ -106,6 +106,7 @@ mod windows {
 
     const DRIVE_REMOVABLE: u32 = 2;
     const DRIVE_FIXED: u32 = 3;
+    const DRIVE_REMOTE: u32 = 4;
 
     fn wide(p: &Path) -> Vec<u16> {
         p.as_os_str().encode_wide().chain([0]).collect()
@@ -144,9 +145,8 @@ mod windows {
         Some(SpaceInfo { total, free, fs })
     }
 
-    /// Drives that could be a card: removable ones, and fixed ones other than Windows' own
-    /// (card readers and USB drives can show up as either); not network or CD drives.
-    pub fn volumes() -> Vec<Volume> {
+    /// Mounted drives of these kinds, by letter, each with whether it's Windows' own.
+    fn mounted(kinds: &[u32]) -> Vec<(Volume, bool)> {
         let mut buf = [0u16; 512];
         // SAFETY: the buffer is as long as said; the call fills it with NUL-separated roots.
         let n = unsafe { GetLogicalDriveStringsW(buf.len() as u32, buf.as_mut_ptr()) } as usize;
@@ -157,14 +157,27 @@ mod windows {
             let letter = path.to_string_lossy().trim_end_matches('\\').to_uppercase();
             // SAFETY: a NUL-terminated root such as "E:\".
             let kind = unsafe { GetDriveTypeW(wide(&path).as_ptr()) };
-            if letter == system || !matches!(kind, DRIVE_REMOVABLE | DRIVE_FIXED) {
+            if !kinds.contains(&kind) {
                 continue;
             }
+            // Unreadable: no disc or card in it (an empty reader).
             let Some((label, _)) = label_and_fs(&path) else { continue };
             let name = if label.is_empty() { format!("Drive ({letter})") } else { format!("{label} ({letter})") };
-            out.push(Volume { name, info: space(&path), path });
+            out.push((Volume { name, info: space(&path), path }, letter == system));
         }
         out
+    }
+
+    /// Drives that could be a card: removable ones, and fixed ones other than Windows' own
+    /// (card readers and USB drives can show up as either); not network or CD drives.
+    pub fn volumes() -> Vec<Volume> {
+        mounted(&[DRIVE_REMOVABLE, DRIVE_FIXED]).into_iter().filter(|(_, system)| !system).map(|(v, _)| v).collect()
+    }
+
+    /// Every drive a music folder could be on, Windows' own and network ones too, for the
+    /// in-app folder browser.
+    pub fn drives() -> Vec<Volume> {
+        mounted(&[DRIVE_REMOVABLE, DRIVE_FIXED, DRIVE_REMOTE]).into_iter().map(|(v, _)| v).collect()
     }
 }
 

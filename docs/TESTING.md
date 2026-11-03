@@ -70,7 +70,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/cese04/pausetape.git
 cd pausetape
-cargo test                          # 78 tests pass on Windows, 79 elsewhere; 12 are skipped on purpose
+cargo test                          # 79 tests pass on Windows, 80 elsewhere; 12 are skipped on purpose
 cargo run --release -- --version    # e.g. "Pausetape 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -102,7 +102,7 @@ unchecked.
 | 1 | **Windows** | *Fixed 2026-10-31, seen working on Windows 11:* drives are listed by letter and label ("DATA (D:)"; "Drive (G:)" without a label). Windows' own drive and empty card readers aren't listed. Other internal drives are, under "other drives". | — |
 | 2 | **Windows** | *Fixed 2026-10-31, seen working on Windows 11:* free space and filesystem ("FAT32", "exFAT", "NTFS"); NTFS counts as not FAT. | — |
 | 3 | **Windows** | *Fixed 2026-11-01, run on Windows 11:* no **console window** opens behind the app. Started from a terminal, it prints there; but the terminal doesn't wait for it. | Use `cargo run`, or add `\| Out-Host` in PowerShell: `pausetape --version \| Out-Host`. Debug builds keep their console. |
-| 4 | **Windows** | The in-app browser can't reach other drives except through **system picker…**; there's no "Drives" button. | Use **system picker…**. |
+| 4 | **Windows** | *Fixed 2026-11-02, seen on Windows 11:* the in-app browser's **Drives** opens "Computer", a list of every drive with its free space; "back up" from a drive's top folder goes there too. | — |
 | 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9`. *On Windows 11 the app writes and reads them* (`Aux\`, `CON.mp3`, `COM1` were tried); Windows 10 and Explorer may not open them. | Rename it for that write in the card tab. Rare. |
 | 6 | **Windows** | Card paths can exceed 260 characters with very long names. *On Windows 11 the app wrote and read a 374-character path;* Explorer may not open it. | Rename long albums for the card. |
 | 7 | **Linux** | **Every** mounted drive under `/media/$USER` or `/run/media/$USER` is listed as a possible card, and the "not FAT32/exFAT" warning never appears (filesystem type isn't read on Linux yet). | Pick the right one by name and size. |

@@ -19,4 +19,6 @@ pub use label::Label;
 pub use journal::{latest_journal, save_problems, undo_latest};
 pub use plan::{AlbumOrder, Chosen, Custom, Options, PlanItem, REPEAT, Rules, Target, Unplayable, build_plan, card_size, song_path, target, tidy_plan};
 pub use volumes::{SpaceInfo, Volume, space, volumes};
+#[cfg(windows)]
+pub use volumes::drives;
 pub use write::{Outcome, Preview, WriteProfile, now, preview, removing, renamed, write};
