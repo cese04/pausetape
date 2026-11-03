@@ -54,23 +54,39 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 
 ## Status
 
-Early, unreleased (0.1.0). Developed and tested on **macOS**; **Windows and Linux have not been
-tried yet**. Details: [docs/PROGRESS.md](docs/PROGRESS.md).
+Early: 0.1.0 is the first release. Developed and used most on **macOS**, tested by hand on
+**Windows 11**; **Linux** builds and passes its tests, but hasn't been run on a desktop yet.
+Details: [docs/PROGRESS.md](docs/PROGRESS.md).
 
-| Platform | How to get it | State |
+Downloads are on [Releases](https://github.com/cese04/pausetape/releases) (or the
+[website](https://cese04.github.io/pausetape/), which picks the right one). None is signed yet,
+so each system asks once whether to trust it.
+
+| Platform | Download | State |
 |---|---|---|
-| macOS 12+ (Apple Silicon + Intel) | Build the DMG (below), or download from [Releases](https://github.com/cese04/pausetape/releases) once published | Works; not signed by a registered Apple developer yet |
-| Windows 10/11 | Build from source | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) |
-| Linux | Build from source | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) |
+| macOS 12+ (Apple Silicon + Intel) | `Pausetape-<version>.dmg`, ffmpeg included | Works |
+| Windows 10/11 (x64) | `pausetape-v<version>-Windows.exe`, one file, nothing to install | Works on Windows 11; what was checked is in [docs/TESTING.md](docs/TESTING.md) §3 |
+| Linux (x86-64) | `pausetape-v<version>-Linux`, one file | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) §3 |
 
-## Install on macOS
+## Install
+
+**macOS**
 
 1. Open `Pausetape-<version>.dmg` and drag the app to Applications.
 2. Open it once; macOS says it can't verify the developer. Click **Done**.
 3. System Settings › Privacy & Security › **Open Anyway**. Only needed the first time.
 
-To build the DMG yourself (needs Xcode Command Line Tools and
-`rustup target add x86_64-apple-darwin`; the first run also compiles the bundled ffmpeg):
+**Windows:** run the `.exe`. If Windows says it protected your PC, click **More info**, then
+**Run anyway**. For Dolby, Opus, APE, WavPack and WMA files, install ffmpeg:
+`winget install Gyan.FFmpeg`.
+
+**Linux:** `chmod +x pausetape-v<version>-Linux`, then run it. For the same rarer formats,
+install ffmpeg from your distribution (`sudo apt install ffmpeg`).
+
+### Build the Mac app
+
+Needs Xcode Command Line Tools and `rustup target add x86_64-apple-darwin`; the first run also
+compiles the bundled ffmpeg:
 
 ```sh
 scripts/package-macos.sh      # → dist/Pausetape.app and dist/Pausetape-<version>.dmg
@@ -86,7 +102,7 @@ Linux the audio/windowing headers (exact commands per distribution in
 cargo run --release                          # the app
 cargo run --release -- --version             # version, and which ffmpeg it uses
 cargo run --release -- --plan ~/Music        # dry run: print the planned layout, change nothing
-cargo test                                   # 40 offline tests
+cargo test                                   # offline tests
 ```
 
 ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
