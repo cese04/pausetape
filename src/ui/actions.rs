@@ -33,6 +33,8 @@ pub(super) enum Action {
     /// Add a song to the selection or take it out; add a run of songs.
     Select(usize),
     SelectRun(Vec<usize>),
+    /// A plain click on a song: it alone is selected.
+    OnlySong(usize),
     ClearSelection,
     /// Move album copies another copy covers to the Trash (artist, album).
     TrashCopies(Vec<(usize, usize)>),
@@ -79,6 +81,10 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::EditTags(songs) => app.edit_tags(songs),
             Action::Select(t) => app.toggle_selected(t),
             Action::SelectRun(ts) => app.select_run(ts),
+            Action::OnlySong(t) => {
+                app.selected = [t].into();
+                app.select_anchor = Some(t);
+            }
             Action::ClearSelection => {
                 app.selected.clear();
                 app.select_anchor = None;

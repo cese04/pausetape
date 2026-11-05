@@ -34,7 +34,7 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
             if widgets::icon_link(ui, Icon::Close, "clear").on_hover_text("or press Esc").clicked() {
                 actions.push(Action::ClearSelection);
             }
-            help(ui, "⌘-click adds or removes a song, shift-click a run of songs.");
+            help(ui, "Click a song to select it alone, ⌘-click to add or remove one, shift-click for a run; double-click plays.");
         });
     });
     ui.add_space(S1);

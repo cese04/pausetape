@@ -806,3 +806,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   put on the card, which no setup will then update or take off, and how to clear them first.
 - **Forgetting the stored tags** (Settings) asks first and says what it costs: the next rescan
   opens every file again.
+
+### 67. A click selects, a double click plays, in every view (2026-11-05)
+- In the library by artist, a click on a song played it, and selecting needed ⌘-click: the
+  opposite of the album table, Finder, Explorer and other players, so looking around with the
+  mouse interrupted the music. Now a click selects the song (alone), ⌘-click adds or removes
+  one, shift-click a run, and a double click plays from that song to the album's end.
+- One selected song is only highlighted; the bar with what to do with a selection appears from
+  two songs, so a click doesn't push the list down. Esc clears either.

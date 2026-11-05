@@ -268,8 +268,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
     }
     let mut actions = Vec::new();
-    if !app.selected.is_empty() {
+    // One song selected is only a highlight (a click selects); from two, a bar says what to do
+    // with them. Esc clears either.
+    if app.selected.len() > 1 {
         super::tag_editor::selection_bar(app, ui, &mut actions);
+    } else if !app.selected.is_empty() && app.tag_edit.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        actions.push(Action::ClearSelection);
     }
     // Albums (by base id) where one copy covers another, or with songs stored twice, for the
     // duplicates view.
@@ -538,14 +542,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
                         let selected = app.selected.contains(&ti);
                         let (r, add) = track_row(ui, t, device, (&numbers[pos], number_end), al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
-                        if r.clicked() && mods.command {
+                        // As in the album table and any file list: a click selects, a double click
+                        // plays (from this song to the album's end).
+                        if r.double_clicked() {
+                            actions.push(Action::Play(al.tracks.clone(), pos));
+                        } else if r.clicked() && mods.command {
                             actions.push(Action::Select(ti));
                         } else if r.clicked() && mods.shift {
                             // A run from the last song clicked, if it's in this album.
                             let from = app.select_anchor.and_then(|a| al.tracks.iter().position(|&x| x == a)).unwrap_or(pos);
                             actions.push(Action::SelectRun(al.tracks[from.min(pos)..=from.max(pos)].to_vec()));
-                        } else if r.double_clicked() || r.clicked() {
-                            actions.push(Action::Play(al.tracks.clone(), pos));
+                        } else if r.clicked() {
+                            actions.push(Action::OnlySong(ti));
                         }
                         r.context_menu(|ui| {
                             let several = selected && app.selected.len() > 1;
@@ -561,7 +569,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 actions.push(Action::EditTags(al.tracks.clone()));
                                 ui.close();
                             }
-                            if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "unselect (⌘-click)" } else { "select (⌘-click)" }).clicked() {
+                            if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "take out of the selection (⌘-click)" } else { "add to the selection (⌘-click)" }).clicked() {
                                 actions.push(Action::Select(ti));
                                 ui.close();
                             }
