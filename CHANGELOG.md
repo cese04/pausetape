@@ -840,3 +840,11 @@ Calibre's device view, for music: the library is where you choose what goes on t
   "Send 2 albums to the card").
 - Before, songs could only go into the open playlist, with a + that showed on hover; the + stays,
   and adding now says so in a notice that offers *undo*.
+
+### 70. Drop a folder on the window to add its music (2026-11-05)
+- Dragging a folder (an album, or a folder of albums) over the window covers the page with
+  "Drop a folder to add its music to your library"; dropping it does what *add music* does
+  after choosing a folder: checks it against the library, then asks what to copy.
+- Single files are turned down with a note to drop their folder instead (checking the folder
+  they're in could mean all of Downloads); of several folders, the first is checked. While a
+  dialog is open or something is running, the drop waits and a notice says why.

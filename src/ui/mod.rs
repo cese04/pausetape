@@ -81,9 +81,41 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     player_test::dialog(app, ui);
     // ⌘F is for the search box of the tab it opened; if that tab didn't draw one, it lapses.
     app.focus_search = false;
+    drop_to_add(app, ui);
     card::sync_confirm_dialog(app, ui);
     confirm::dialog(app, ui);
     folders::add_dialog(app, ui);
+}
+
+/// A folder dropped on the window is music to add, as "add music" would: while it's held over
+/// the window, the page says so; once dropped, it's checked against the library.
+fn drop_to_add(app: &mut App, ui: &mut Ui) {
+    let (hovering, dropped) = ui.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect::<Vec<_>>()));
+    if hovering {
+        let ink = ink(ui);
+        let area = ui.ctx().content_rect().shrink(S2);
+        let p = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("drop to add")));
+        p.rect_filled(area, 8.0, ink.bg.gamma_multiply(0.92));
+        p.rect_filled(area, 8.0, ink.accent.gamma_multiply(0.10));
+        p.rect_stroke(area, 8.0, Stroke::new(1.5, ink.accent), egui::StrokeKind::Inside);
+        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first (folders tab), then drop music to add" };
+        p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(20.0), ink.text);
+        p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(14.0), ink.muted);
+    }
+    let Some(first) = dropped.first() else { return };
+    if app.dialog_open() {
+        app.notice("close the dialog first, then drop it again");
+    } else if let Some(b) = &app.busy {
+        app.notice(format!("wait until {} is done, then drop it again", b.label));
+    } else if !first.is_dir() {
+        app.notice("drop the folder the music is in (an album, or a folder of albums), not single files");
+    } else {
+        if dropped.len() > 1 {
+            app.notice("one folder at a time: checking the first");
+        }
+        app.tab = Tab::Library;
+        app.check_folder(first.clone());
+    }
 }
 
 /// The tab bar: the app's name, the tabs, and what's running in the background.
