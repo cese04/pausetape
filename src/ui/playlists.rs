@@ -34,6 +34,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let mut play = None;
     // What was asked, done once drawing is over (the rows borrow the library's songs).
     let mut todo: Vec<Do> = Vec::new();
+    let mut actions = Vec::new();
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
             ui.set_width(200.0);
@@ -96,7 +97,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         ui.add_sized([28.0, 18.0], egui::Label::new(RichText::new(format!("{}", n + 1)).color(ink.muted)));
                         match by_path.get(path.as_path()) {
                             Some(t) => {
-                                ui.label(t.display_title());
+                                let r = ui.add(egui::Label::new(t.display_title()).sense(egui::Sense::click()));
+                                if let Some(&ti) = by_index.get(path.as_path()) {
+                                    r.context_menu(|ui| {
+                                        super::menu::music(app, ui, super::menu::Of::Songs(vec![ti]), &mut actions, |ui, _| {
+                                            ui.separator();
+                                            if icon_link(ui, Icon::Close, "Remove from the playlist").clicked() {
+                                                todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
+                                                ui.close();
+                                            }
+                                        });
+                                    });
+                                }
                                 muted(ui, t.artist.as_deref().unwrap_or(""));
                                 if let Some(note) = text::format_note(t, device) {
                                     ui.label(RichText::new(text::format_badge(t, device)).size(12.0).color(ink.warn)).on_hover_text(note);
@@ -122,6 +134,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
         });
     });
+    super::actions::apply(app, actions);
     for d in todo {
         match d {
             Do::New => app.new_playlist(),

@@ -828,3 +828,15 @@ Calibre's device view, for music: the library is where you choose what goes on t
   system writes them, and the Sync, *send to card* and *edit tags* commands show theirs on
   hover. Shortcuts wait while you type in a field or a dialog is open; the arrows and Enter
   also leave a control focused with Tab alone.
+
+### 69. One right-click menu for music, everywhere (2026-11-05)
+- Right-click an artist's name, an album's title (library by artist), an album's row (album
+  table), a song, or a playlist's song: the same menu each time, in the same order. **Play**
+  (a song plays on through its album) · **Add to playlist ▸** (any playlist, or a new one) ·
+  **Send to the card** or **Take off the card** · **Edit tags** · **Find cover** (when there's
+  none) · **Look up on MusicBrainz** (one album) · **Open folder**. A playlist's song adds
+  **Remove from the playlist**, a library song adding to or taking out of the selection.
+- On something in a selection of several, the menu acts on the whole selection ("Play 3 songs",
+  "Send 2 albums to the card").
+- Before, songs could only go into the open playlist, with a + that showed on hover; the + stays,
+  and adding now says so in a notice that offers *undo*.

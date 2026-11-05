@@ -161,7 +161,11 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             } else if resp.clicked() {
                 actions.push(Action::OnlyAlbum(row.id.clone()));
             }
-            resp.context_menu(|ui| album_menu(app, ui, row, actions));
+            // On an album in the selection, the menu is for the whole selection.
+            resp.context_menu(|ui| {
+                let of = if selected && app.selected_albums.len() > 1 { super::menu::Of::Songs(app.selected_album_songs(&rows)) } else { super::menu::Of::Album(row.artist, row.album) };
+                super::menu::music(app, ui, of, actions, |_, _| {});
+            });
         }
     });
     app.album_rows_shown = drawn;
@@ -204,33 +208,6 @@ fn album_keys(app: &App, ui: &Ui, rows: &[AlbumRow], actions: &mut Vec<Action>) 
     }
     if super::keys::pressed(ui, &super::keys::CARD) {
         actions.push(Action::ToggleCard(chosen.iter().map(|r| (r.artist, r.album)).collect()));
-    }
-}
-
-/// Right-click on an album row.
-fn album_menu(app: &App, ui: &mut Ui, row: &AlbumRow, actions: &mut Vec<Action>) {
-    let al = &app.index.artists[row.artist].albums[row.album];
-    let mut item = |ui: &mut Ui, icon, text: &str, action: Action| {
-        if widgets::icon_link(ui, icon, text).clicked() {
-            actions.push(action);
-            ui.close();
-        }
-    };
-    item(ui, Icon::Play, "play", Action::Play(al.tracks.clone(), 0));
-    item(ui, Icon::Rename, "edit tags", Action::EditTags(al.tracks.clone()));
-    if row.card.chosen {
-        item(ui, Icon::Remove, "take off card", Action::CardAlbums(vec![(row.artist, row.album)], false));
-    } else {
-        item(ui, Icon::Add, "send to card", Action::CardAlbums(vec![(row.artist, row.album)], true));
-    }
-    if !row.cover && app.busy.is_none() {
-        item(ui, Icon::Image, "find cover", Action::FindCovers(vec![(row.artist, row.album)]));
-    }
-    if let Some(dir) = app.tracks[al.tracks[0]].path.parent()
-        && widgets::icon_link(ui, Icon::Folder, "open folder").clicked()
-    {
-        crate::platform::reveal(dir);
-        ui.close();
     }
 }
 

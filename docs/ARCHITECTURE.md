@@ -132,6 +132,7 @@ src/
     ├── player_test.rs the dialog for testing the card's player
     ├── confirm.rs     asking before a change that can't be undone (deleting a card setup, forgetting stored tags)
     ├── keys.rs        keyboard shortcuts: the keys, when they're listened for, the list in Settings
+    ├── menu.rs        the right-click menu on music, the same on artists, albums, songs and playlists' songs
     └── screenshots.rs debug-only screenshot demo (PAUSETAPE_SHOT)
 ```
 

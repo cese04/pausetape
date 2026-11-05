@@ -9,6 +9,7 @@ mod cassette;
 mod confirm;
 pub mod folders;
 mod keys;
+mod menu;
 pub mod icons;
 pub mod layout;
 mod library;

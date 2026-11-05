@@ -412,6 +412,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         let name = RichText::new(&artist.name).size(20.0).color(ink.text);
                         let r = widgets::fitted(ui, name, name_w, Sense::click()).on_hover_text(&artist.name);
                         widgets::focus_ring(ui, &r, r.rect, 2.0);
+                        r.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Artist(ai), &mut actions, |_, _| {}));
                         muted(ui, meta);
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             let hint = if whole {
@@ -459,7 +460,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         let no_cover = app.lacks_cover(al);
                         let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 510.0 + if no_cover { 100.0 } else { 0.0 };
                         let shown = RichText::new(title).italics().size(17.0);
-                        widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
+                        let r = widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::click()).on_hover_text(format!("{title}\nRight-click for what you can do with it."));
+                        widgets::focus_ring(ui, &r, r.rect, 2.0);
+                        r.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Album(ai, bi), &mut actions, |_, _| {}));
                         let r = ui.label(RichText::new(meta).color(ink.muted));
                         if let Some(e) = &al.edition {
                             r.on_hover_text(format!("{}\nThe card gets one edition; choose which in the card tab.", e.label));
@@ -567,23 +570,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             actions.push(Action::OnlySong(ti));
                         }
                         r.context_menu(|ui| {
-                            let several = selected && app.selected.len() > 1;
-                            if several && widgets::icon_link(ui, Icon::Rename, format!("edit tags of the {} selected songs", app.selected.len())).clicked() {
-                                actions.push(Action::EditTags(app.selected.iter().copied().collect()));
-                                ui.close();
-                            }
-                            if widgets::icon_link(ui, Icon::Rename, "edit tags of this song").clicked() {
-                                actions.push(Action::EditTags(vec![ti]));
-                                ui.close();
-                            }
-                            if widgets::icon_link(ui, Icon::Rename, "edit tags of the album").clicked() {
-                                actions.push(Action::EditTags(al.tracks.clone()));
-                                ui.close();
-                            }
-                            if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "take out of the selection (⌘-click)" } else { "add to the selection (⌘-click)" }).clicked() {
-                                actions.push(Action::Select(ti));
-                                ui.close();
-                            }
+                            // On a song in the selection, the menu is for the whole selection.
+                            let songs = if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] };
+                            super::menu::music(app, ui, super::menu::Of::Songs(songs), &mut actions, |ui, actions| {
+                                ui.separator();
+                                if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "Take out of the selection (⌘-click)" } else { "Add to the selection (⌘-click)" }).clicked() {
+                                    actions.push(Action::Select(ti));
+                                    ui.close();
+                                }
+                            });
                         });
                         if add {
                             actions.push(Action::Add(ti));

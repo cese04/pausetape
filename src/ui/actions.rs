@@ -41,6 +41,9 @@ pub(super) enum Action {
     AlbumCursor(String, usize, bool),
     /// ⌘D: these albums onto the card, or off it if they're all there.
     ToggleCard(Vec<(usize, usize)>),
+    /// Songs to the end of a playlist (by position); into a new playlist.
+    AddToPlaylist(usize, Vec<usize>),
+    NewPlaylistWith(Vec<usize>),
     ClearSelection,
     /// Move album copies another copy covers to the Trash (artist, album).
     TrashCopies(Vec<(usize, usize)>),
@@ -108,6 +111,13 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                 app.album_scroll_to = Some(row);
             }
             Action::ToggleCard(albums) => app.toggle_on_card(albums),
+            Action::AddToPlaylist(i, songs) => app.add_songs_to_playlist(i, &songs),
+            Action::NewPlaylistWith(songs) => {
+                app.new_playlist();
+                if let Some(i) = app.active_playlist {
+                    app.add_songs_to_playlist(i, &songs);
+                }
+            }
             Action::ClearSelection => {
                 app.selected.clear();
                 app.select_anchor = None;

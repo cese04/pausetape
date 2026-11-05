@@ -334,15 +334,23 @@ impl App {
     }
 
     pub fn add_to_playlist(&mut self, track: usize) {
-        let Some(name) = self.active_playlist.and_then(|i| self.saved.playlists.get(i)).map(|p| p.name.clone()) else {
-            self.notice("create a playlist first");
-            return;
-        };
-        self.remember_playlists(format!("adding “{}” to “{name}”", self.tracks[track].display_title()));
-        let id = self.tracks[track].id();
-        if let Some(p) = self.active_playlist.and_then(|i| self.saved.playlists.get_mut(i)) {
-            p.tracks.push(id);
+        match self.active_playlist {
+            Some(i) => self.add_songs_to_playlist(i, &[track]),
+            None => self.notice("create a playlist first"),
         }
+    }
+
+    /// Add songs to the end of a playlist, and say so (undo takes them back out).
+    pub fn add_songs_to_playlist(&mut self, i: usize, songs: &[usize]) {
+        let Some(name) = self.saved.playlists.get(i).map(|p| p.name.clone()) else { return };
+        let what = match songs {
+            [one] => format!("“{}”", self.tracks[*one].display_title()),
+            _ => format!("{} songs", songs.len()),
+        };
+        self.remember_playlists(format!("adding {what} to “{name}”"));
+        let ids: Vec<PathBuf> = songs.iter().map(|&t| self.tracks[t].id()).collect();
+        self.saved.playlists[i].tracks.extend(ids);
+        self.notice_undoable(format!("added {what} to “{name}”"));
     }
 
     /// A new, empty playlist, named so no other has its name, and open.
