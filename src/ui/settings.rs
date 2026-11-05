@@ -57,10 +57,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && icon_link(ui, Icon::Rescan, "read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
                     app.read_all_again();
                 }
-                if icon_link(ui, Icon::Trash, "forget stored tags").on_hover_text("unsaved corrections are kept").clicked()
-                    && let Some(db) = &mut app.db
-                {
-                    let _ = db.clear();
+                if icon_link(ui, Icon::Trash, "forget stored tags").on_hover_text("asks first; unsaved corrections are kept").clicked() {
+                    app.confirm = Some(crate::app::Confirm::ForgetTags);
                 }
             });
         });

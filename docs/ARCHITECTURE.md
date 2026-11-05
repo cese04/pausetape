@@ -111,6 +111,7 @@ src/
 │   ├── cards.rs       noticing cards plugged in by their label; refusing another setup's card
 │   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
+│   ├── undo.rs        ⌘Z: taking back changes to playlists and to what goes on the card (not to files)
 │   ├── playback.rs    play queue, waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
@@ -129,6 +130,7 @@ src/
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     ├── albums.rs      the library as a sortable table of albums
     ├── player_test.rs the dialog for testing the card's player
+    ├── confirm.rs     asking before a change that can't be undone (deleting a card setup, forgetting stored tags)
     └── screenshots.rs debug-only screenshot demo (PAUSETAPE_SHOT)
 ```
 

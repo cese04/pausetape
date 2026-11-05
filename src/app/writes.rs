@@ -88,6 +88,8 @@ impl App {
     /// Put an album on the active write's card, or take it off. Like everything chosen, it
     /// reaches the card at the next Sync.
     pub fn card_album(&mut self, artist: usize, album: usize, on: bool) {
+        let title = self.index.artists[artist].albums[album].title.clone().unwrap_or_else(|| "loose tracks".into());
+        self.remember_chosen(if on { format!("sending “{title}” to the card") } else { format!("taking “{title}” off the card") });
         let a = &self.index.artists[artist];
         let ck = self.index.clusters[a.cluster].key.clone();
         let al = &a.albums[album];
@@ -97,6 +99,8 @@ impl App {
 
     /// Put a whole artist on the card (albums added later too), or take all of it off.
     pub fn card_artist(&mut self, artist: usize, on: bool) {
+        let name = self.index.artists[artist].name.clone();
+        self.remember_chosen(if on { format!("sending all of {name} to the card") } else { format!("taking all of {name} off the card") });
         let a = &self.index.artists[artist];
         let ck = self.index.clusters[a.cluster].key.clone();
         self.saved.writes[self.saved.active_write].custom.set_artist(&ck, &a.albums, on);
@@ -124,10 +128,16 @@ impl App {
         self.select_write(self.saved.writes.len() - 1);
     }
 
-    pub fn delete_write(&mut self) {
+    /// Delete the card setup with this id (asked first: see `Confirm::DeleteWrite`). The last
+    /// one stays.
+    pub fn delete_write(&mut self, id: &str) {
+        let Some(i) = self.saved.writes.iter().position(|w| w.id == id) else { return };
         if self.saved.writes.len() > 1 {
-            self.saved.writes.remove(self.saved.active_write);
-            self.select_write(self.saved.active_write.saturating_sub(1));
+            let name = self.saved.writes.remove(i).name;
+            let active = self.saved.active_write;
+            // The one open stays open; if it was this one, the one before it opens.
+            self.select_write(if active > i || (active == i && i > 0) { active - 1 } else { active });
+            self.notice(format!("deleted the card setup “{name}”"));
         }
     }
 
@@ -319,10 +329,58 @@ impl App {
     }
 
     pub fn add_to_playlist(&mut self, track: usize) {
-        let Some(p) = self.active_playlist.and_then(|i| self.saved.playlists.get_mut(i)) else {
+        let Some(name) = self.active_playlist.and_then(|i| self.saved.playlists.get(i)).map(|p| p.name.clone()) else {
             self.notice("create a playlist first");
             return;
         };
-        p.tracks.push(self.tracks[track].id());
+        self.remember_playlists(format!("adding “{}” to “{name}”", self.tracks[track].display_title()));
+        let id = self.tracks[track].id();
+        if let Some(p) = self.active_playlist.and_then(|i| self.saved.playlists.get_mut(i)) {
+            p.tracks.push(id);
+        }
+    }
+
+    /// A new, empty playlist, named so no other has its name, and open.
+    pub fn new_playlist(&mut self) {
+        self.remember_playlists("making a new playlist");
+        let taken = |n: &str| self.saved.playlists.iter().any(|p| p.name.eq_ignore_ascii_case(n));
+        let name = (1..).map(|n| format!("Playlist {n}")).find(|n| !taken(n)).unwrap_or_default();
+        self.saved.playlists.push(Playlist { name, tracks: Vec::new() });
+        self.active_playlist = Some(self.saved.playlists.len() - 1);
+    }
+
+    /// Delete a playlist; a notice offers to undo it. Card setups stop putting it on their cards.
+    pub fn delete_playlist(&mut self, i: usize) {
+        let Some(name) = self.saved.playlists.get(i).map(|p| p.name.clone()) else { return };
+        self.remember_playlists(format!("deleting the playlist “{name}”"));
+        self.saved.playlists.remove(i);
+        for w in &mut self.saved.writes {
+            w.playlists.remove(&name);
+        }
+        self.active_playlist = self.saved.playlists.len().checked_sub(1).map(|last| i.min(last));
+        self.write_preview = None;
+        self.notice_undoable(format!("deleted the playlist “{name}”"));
+    }
+
+    /// Rename a playlist, and the setups that put it on their cards with it. A name that's empty,
+    /// or another playlist's (card folders ignore case), is refused: the old one stays.
+    pub fn rename_playlist(&mut self, i: usize, new: &str) -> bool {
+        let new = new.trim();
+        let Some(old) = self.saved.playlists.get(i).map(|p| p.name.clone()) else { return false };
+        if new == old {
+            return true;
+        }
+        if new.is_empty() || self.saved.playlists.iter().enumerate().any(|(j, p)| j != i && p.name.eq_ignore_ascii_case(new)) {
+            self.notice(if new.is_empty() { format!("a playlist needs a name; kept “{old}”") } else { format!("there's already a playlist called “{new}”; kept “{old}”") });
+            return false;
+        }
+        self.remember_playlists(format!("renaming “{old}” to “{new}”"));
+        self.saved.playlists[i].name = new.to_string();
+        for w in &mut self.saved.writes {
+            if w.playlists.remove(&old) {
+                w.playlists.insert(new.to_string());
+            }
+        }
+        true
     }
 }

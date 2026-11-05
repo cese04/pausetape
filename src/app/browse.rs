@@ -135,6 +135,9 @@ impl App {
 
     /// Put the selected albums on the card, or take them off.
     pub fn card_albums(&mut self, albums: &[(usize, usize)], on: bool) {
+        let n = albums.len();
+        let what = if n == 1 { "1 album".to_string() } else { format!("{n} albums") };
+        self.remember_chosen(if on { format!("sending {what} to the card") } else { format!("taking {what} off the card") });
         for &(ai, bi) in albums {
             let a = &self.index.artists[ai];
             let ck = self.index.clusters[a.cluster].key.clone();

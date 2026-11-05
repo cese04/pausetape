@@ -247,8 +247,8 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         if widgets::icon_link(ui, Icon::Copy, "duplicate").on_hover_text("same choices, e.g. for a second card").clicked() {
             app.new_write(true);
         }
-        if app.saved.writes.len() > 1 && widgets::icon_link(ui, Icon::Trash, "delete").on_hover_text("forgets the layout; files on the card stay").clicked() {
-            app.delete_write();
+        if app.saved.writes.len() > 1 && widgets::icon_link(ui, Icon::Trash, "delete").on_hover_text("forgets this setup; asks first").clicked() {
+            app.confirm = Some(crate::app::Confirm::DeleteWrite(app.write().id.clone()));
         }
     });
     if let Some(i) = select {
@@ -1169,7 +1169,6 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     }
     let mut touched_layout = false;
     for e in edits {
-        let w = &mut app.saved.writes[app.saved.active_write];
         match e {
             Edit::Expand(k) => {
                 if !app.card_expanded.remove(&k) {
@@ -1178,6 +1177,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             }
             Edit::StartRename(is_artist, key, current) => app.card_renaming = Some((is_artist, key, current)),
             Edit::Rename(is_artist, key, name) => {
+                app.remember_chosen(if name.trim().is_empty() { "going back to the library's name on the card".to_string() } else { format!("renaming to “{}” on the card", name.trim()) });
+                let w = &mut app.saved.writes[app.saved.active_write];
                 let map = if is_artist { &mut w.custom.artist_names } else { &mut w.custom.album_names };
                 if name.trim().is_empty() {
                     map.remove(&key);
@@ -1190,6 +1191,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             Edit::Artist(ai, on) => app.card_artist(ai, on),
             Edit::Album(ai, bi, on) => app.card_album(ai, bi, on),
             Edit::All(on) => {
+                app.remember_chosen(if on { "ticking everything" } else { "unticking everything" });
+                let w = &mut app.saved.writes[app.saved.active_write];
                 for a in &app.index.artists {
                     w.custom.set_artist(&app.index.clusters[a.cluster].key, &a.albums, on);
                 }
@@ -1198,6 +1201,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             Edit::Move(ck, mut ids, n, d) => {
                 let m = n as isize + d;
                 if m >= 0 && (m as usize) < ids.len() {
+                    app.remember_chosen("changing the order of albums");
+                    let w = &mut app.saved.writes[app.saved.active_write];
                     ids.swap(n, m as usize);
                     w.custom.album_order.insert(ck, ids);
                     touched_layout = true;

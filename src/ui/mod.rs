@@ -6,6 +6,7 @@ mod albums;
 mod artist_panel;
 mod card;
 mod cassette;
+mod confirm;
 pub mod folders;
 pub mod icons;
 pub mod layout;
@@ -39,6 +40,11 @@ const ROW_H: f32 = layout::ROW;
 /// off, so they never read as content. Everything inside keeps to the page's side margin.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
+    // ⌘Z (Ctrl+Z) takes back the latest change to playlists or to what goes on the card, unless
+    // a text field has the keyboard (it has an undo of its own) or a dialog is open.
+    if !ui.ctx().egui_wants_keyboard_input() && app.confirm.is_none() && app.sync_confirm.is_none() && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) {
+        app.undo_last();
+    }
     let chrome = |x: f32, y: f32| egui::Frame::new().fill(ink.bar).inner_margin(margin(x, y));
     let r = egui::Panel::top("nav").frame(chrome(S4, S1)).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
@@ -76,6 +82,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     card::take_over_dialog(app, ui);
     player_test::dialog(app, ui);
     card::sync_confirm_dialog(app, ui);
+    confirm::dialog(app, ui);
     folders::add_dialog(app, ui);
 }
 
@@ -145,9 +152,14 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
         icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
-        ui.allocate_ui(egui::vec2(ui.available_width() - S5, 0.0), |ui| {
+        let offers_undo = app.notice_offers_undo();
+        let undo_w = if offers_undo { widgets::text_width(ui, "undo (⌘Z)", 13.5) + S4 } else { 0.0 };
+        ui.allocate_ui(egui::vec2(ui.available_width() - S5 - undo_w, 0.0), |ui| {
             ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
         });
+        if offers_undo && widgets::icon_link(ui, Icon::Back, "undo (⌘Z)").clicked() {
+            app.undo_last();
+        }
         if widgets::icon_button(ui, Icon::Close, "dismiss").clicked() {
             app.notices.clear();
         }

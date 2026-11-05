@@ -12,7 +12,6 @@ use super::theme::ink;
 use super::icons::Icon;
 use super::widgets::{self, caps, icon_button, icon_link, muted};
 use crate::app::App;
-use crate::card::playlist::Playlist;
 use crate::library::Track;
 use super::layout::{S1, S2, S3, row};
 
@@ -33,6 +32,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let by_index: HashMap<&Path, usize> = ids.iter().enumerate().map(|(i, id)| (id.as_path(), i)).collect();
     let mut select = None;
     let mut play = None;
+    // What was asked, done once drawing is over (the rows borrow the library's songs).
+    let mut todo: Vec<Do> = Vec::new();
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
             ui.set_width(200.0);
@@ -44,8 +45,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
             ui.add_space(S1);
             if icon_link(ui, Icon::Add, "new playlist").clicked() {
-                app.saved.playlists.push(Playlist { name: format!("Playlist {}", app.saved.playlists.len() + 1), tracks: Vec::new() });
-                select = Some(app.saved.playlists.len() - 1);
+                todo.push(Do::New);
             }
             ui.add_space(S2);
             let total: u64 = app.saved.playlists.iter().map(|p| p.bytes(&by_path)).sum();
@@ -58,35 +58,39 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 muted(ui, "Create a playlist, then use the + at the end of any track row in the library.");
                 return;
             };
-            let mut delete = false;
-            let old_name = app.saved.playlists[pi].name.clone();
             row(ui, |ui| {
-                let r = ui.add(egui::TextEdit::singleline(&mut app.saved.playlists[pi].name).align(egui::Align2::LEFT_CENTER).font(FontId::proportional(20.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(320.0));
-                // Writes refer to playlists by name; follow the rename.
-                if r.changed() {
-                    let new = app.saved.playlists[pi].name.clone();
-                    for w in &mut app.saved.writes {
-                        if w.playlists.remove(&old_name) {
-                            w.playlists.insert(new.clone());
-                        }
+                // The name is edited as a draft and taken when the field is left (Enter, Tab, a
+                // click elsewhere): card setups refer to playlists by name, so it's checked then.
+                let draft_id = egui::Id::unique(("playlist name", pi));
+                let mut draft = ui.data_mut(|d| d.get_temp::<String>(draft_id)).unwrap_or_else(|| app.saved.playlists[pi].name.clone());
+                let r = ui.add(egui::TextEdit::singleline(&mut draft).align(egui::Align2::LEFT_CENTER).font(FontId::proportional(20.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(320.0)).on_hover_text("click to rename");
+                if r.has_focus() {
+                    ui.data_mut(|d| d.insert_temp(draft_id, draft));
+                } else {
+                    if r.lost_focus() {
+                        todo.push(Do::Rename(pi, draft));
                     }
+                    ui.data_mut(|d| d.remove::<String>(draft_id));
+                }
+                if !r.has_focus() && icon_button(ui, Icon::Rename, "rename").clicked() {
+                    r.request_focus();
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if icon_link(ui, Icon::Trash, "delete").clicked() {
-                        delete = true;
+                    if icon_link(ui, Icon::Trash, "delete").on_hover_text("undo brings it back").clicked() {
+                        todo.push(Do::Delete(pi));
                     }
                     if icon_link(ui, Icon::Play, "play").clicked() {
                         play = Some(0);
                     }
                 });
             });
-            let pl = &mut app.saved.playlists[pi];
+            let pl = &app.saved.playlists[pi];
             let dur: Duration = pl.tracks.iter().filter_map(|p| by_path.get(p.as_path())).map(|t| t.duration).sum();
             muted(ui, format!("{} tracks · {} · {}", pl.tracks.len(), text::duration(dur), text::bytes(pl.bytes(&by_path))));
             ui.add_space(S1);
-            let mut op: Option<(usize, i32)> = None;
             ScrollArea::vertical().auto_shrink(false).max_height(ui.available_height() - 40.0).show(ui, |ui| {
                 for (n, path) in pl.tracks.iter().enumerate() {
+                    let title = by_path.get(path.as_path()).map(|t| t.display_title()).unwrap_or_else(|| "a missing song".into());
                     row(ui, |ui| {
                         ui.add_sized([28.0, 18.0], egui::Label::new(RichText::new(format!("{}", n + 1)).color(ink.muted)));
                         match by_path.get(path.as_path()) {
@@ -103,36 +107,37 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if icon_button(ui, Icon::Close, "remove from the playlist").clicked() {
-                                op = Some((n, 0));
+                                todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
                             }
-                            if icon_button(ui, Icon::Down, "move down").clicked() {
-                                op = Some((n, 1));
+                            if n + 1 < pl.tracks.len() && icon_button(ui, Icon::Down, "move down").clicked() {
+                                todo.push(Do::Swap(pi, n, n + 1, format!("moving “{title}” down")));
                             }
-                            if icon_button(ui, Icon::Up, "move up").clicked() {
-                                op = Some((n, -1));
+                            if n > 0 && icon_button(ui, Icon::Up, "move up").clicked() {
+                                todo.push(Do::Swap(pi, n, n - 1, format!("moving “{title}” up")));
                             }
                         });
                     });
                 }
             });
-            match op {
-                Some((n, 0)) => {
-                    pl.tracks.remove(n);
-                }
-                Some((n, d)) => {
-                    let m = n as i32 + d;
-                    if m >= 0 && (m as usize) < pl.tracks.len() {
-                        pl.tracks.swap(n, m as usize);
-                    }
-                }
-                None => {}
-            }
-            if delete {
-                app.saved.playlists.remove(pi);
-                app.active_playlist = app.saved.playlists.len().checked_sub(1);
-            }
         });
     });
+    for d in todo {
+        match d {
+            Do::New => app.new_playlist(),
+            Do::Rename(i, name) => {
+                app.rename_playlist(i, &name);
+            }
+            Do::Delete(i) => app.delete_playlist(i),
+            Do::Remove(i, n, what) => {
+                app.remember_playlists(what);
+                app.saved.playlists[i].tracks.remove(n);
+            }
+            Do::Swap(i, a, b, what) => {
+                app.remember_playlists(what);
+                app.saved.playlists[i].tracks.swap(a, b);
+            }
+        }
+    }
     if let Some(i) = select {
         app.active_playlist = Some(i);
     }
@@ -144,6 +149,16 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
 }
 
+
+/// A change to the playlists, asked for while drawing them.
+enum Do {
+    New,
+    Rename(usize, String),
+    Delete(usize),
+    /// Playlist, song, and how undo will name it.
+    Remove(usize, usize, String),
+    Swap(usize, usize, usize, String),
+}
 
 /// A player that lists songs from their tags also lists a playlist's copies.
 pub fn playlist_copies_warning(device: crate::card::Player) -> String {

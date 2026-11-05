@@ -789,3 +789,20 @@ Calibre's device view, for music: the library is where you choose what goes on t
   nothing. Icon-only buttons take the name they show on hover.
 - While a control has the focus, Space presses it and ←/→ move to the next control, instead
   of also pausing or seeking the player.
+
+### 66. Undo for playlists and the card's music; asking before what can't be undone (2026-11-05)
+- **⌘Z** (Ctrl+Z on Windows and Linux) takes back the latest change to playlists (a playlist
+  made, renamed or deleted, a song added, moved or taken out) or to what a card setup puts on
+  its card (albums and artists sent or taken off, tick all and untick all, names and order on
+  the card), up to 50 of them. The notice says what was undone. Changes to files keep their
+  own undo commands, so a keystroke never moves files; text fields keep their own ⌘Z.
+- **Deleting a playlist** no longer happens silently: the notice says so and offers *undo*, and
+  card setups stop listing it.
+- **Renaming a playlist** is taken when the field is left, and a name that's empty or another
+  playlist's (card folders ignore case) is refused with a notice, keeping the old one. Before,
+  each keystroke renamed it in every card setup, and two playlists could share a name. A pencil
+  beside the name shows it can be renamed. New playlists get a number no other has.
+- **Deleting a card setup** asks first and says what goes with it: its record of the files it
+  put on the card, which no setup will then update or take off, and how to clear them first.
+- **Forgetting the stored tags** (Settings) asks first and says what it costs: the next rescan
+  opens every file again.
