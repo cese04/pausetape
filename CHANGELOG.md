@@ -814,3 +814,17 @@ Calibre's device view, for music: the library is where you choose what goes on t
   one, shift-click a run, and a double click plays from that song to the album's end.
 - One selected song is only highlighted; the bar with what to do with a selection appears from
   two songs, so a click doesn't push the list down. Esc clears either.
+
+### 68. Keyboard shortcuts for the library (2026-11-05)
+- **↑ ↓** move the selection through the songs shown (library by artist) or the albums (album
+  table), scrolling to keep it in view; with **Shift**, they add to it. **Enter** plays what's
+  selected (one song plays on through its album, as a double click does).
+- **⌘A** selects everything shown, **⌘I** edits the tags of what's selected, **⌘D** sends the
+  selected albums (or the albums of the selected songs) to the card, or takes them off if
+  they're all there.
+- **⌘F** goes to the library's search box (in the card tab, to its filter); **⌘⇧S** syncs the
+  card, saying why not if it isn't connected or something else is running.
+- On Windows and Linux, Ctrl in place of ⌘. Settings › Keyboard lists them all, as each
+  system writes them, and the Sync, *send to card* and *edit tags* commands show theirs on
+  hover. Shortcuts wait while you type in a field or a dialog is open; the arrows and Enter
+  also leave a control focused with Tab alone.

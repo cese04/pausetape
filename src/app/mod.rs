@@ -294,6 +294,13 @@ pub struct App {
     pub undo_notice: Option<String>,
     /// A dialog asking before a change that can't be undone.
     pub confirm: Option<Confirm>,
+    /// ⌘F was pressed: the open tab's search box takes the keyboard on its next frame.
+    pub focus_search: bool,
+    /// A song or album row (album table position) chosen from the keyboard, to scroll into view.
+    pub scroll_to_song: Option<usize>,
+    pub album_scroll_to: Option<usize>,
+    /// The album table rows drawn last frame, to tell whether one is in view.
+    pub album_rows_shown: std::ops::Range<usize>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     mb: Option<(String, musicbrainz::Client)>,
@@ -410,6 +417,10 @@ impl App {
             undo_stack: Vec::new(),
             undo_notice: None,
             confirm: None,
+            focus_search: false,
+            scroll_to_song: None,
+            album_scroll_to: None,
+            album_rows_shown: 0..0,
             tx,
             rx,
             mb: None,

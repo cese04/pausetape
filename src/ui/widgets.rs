@@ -181,10 +181,12 @@ pub fn section(ui: &mut Ui, icon: Icon, title: &str) {
     });
 }
 
+/// The width of the column settings have their names in.
+pub const LABEL_W: f32 = 21.0 * S1;
+
 /// One setting: its name in a column on the left, the controls (and their help) on the right.
 /// Both columns start at the top: the name lines up with the first row of controls.
 pub fn setting(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
-    const LABEL_W: f32 = 21.0 * S1;
     let ink = ink(ui);
     ui.horizontal_top(|ui| {
         ui.allocate_ui_with_layout(vec2(LABEL_W, ROW), egui::Layout::left_to_right(egui::Align::Center), |ui| {

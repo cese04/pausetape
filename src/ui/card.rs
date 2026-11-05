@@ -132,7 +132,7 @@ fn sync_row(app: &mut App, ui: &mut Ui) {
                 muted(ui, "card not connected");
                 return;
             }
-            if app.busy.is_none() && app.refused_by_label().is_none() && widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text("copy what you added, take off what you removed, update what changed").clicked() {
+            if app.busy.is_none() && app.refused_by_label().is_none() && widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text(format!("copy what you added, take off what you removed, update what changed ({})", ui.ctx().format_shortcut(&super::keys::SYNC))).clicked() {
                 app.run_write();
             }
             if app.busy.is_none() && widgets::button_with(ui, Icon::Compare, "Compare").on_hover_text("look at the card: what would be copied and removed; changes nothing").clicked() {
@@ -186,7 +186,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
             });
             if can_sync {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::button_with(ui, Icon::Sync, "Sync").on_hover_text("copy what you added, take off what you removed").clicked() {
+                    if widgets::button_with(ui, Icon::Sync, "Sync").on_hover_text(format!("copy what you added, take off what you removed ({})", ui.ctx().format_shortcut(&super::keys::SYNC))).clicked() {
                         app.run_write();
                     }
                 });
@@ -1020,7 +1020,11 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        widgets::search_field(ui, &mut app.card_filter, "filter", 200.0);
+        let r = widgets::search_field(ui, &mut app.card_filter, "filter", 200.0);
+        if app.focus_search && app.tab == crate::app::Tab::Card {
+            app.focus_search = false;
+            r.request_focus();
+        }
         if widgets::icon_link(ui, Icon::Add, "tick all").clicked() {
             edits.push(Edit::All(true));
         }

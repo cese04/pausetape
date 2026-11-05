@@ -8,6 +8,7 @@ mod card;
 mod cassette;
 mod confirm;
 pub mod folders;
+mod keys;
 pub mod icons;
 pub mod layout;
 mod library;
@@ -40,11 +41,7 @@ const ROW_H: f32 = layout::ROW;
 /// off, so they never read as content. Everything inside keeps to the page's side margin.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    // ⌘Z (Ctrl+Z) takes back the latest change to playlists or to what goes on the card, unless
-    // a text field has the keyboard (it has an undo of its own) or a dialog is open.
-    if !ui.ctx().egui_wants_keyboard_input() && app.confirm.is_none() && app.sync_confirm.is_none() && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) {
-        app.undo_last();
-    }
+    keys::global(app, ui);
     let chrome = |x: f32, y: f32| egui::Frame::new().fill(ink.bar).inner_margin(margin(x, y));
     let r = egui::Panel::top("nav").frame(chrome(S4, S1)).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
@@ -81,6 +78,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
     player_test::dialog(app, ui);
+    // ⌘F is for the search box of the tab it opened; if that tab didn't draw one, it lapses.
+    app.focus_search = false;
     card::sync_confirm_dialog(app, ui);
     confirm::dialog(app, ui);
     folders::add_dialog(app, ui);

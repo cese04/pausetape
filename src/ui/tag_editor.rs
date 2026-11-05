@@ -25,7 +25,7 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
             ui.label(RichText::new(format!("{} selected", plural(app.selected.len(), "song"))).color(ink.text));
             ui.add_space(S1);
             let songs: Vec<usize> = app.selected.iter().copied().collect();
-            if widgets::icon_link(ui, Icon::Rename, "edit their tags").clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "edit their tags").on_hover_text(ui.ctx().format_shortcut(&super::keys::EDIT_TAGS)).clicked() {
                 actions.push(Action::EditTags(songs.clone()));
             }
             if widgets::icon_link(ui, Icon::Play, "play them").clicked() {

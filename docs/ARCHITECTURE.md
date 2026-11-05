@@ -131,6 +131,7 @@ src/
     ├── albums.rs      the library as a sortable table of albums
     ├── player_test.rs the dialog for testing the card's player
     ├── confirm.rs     asking before a change that can't be undone (deleting a card setup, forgetting stored tags)
+    ├── keys.rs        keyboard shortcuts: the keys, when they're listened for, the list in Settings
     └── screenshots.rs debug-only screenshot demo (PAUSETAPE_SHOT)
 ```
 

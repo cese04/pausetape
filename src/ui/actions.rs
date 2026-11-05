@@ -35,6 +35,12 @@ pub(super) enum Action {
     SelectRun(Vec<usize>),
     /// A plain click on a song: it alone is selected.
     OnlySong(usize),
+    /// The arrow keys moved to a song: select it alone, or (with Shift) add it; bring it into view.
+    SongCursor(usize, bool),
+    /// The same in the album table, by album id and row.
+    AlbumCursor(String, usize, bool),
+    /// ⌘D: these albums onto the card, or off it if they're all there.
+    ToggleCard(Vec<(usize, usize)>),
     ClearSelection,
     /// Move album copies another copy covers to the Trash (artist, album).
     TrashCopies(Vec<(usize, usize)>),
@@ -85,6 +91,23 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                 app.selected = [t].into();
                 app.select_anchor = Some(t);
             }
+            Action::SongCursor(t, extend) => {
+                if !extend {
+                    app.selected.clear();
+                }
+                app.selected.insert(t);
+                app.select_anchor = Some(t);
+                app.scroll_to_song = Some(t);
+            }
+            Action::AlbumCursor(id, row, extend) => {
+                if !extend {
+                    app.selected_albums.clear();
+                }
+                app.selected_albums.insert(id.clone());
+                app.album_anchor = Some(id);
+                app.album_scroll_to = Some(row);
+            }
+            Action::ToggleCard(albums) => app.toggle_on_card(albums),
             Action::ClearSelection => {
                 app.selected.clear();
                 app.select_anchor = None;

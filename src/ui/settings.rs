@@ -150,6 +150,21 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
 
         ui.add_space(S2);
+        widgets::section(ui, Icon::Info, "Keyboard");
+        ui.add_space(S1);
+        // Keys in the column where settings have their names.
+        for (keys, what) in super::keys::list(ui.ctx()) {
+            row(ui, |ui| {
+                ui.allocate_ui_with_layout(egui::vec2(widgets::LABEL_W, 0.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_width(widgets::LABEL_W);
+                    ui.label(RichText::new(keys).color(ink(ui).text));
+                });
+                ui.label(RichText::new(what).color(ink(ui).muted));
+            });
+        }
+        help(ui, "The arrows, Enter and the shortcuts for selecting, tags and the card act on the library. Shortcuts wait while you type in a field or a dialog is open.");
+
+        ui.add_space(S2);
         widgets::section(ui, Icon::Search, "MusicBrainz");
         ui.add_space(S1);
         setting(ui, "Contact", |ui| {

@@ -182,7 +182,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     row_wrapped(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), Sense::hover());
         icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        widgets::search_field(ui, &mut app.filter, "search, or try format:flac", 260.0).on_hover_text(crate::library::search::HELP);
+        let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", 260.0).on_hover_text(crate::library::search::HELP);
+        if app.focus_search && app.tab == crate::app::Tab::Library {
+            app.focus_search = false;
+            r.request_focus();
+        }
         filters_menu(app, ui);
         let typed = app.filter.trim().to_string();
         if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "save").on_hover_text("keep this search for later, beside the box").clicked() {
@@ -358,6 +362,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let present: std::collections::BTreeSet<char> = app.index.artists.iter().map(|a| initial(&a.name)).collect();
     let jump = app.jump_to.take();
     let source_root = app.saved.source.clone().unwrap_or_default();
+    // Songs in the order they're shown, for the arrow keys; the one they last moved to.
+    let mut shown: Vec<usize> = Vec::new();
+    let scroll_to = app.scroll_to_song.take();
     // The A–Z rail is a panel of its own at the right edge; the list fills the rest.
     let mut rail_click = None;
     let rail = egui::Frame::new().inner_margin(egui::Margin { left: S1 as i8, ..Default::default() });
@@ -542,6 +549,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
                         let selected = app.selected.contains(&ti);
                         let (r, add) = track_row(ui, t, device, (&numbers[pos], number_end), al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
+                        shown.push(ti);
+                        if scroll_to == Some(ti) {
+                            r.scroll_to_me(None);
+                        }
                         // As in the album table and any file list: a click selects, a double click
                         // plays (from this song to the album's end).
                         if r.double_clicked() {
@@ -585,7 +596,50 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if let Some(c) = rail_click {
         app.jump_to = Some(c);
     }
+    song_keys(app, ui, &shown, &mut actions);
     apply(app, actions);
+}
+
+/// The keyboard in the library by artist: ↑/↓ move the selection through the songs shown (with
+/// Shift, extend it), Enter plays, ⌘A selects them all, ⌘I edits tags, ⌘D sends their albums
+/// to the card or takes them off.
+fn song_keys(app: &App, ui: &Ui, shown: &[usize], actions: &mut Vec<Action>) {
+    if shown.is_empty() || super::keys::taken(app, ui) {
+        return;
+    }
+    let navigation = super::keys::navigation_free(app, ui);
+    let at = app.select_anchor.and_then(|a| shown.iter().position(|&t| t == a));
+    for (key, step) in [(egui::Key::ArrowDown, 1isize), (egui::Key::ArrowUp, -1)] {
+        if let Some(extend) = super::keys::nav_key(ui, key).filter(|_| navigation) {
+            let next = match at {
+                Some(i) => (i as isize + step).clamp(0, shown.len() as isize - 1) as usize,
+                None if step > 0 => 0,
+                None => shown.len() - 1,
+            };
+            actions.push(Action::SongCursor(shown[next], extend));
+        }
+    }
+    if navigation && super::keys::nav_key(ui, egui::Key::Enter).is_some() && !app.selected.is_empty() {
+        let picked: Vec<usize> = shown.iter().copied().filter(|t| app.selected.contains(t)).collect();
+        if let [one] = picked[..] {
+            // One song plays on through its album, as a double click does.
+            if let Some(&(ai, bi)) = app.albums_of(&[one].into()).first() {
+                let al = &app.index.artists[ai].albums[bi];
+                actions.push(Action::Play(al.tracks.clone(), al.tracks.iter().position(|&t| t == one).unwrap_or(0)));
+            }
+        } else if !picked.is_empty() {
+            actions.push(Action::Play(picked, 0));
+        }
+    }
+    if super::keys::pressed(ui, &super::keys::SELECT_ALL) {
+        actions.push(Action::SelectRun(shown.to_vec()));
+    }
+    if !app.selected.is_empty() && super::keys::pressed(ui, &super::keys::EDIT_TAGS) {
+        actions.push(Action::EditTags(app.selected.iter().copied().collect()));
+    }
+    if !app.selected.is_empty() && super::keys::pressed(ui, &super::keys::CARD) {
+        actions.push(Action::ToggleCard(app.albums_of(&app.selected)));
+    }
 }
 
 /// An album's mark and words for where it stands with the card ("on card", "added at the next

@@ -85,7 +85,20 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     }
     let mods = ui.input(|i| i.modifiers);
     let current = app.current();
-    ScrollArea::vertical().auto_shrink(false).show_rows(ui, ROW_H, rows.len(), |ui, range| {
+    // Only the rows in view are drawn, so a row the arrow keys moved to out of view is scrolled
+    // to by its position: to the top edge going up, the bottom edge going down.
+    let mut area = ScrollArea::vertical().auto_shrink(false);
+    if let Some(n) = app.album_scroll_to.take() {
+        let (pitch, was) = (ROW_H + ui.spacing().item_spacing.y, app.album_rows_shown.clone());
+        if n <= was.start {
+            area = area.vertical_scroll_offset(n as f32 * pitch);
+        } else if n + 1 >= was.end {
+            area = area.vertical_scroll_offset((n + 2).saturating_sub(was.len()) as f32 * pitch);
+        }
+    }
+    let mut drawn = 0..0;
+    area.show_rows(ui, ROW_H, rows.len(), |ui, range| {
+        drawn = range.clone();
         for n in range {
             let row = &rows[n];
             let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
@@ -151,6 +164,47 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             resp.context_menu(|ui| album_menu(app, ui, row, actions));
         }
     });
+    app.album_rows_shown = drawn;
+    album_keys(app, ui, &rows, actions);
+}
+
+/// The keyboard in the album table: ↑/↓ move the selection (with Shift, extend it), Enter plays,
+/// ⌘A selects every row, ⌘I edits tags, ⌘D sends the albums to the card or takes them off.
+fn album_keys(app: &App, ui: &Ui, rows: &[AlbumRow], actions: &mut Vec<Action>) {
+    if rows.is_empty() || super::keys::taken(app, ui) {
+        return;
+    }
+    let navigation = super::keys::navigation_free(app, ui);
+    let at = app.album_anchor.as_ref().and_then(|a| rows.iter().position(|r| &r.id == a));
+    for (key, step) in [(egui::Key::ArrowDown, 1isize), (egui::Key::ArrowUp, -1)] {
+        if let Some(extend) = super::keys::nav_key(ui, key).filter(|_| navigation) {
+            let next = match at {
+                Some(i) => (i as isize + step).clamp(0, rows.len() as isize - 1) as usize,
+                None if step > 0 => 0,
+                None => rows.len() - 1,
+            };
+            actions.push(Action::AlbumCursor(rows[next].id.clone(), next, extend));
+        }
+    }
+    let chosen: Vec<&AlbumRow> = rows.iter().filter(|r| app.selected_albums.contains(&r.id)).collect();
+    if chosen.is_empty() {
+        if super::keys::pressed(ui, &super::keys::SELECT_ALL) {
+            actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
+        }
+        return;
+    }
+    if navigation && super::keys::nav_key(ui, egui::Key::Enter).is_some() {
+        actions.push(Action::Play(app.selected_album_songs(rows), 0));
+    }
+    if super::keys::pressed(ui, &super::keys::SELECT_ALL) {
+        actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
+    }
+    if super::keys::pressed(ui, &super::keys::EDIT_TAGS) {
+        actions.push(Action::EditTags(app.selected_album_songs(rows)));
+    }
+    if super::keys::pressed(ui, &super::keys::CARD) {
+        actions.push(Action::ToggleCard(chosen.iter().map(|r| (r.artist, r.album)).collect()));
+    }
 }
 
 /// Right-click on an album row.
@@ -200,13 +254,13 @@ fn selection_bar(app: &App, ui: &mut Ui, rows: &[AlbumRow], actions: &mut Vec<Ac
             }
             ui.label(RichText::new(what).color(ink.text));
             ui.add_space(S1);
-            if widgets::icon_link(ui, Icon::Add, "send to card").on_hover_text("copied at the next Sync").clicked() {
+            if widgets::icon_link(ui, Icon::Add, "send to card").on_hover_text(format!("copied at the next Sync ({} sends or takes off)", ui.ctx().format_shortcut(&super::keys::CARD))).clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), true));
             }
             if widgets::icon_link(ui, Icon::Remove, "take off card").on_hover_text("taken off at the next Sync").clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), false));
             }
-            if widgets::icon_link(ui, Icon::Rename, "edit tags").on_hover_text("set album artist, year… for all their songs").clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "edit tags").on_hover_text(format!("set album artist, year… for all their songs ({})", ui.ctx().format_shortcut(&super::keys::EDIT_TAGS))).clicked() {
                 actions.push(Action::EditTags(songs.clone()));
             }
             let coverless: Vec<(usize, usize)> = chosen.iter().filter(|r| !r.cover).map(|r| (r.artist, r.album)).collect();
