@@ -88,10 +88,10 @@ fn source_step(app: &mut App, ui: &mut Ui) {
             if button_with(ui, Icon::Folder, label).clicked() {
                 app.picker = Some(Picker::Source(Navigator::new(app.saved.source.as_deref())));
             }
-            if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Rescan, "read again").on_hover_text("pick up files added or changed since").clicked() {
+            if app.saved.source.is_some() && app.busy.is_none() && button_with(ui, Icon::Rescan, "Rescan").on_hover_text("pick up files added, changed or removed since the folder was last read").clicked() {
                 app.scan();
             }
-            if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Add, "add music from a folder…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
+            if app.saved.source.is_some() && app.busy.is_none() && button_with(ui, Icon::Add, "Add music…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
                 app.picker = Some(Picker::AddFrom(Navigator::new(dirs_downloads().as_deref())));
             }
         });

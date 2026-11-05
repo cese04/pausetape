@@ -99,7 +99,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text("or ⌘-Return").clicked() {
                 save = true;
             }
-            if widgets::button_with(ui, Icon::Close, "Cancel").on_hover_text("or Esc").clicked() {
+            if widgets::button(ui, "Cancel").on_hover_text("or Esc").clicked() {
                 cancel = true;
             }
         });

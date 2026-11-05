@@ -848,3 +848,16 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - Single files are turned down with a note to drop their folder instead (checking the folder
   they're in could mean all of Downloads); of several folders, the first is checked. While a
   dialog is open or something is running, the drop waits and a notice says why.
+
+### 71. One look and one name per action (2026-11-05)
+- The same action looked and was called different things in different places: *Change
+  folder…* was a button in the folders tab and a quiet link in the library; reading the folder
+  again was *read again* there and *rescan* here; adding music was *add music from a folder…*
+  and *add music*; the card was *Change card…* in the folders tab and a link in the card tab;
+  Sync was filled in the card tab and outlined in the library. Now each has one name and one
+  look: outlined buttons for **Change folder…**, **Rescan**, **Add music…** and **Change
+  card…**, and Sync filled wherever it is, as the main thing to do.
+- Leaving a dialog is a framed **Cancel** in each (the tag editor's had an icon), or **Not now**
+  where the offer comes back (taking a card over), or **Done** where there's nothing to cancel.
+- In the card tab the card's path gives way to *Change card…*, shortened with "…" and shown
+  whole on hover, so the button is never pushed out of a narrow window.

@@ -19,7 +19,7 @@ use crate::card::pattern::{Field, Pattern, default_for};
 use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
 use crate::library::search::fold;
-use super::layout::{S1, S2, S3, row, row_wrapped};
+use super::layout::{ICON, S1, S2, S3, row, row_wrapped};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
@@ -186,7 +186,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
             });
             if can_sync {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::button_with(ui, Icon::Sync, "Sync").on_hover_text(format!("copy what you added, take off what you removed ({})", ui.ctx().format_shortcut(&super::keys::SYNC))).clicked() {
+                    if widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text(format!("copy what you added, take off what you removed ({})", ui.ctx().format_shortcut(&super::keys::SYNC))).clicked() {
                         app.run_write();
                     }
                 });
@@ -275,8 +275,10 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     let has_dest = w.dest.is_some();
     row(ui, |ui| {
         caps(ui, "destination");
-        ui.add(egui::Label::new(shown).truncate());
-        if widgets::icon_link(ui, Icon::Card, if has_dest { "change card" } else { "choose a card" }).clicked() {
+        // The path gives way to the button, shortened with "…"; all of it shows on hover.
+        let button_w = widgets::text_width(ui, "Change card…", 14.5) + ICON + S1 + 2.0 * S2 + S1;
+        widgets::fitted(ui, RichText::new(&shown), ui.available_width() - button_w, Sense::hover()).on_hover_text(&shown);
+        if widgets::button_with(ui, Icon::Card, if has_dest { "Change card…" } else { "Choose card…" }).clicked() {
             app.volumes = crate::card::volumes();
             app.picker = Some(crate::ui::folders::Picker::Card { browse: None, show_all: false });
         }
@@ -689,7 +691,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && widgets::primary_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
                     app.survey_card();
                 }
-                if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card tab offers it again").clicked() {
                     app.take_over_open = false;
                 }
             });
@@ -782,7 +784,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && used + spare + versions + unknown + other > 0 && take_over(ui).on_hover_text("only moves files on the card; undo puts everything back").clicked() {
                     app.take_over_card();
                 }
-                if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card tab offers it again").clicked() {
                     app.card_survey = None;
                     app.take_over_open = false;
                 }

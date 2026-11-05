@@ -163,17 +163,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             facts.push_str(&format!(" · {} with corrected tags", plural(dirty, "song")));
         }
         muted(ui, facts);
-        if widgets::icon_link(ui, Icon::Folder, "change folder").clicked() {
+        if widgets::button_with(ui, Icon::Folder, "Change folder…").clicked() {
             app.picker = Some(crate::ui::folders::Picker::Source(crate::ui::navigator::Navigator::new(app.saved.source.as_deref())));
         }
         let since = app.library_read.map(|t| format!(" (read {})", text::ago(t))).unwrap_or_default();
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text(format!("pick up files added, changed or removed by other programs since the folder was last read{since}")).clicked() {
+        if app.busy.is_none() && widgets::button_with(ui, Icon::Rescan, "Rescan").on_hover_text(format!("pick up files added, changed or removed by other programs since the folder was last read{since}")).clicked() {
             app.scan();
         }
         if app.source_missing {
             ui.label(RichText::new("can't reach this folder: is its drive connected? It's read again once it's back").color(ink.warn));
         }
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Add, "add music").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
+        if app.busy.is_none() && widgets::button_with(ui, Icon::Add, "Add music…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
             app.picker = Some(crate::ui::folders::Picker::AddFrom(crate::ui::navigator::Navigator::new(crate::ui::folders::dirs_downloads().as_deref())));
         }
     });
