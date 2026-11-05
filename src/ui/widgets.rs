@@ -2,20 +2,41 @@
 //! icon), framed and primary buttons, tabs, section headings, help text, round transport
 //! buttons, labels that shorten to fit.
 
-use egui::{Color32, FontId, Rect, Response, RichText, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Color32, FontId, Rect, Response, RichText, Sense, Stroke, Ui, Role, WidgetInfo, pos2, vec2};
 
 use super::icons::{self, Icon};
 use super::layout::{CONTROL, ICON, ROW, S1, S2, S3, row};
 use super::theme::{Ink, ink};
 
+/// What a control drawn here is called, for screen readers.
+pub fn name(ui: &Ui, resp: &Response, role: Role, text: &str) {
+    resp.widget_info(|| WidgetInfo::labeled(role, ui.is_enabled(), text));
+}
+
+/// Keyboard focus (Tab gives it; a click doesn't): a ring in the accent just outside the
+/// control, so it shows where Space or Enter would act.
+pub fn focus_ring(ui: &Ui, resp: &Response, rect: Rect, radius: f32) {
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.expand(2.0), radius + 2.0, Stroke::new(2.0, ink(ui).accent), egui::StrokeKind::Outside);
+    }
+}
+
+/// Under the pointer or the keyboard's focus: either way, the control shows it's the one.
+fn hot(resp: &Response) -> bool {
+    resp.hovered() || resp.has_focus()
+}
+
 /// A quiet text link: muted, darkening and underlined on hover. A row tall, the words centred.
 pub fn link(ui: &mut Ui, text: impl Into<String>) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(13.5), Color32::PLACEHOLDER);
+    let text = text.into();
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(13.5), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x, ROW), Sense::click());
-    let color = if resp.hovered() { ink.text } else { ink.muted };
+    name(ui, &resp, Role::Link, &text);
+    focus_ring(ui, &resp, rect, 2.0);
+    let color = if hot(&resp) { ink.text } else { ink.muted };
     let top = rect.center().y - galley.size().y / 2.0;
-    if resp.hovered() {
+    if hot(&resp) {
         ui.painter().hline(rect.x_range(), top + galley.size().y - 1.0, Stroke::new(0.8, color));
     }
     ui.painter().galley(pos2(rect.left(), top), galley, color);
@@ -38,10 +59,13 @@ fn words_at(ui: &Ui, x: f32, y: f32, galley: std::sync::Arc<egui::Galley>, color
 /// Commands read as commands this way; plain `link`s stay for small in-text actions.
 pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(13.5), Color32::PLACEHOLDER);
+    let text = text.into();
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(13.5), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1, ROW), Sense::click());
-    let color = if resp.hovered() { ink.text } else { ink.muted };
-    if resp.hovered() {
+    name(ui, &resp, Role::Button, &text);
+    focus_ring(ui, &resp, rect, 4.0);
+    let color = if hot(&resp) { ink.text } else { ink.muted };
+    if hot(&resp) {
         ui.painter().rect_filled(rect, 4.0, ink.hover);
     }
     let y = rect.center().y;
@@ -56,27 +80,34 @@ pub fn icon(ui: &mut Ui, icon: Icon, color: Color32) {
     icon_at(ui, rect.left(), rect.center().y, 1.5, icon, color);
 }
 
-/// Just an icon, for compact commands (move up, remove from list); give it a hover text.
-pub fn icon_button(ui: &mut Ui, icon: Icon) -> Response {
+/// Just an icon, for compact commands (move up, remove from list). `label` says what it does,
+/// on hover and to screen readers.
+pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
     let ink = ink(ui);
     let (rect, resp) = ui.allocate_exact_size(vec2(ROW, ROW), Sense::click());
-    if resp.hovered() {
+    name(ui, &resp, Role::Button, label);
+    focus_ring(ui, &resp, rect, 4.0);
+    if hot(&resp) {
         ui.painter().rect_filled(rect, 4.0, ink.hover);
     }
-    icons::paint(ui.painter(), rect.shrink((ROW - ICON) / 2.0 + 1.0), icon, if resp.hovered() { ink.text } else { ink.muted });
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+    icons::paint(ui.painter(), rect.shrink((ROW - ICON) / 2.0 + 1.0), icon, if hot(&resp) { ink.text } else { ink.muted });
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(label)
 }
 
-/// A tab in the top bar: icon and name in a pill, filled when it's the open one.
-pub fn nav_tab(ui: &mut Ui, icon: Icon, text: &str, active: bool) -> Response {
+/// A tab in the top bar: icon and name in a pill, filled when it's the open one. Without
+/// `show_name` (a narrow window) only the icon is drawn; the name is still its tooltip and
+/// what screen readers say.
+pub fn nav_tab(ui: &mut Ui, icon: Icon, text: &str, show_name: bool, active: bool) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(15.0), Color32::PLACEHOLDER);
-    let words = if text.is_empty() { 0.0 } else { S1 + galley.size().x };
+    let galley = ui.painter().layout_no_wrap(if show_name { text.to_string() } else { String::new() }, FontId::proportional(15.0), Color32::PLACEHOLDER);
+    let words = if show_name { S1 + galley.size().x } else { 0.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(S2 + ICON + words + S2, CONTROL), Sense::click());
+    resp.widget_info(|| WidgetInfo::selected(Role::Tab, ui.is_enabled(), active, text));
+    focus_ring(ui, &resp, rect, rect.height() / 2.0);
     // The open tab's pill takes a hint of the accent, and its icon the accent itself.
-    let fill = if active { ink.chip.lerp_to_gamma(ink.accent, 0.12) } else if resp.hovered() { ink.hover } else { Color32::TRANSPARENT };
+    let fill = if active { ink.chip.lerp_to_gamma(ink.accent, 0.12) } else if hot(&resp) { ink.hover } else { Color32::TRANSPARENT };
     ui.painter().rect_filled(rect, rect.height() / 2.0, fill);
-    let color = if active || resp.hovered() { ink.text } else { ink.muted };
+    let color = if active || hot(&resp) { ink.text } else { ink.muted };
     let y = rect.center().y;
     icon_at(ui, rect.left() + S2, y, 0.5, icon, if active { ink.accent } else { color });
     words_at(ui, rect.left() + S2 + ICON + S1, y, galley, color);
@@ -86,10 +117,13 @@ pub fn nav_tab(ui: &mut Ui, icon: Icon, text: &str, active: bool) -> Response {
 /// A fact that leads somewhere: icon and text in an outlined pill.
 pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(13.0), Color32::PLACEHOLDER);
+    let text = text.into();
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(13.0), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1 + S1, ROW), Sense::click());
-    let fill = if resp.hovered() { ink.hover } else { Color32::TRANSPARENT };
-    ui.painter().rect(rect, rect.height() / 2.0, fill, Stroke::new(1.0, if resp.hovered() { color } else { ink.faint }), egui::StrokeKind::Inside);
+    name(ui, &resp, Role::Button, &text);
+    focus_ring(ui, &resp, rect, rect.height() / 2.0);
+    let fill = if hot(&resp) { ink.hover } else { Color32::TRANSPARENT };
+    ui.painter().rect(rect, rect.height() / 2.0, fill, Stroke::new(1.0, if hot(&resp) { color } else { ink.faint }), egui::StrokeKind::Inside);
     let y = rect.center().y;
     icon_at(ui, rect.left() + S1, y, 2.0, icon, color);
     words_at(ui, rect.left() + S1 + ICON + S1, y, galley, color);
@@ -113,10 +147,12 @@ pub fn search_field(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> R
     if !text.is_empty() {
         let rect = Rect::from_center_size(pos2(r.rect.right() - S3 / 2.0, r.rect.center().y), vec2(ICON, ICON));
         let clear = ui.interact(rect, r.id.with("clear"), Sense::click()).on_hover_text("clear (Esc)").on_hover_cursor(egui::CursorIcon::PointingHand);
-        if clear.hovered() {
+        name(ui, &clear, Role::Button, "clear the search");
+        focus_ring(ui, &clear, rect, ICON / 2.0);
+        if hot(&clear) {
             ui.painter().circle_filled(rect.center(), ICON / 2.0, ink.faint);
         }
-        icons::paint(ui.painter(), rect.shrink(4.0), Icon::Close, if clear.hovered() { ink.text } else { ink.muted });
+        icons::paint(ui.painter(), rect.shrink(4.0), Icon::Close, if hot(&clear) { ink.text } else { ink.muted });
         if clear.clicked() {
             text.clear();
         }
@@ -171,7 +207,9 @@ pub fn tab(ui: &mut Ui, text: &str, active: bool) -> Response {
     let ink = ink(ui);
     let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(15.5), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x, ROW), Sense::click());
-    let color = if active || resp.hovered() { ink.text } else { ink.muted };
+    resp.widget_info(|| WidgetInfo::selected(Role::Tab, ui.is_enabled(), active, text));
+    focus_ring(ui, &resp, rect, 2.0);
+    let color = if active || hot(&resp) { ink.text } else { ink.muted };
     words_at(ui, rect.left(), rect.center().y, galley, color);
     if active {
         ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1.5, ink.accent));
@@ -212,15 +250,17 @@ pub fn primary_with(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Respons
 
 fn framed(ui: &mut Ui, icon: Option<Icon>, text: String, primary: bool) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text, FontId::proportional(14.5), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(14.5), Color32::PLACEHOLDER);
     let lead = if icon.is_some() { ICON + S1 } else { 0.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(S2 + lead + galley.size().x + S2, CONTROL), Sense::click());
+    name(ui, &resp, Role::Button, &text);
+    focus_ring(ui, &resp, rect, 6.0);
     let fg = if primary {
-        ui.painter().rect_filled(rect, 6.0, if resp.hovered() { pressed(&ink) } else { ink.accent });
+        ui.painter().rect_filled(rect, 6.0, if hot(&resp) { pressed(&ink) } else { ink.accent });
         ink.bg
     } else {
-        let stroke = if resp.hovered() { ink.text } else { ink.muted };
-        ui.painter().rect(rect, 6.0, if resp.hovered() { ink.hover } else { Color32::TRANSPARENT }, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
+        let stroke = if hot(&resp) { ink.text } else { ink.muted };
+        ui.painter().rect(rect, 6.0, if hot(&resp) { ink.hover } else { Color32::TRANSPARENT }, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
         ink.text
     };
     let y = rect.center().y;
@@ -246,9 +286,17 @@ pub fn media_button(ui: &mut Ui, icon: Media, size: f32, slot: f32, primary: boo
     let ink = ink(ui);
     let (slot_rect, resp) = ui.allocate_exact_size(vec2(size, slot.max(size)), Sense::click());
     let rect = egui::Rect::from_center_size(slot_rect.center(), vec2(size, size));
+    let label = match icon {
+        Media::Previous => "previous",
+        Media::Play => "play",
+        Media::Pause => "pause",
+        Media::Next => "next",
+    };
+    name(ui, &resp, Role::Button, label);
+    focus_ring(ui, &resp, rect, size / 2.0);
     let c = rect.center();
     let r = size / 2.0 - 1.0;
-    let (bg, fg) = match (primary, resp.hovered()) {
+    let (bg, fg) = match (primary, hot(&resp)) {
         (true, false) => (ink.accent, ink.bg),
         (true, true) => (pressed(&ink), ink.bg),
         (false, false) => (Color32::TRANSPARENT, ink.text),
@@ -302,12 +350,14 @@ pub fn hairline_progress(ui: &mut Ui, frac: f32, width: f32) {
 }
 
 /// A colour to choose: a filled dot, ringed when it's the chosen one.
-pub fn swatch(ui: &mut Ui, colour: Color32, chosen: bool) -> Response {
+pub fn swatch(ui: &mut Ui, colour: Color32, chosen: bool, label: &str) -> Response {
     let ink = ink(ui);
     let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+    resp.widget_info(|| WidgetInfo::selected(Role::RadioButton, ui.is_enabled(), chosen, label));
+    focus_ring(ui, &resp, rect.shrink(1.0), 11.0);
     let c = rect.center();
     ui.painter().circle_filled(c, 8.0, colour);
-    if chosen || resp.hovered() {
+    if chosen || hot(&resp) {
         ui.painter().circle_stroke(c, 11.0, Stroke::new(1.5, if chosen { ink.text } else { ink.faint }));
     }
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)

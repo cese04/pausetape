@@ -102,13 +102,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             }
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if icon_button(ui, Icon::Close).on_hover_text("remove from the playlist").clicked() {
+                            if icon_button(ui, Icon::Close, "remove from the playlist").clicked() {
                                 op = Some((n, 0));
                             }
-                            if icon_button(ui, Icon::Down).on_hover_text("move down").clicked() {
+                            if icon_button(ui, Icon::Down, "move down").clicked() {
                                 op = Some((n, 1));
                             }
-                            if icon_button(ui, Icon::Up).on_hover_text("move up").clicked() {
+                            if icon_button(ui, Icon::Up, "move up").clicked() {
                                 op = Some((n, -1));
                             }
                         });

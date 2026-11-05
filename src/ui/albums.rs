@@ -62,6 +62,8 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     for (k, (name, by, right)) in headings.enumerate() {
         let cell = egui::Rect::from_min_size(rect.min + vec2(lefts[k + 1], 0.0), vec2(widths[k + 1] - if right { RIGHT_PAD } else { 8.0 }, 22.0));
         let r = ui.interact(cell, egui::Id::unique(("album heading", k)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+        widgets::name(ui, &r, egui::Role::ColumnHeader, &format!("sort by {name}"));
+        widgets::focus_ring(ui, &r, cell, 2.0);
         let sorted = app.album_sort.0 == by;
         let arrow = match (sorted, app.album_sort.1) {
             (false, _) => "",
@@ -87,11 +89,13 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         for n in range {
             let row = &rows[n];
             let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
-            let p = ui.painter_at(rect);
             let selected = app.selected_albums.contains(&row.id);
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Row, true, selected, format!("{}, {}", row.artist_name, row.title)));
+            widgets::focus_ring(ui, &resp, rect, 4.0);
+            let p = ui.painter_at(rect);
             if selected {
                 p.rect_filled(rect, 4.0, ink.chip);
-            } else if resp.hovered() {
+            } else if resp.hovered() || resp.has_focus() {
                 p.rect_filled(rect, 0.0, ink.hover);
             }
             let y = rect.center().y;

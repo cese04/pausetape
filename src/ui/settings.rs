@@ -27,7 +27,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             row(ui, |ui| {
                 let dark = ui.visuals().dark_mode;
                 for accent in Accent::ALL {
-                    if widgets::swatch(ui, accent.colour(dark), app.saved.accent == accent).on_hover_text(accent.name()).clicked() {
+                    if widgets::swatch(ui, accent.colour(dark), app.saved.accent == accent, accent.name()).on_hover_text(accent.name()).clicked() {
                         app.saved.accent = accent;
                         app.apply_theme();
                     }

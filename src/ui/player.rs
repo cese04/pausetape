@@ -182,11 +182,13 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     }
 }
 
-/// Space, ←/→ seek 10 s, N/P for next/previous, unless typing in a field.
+/// Space, ←/→ seek 10 s, N/P for next/previous, unless typing in a field. While a control
+/// has the keyboard's focus (Tab), Space presses it and the arrows move between controls.
 fn keyboard(app: &mut App, ui: &Ui, st: &Status, len: Duration) {
     if ui.ctx().egui_wants_keyboard_input() {
         return;
     }
+    let focused = ui.ctx().memory(|m| m.focused().is_some());
     let (space, left, right, n, prev) = ui.input(|i| {
         (
             i.key_pressed(egui::Key::Space),
@@ -196,13 +198,13 @@ fn keyboard(app: &mut App, ui: &Ui, st: &Status, len: Duration) {
             i.key_pressed(egui::Key::P),
         )
     });
-    if space {
+    if space && !focused {
         app.audio.toggle();
     }
-    if left {
+    if left && !focused {
         app.audio.seek(st.pos.saturating_sub(Duration::from_secs(10)));
     }
-    if right {
+    if right && !focused {
         app.audio.seek((st.pos + Duration::from_secs(10)).min(len));
     }
     if n {

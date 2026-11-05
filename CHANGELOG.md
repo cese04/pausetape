@@ -777,3 +777,15 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - A version's release gets the Mac disk image (macos.yml) and the Windows and Linux programs
   (ci.yml), no longer also the Mac program on its own, which only opens in Terminal and would
   confuse someone choosing what to download.
+
+### 65. Keyboard focus you can see; controls screen readers can name (2026-11-05)
+- Tab moves through the app's own controls (links, commands, buttons, tabs, chips, song and
+  album rows, column headings, the A–Z rail, the folder browser), and the one with the focus
+  now has a ring in the accent around it; Space or Enter presses it. Before, Tab worked but
+  nothing showed where it was. A click doesn't give focus, so the ring only appears from the
+  keyboard.
+- Each of those controls now tells VoiceOver, Narrator and other screen readers its name and
+  what it is (button, link, tab, row; selected or not). They were drawn by hand and said
+  nothing. Icon-only buttons take the name they show on hover.
+- While a control has the focus, Space presses it and ←/→ move to the next control, instead
+  of also pausing or seeking the player.

@@ -96,8 +96,7 @@ fn header(app: &mut App, ui: &mut Ui) {
             (Tab::Settings, Icon::Settings, "settings"),
         ] {
             let active = app.tab == t;
-            let label = if compact && !active { "" } else { name };
-            if widgets::nav_tab(ui, icon, label, active).on_hover_text(name).clicked() {
+            if widgets::nav_tab(ui, icon, name, !compact || active, active).on_hover_text(name).clicked() {
                 app.tab = t;
                 // The library tab always opens on the whole library.
                 app.duplicates_only = false;
@@ -149,7 +148,7 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
         ui.allocate_ui(egui::vec2(ui.available_width() - S5, 0.0), |ui| {
             ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
         });
-        if widgets::icon_button(ui, Icon::Close).on_hover_text("dismiss").clicked() {
+        if widgets::icon_button(ui, Icon::Close, "dismiss").clicked() {
             app.notices.clear();
         }
     });

@@ -80,10 +80,12 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, t.display_title()));
+    widgets::focus_ring(ui, &resp, rect, 4.0);
     let p = ui.painter_at(rect);
     if selected {
         p.rect_filled(rect, 4.0, ink.chip);
-    } else if resp.hovered() {
+    } else if resp.hovered() || resp.has_focus() {
         p.rect_filled(rect, 0.0, ink.hover);
     }
     let y = rect.center().y;
@@ -122,7 +124,9 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str
     if can_add {
         let plus = egui::Rect::from_center_size(egui::pos2(rect.right() - 8.0, y), vec2(16.0, ROW_H));
         let r = ui.interact(plus, resp.id.with("add"), Sense::click()).on_hover_text("add to playlist");
-        if resp.hovered() || r.hovered() {
+        widgets::name(ui, &r, egui::Role::Button, "add to playlist");
+        widgets::focus_ring(ui, &r, plus, 2.0);
+        if resp.hovered() || r.hovered() || r.has_focus() {
             p.text(plus.center(), Align2::CENTER_CENTER, "+", font, if r.hovered() { ink.text } else { ink.muted });
         }
         added = r.clicked();
@@ -396,6 +400,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - widgets::text_width(ui, card_link, 14.0) - 70.0;
                         let name = RichText::new(&artist.name).size(20.0).color(ink.text);
                         let r = widgets::fitted(ui, name, name_w, Sense::click()).on_hover_text(&artist.name);
+                        widgets::focus_ring(ui, &r, r.rect, 2.0);
                         muted(ui, meta);
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             let hint = if whole {
@@ -624,7 +629,10 @@ fn az_rail(ui: &mut Ui, present: &std::collections::BTreeSet<char>, height: f32)
         let has = present.contains(&c);
         let sense = if has { Sense::click() } else { Sense::hover() };
         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row), sense);
-        if resp.hovered() && has {
+        if has {
+            widgets::name(ui, &resp, egui::Role::Link, &format!("artists under {c}"));
+        }
+        if (resp.hovered() || resp.has_focus()) && has {
             ui.painter().circle_filled(rect.center(), row * 0.48, ink.faint);
         }
         let color = if has { ink.text } else { ink.faint };
@@ -801,8 +809,10 @@ fn suggestion_row(ui: &mut Ui, c: &crate::musicbrainz::FieldChange, scope: &str,
     let ink = ink(ui);
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, format!("{}: {} to {}", c.field.label(), c.old, c.new)));
+    widgets::focus_ring(ui, &resp, rect, 4.0);
     let p = ui.painter_at(rect);
-    if resp.hovered() {
+    if resp.hovered() || resp.has_focus() {
         p.rect_filled(rect, 4.0, ink.hover);
     }
     let y = rect.center().y;

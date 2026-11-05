@@ -1063,6 +1063,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(16.0).color(if any { ink.text } else { ink.muted });
             // Leave room for the size and the "rename" link on the right.
             let r = widgets::fitted(ui, name, ui.available_width() - 200.0, Sense::click()).on_hover_text(&artist.name);
+            widgets::focus_ring(ui, &r, r.rect, 2.0);
             if r.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 edits.push(Edit::Expand(ck.clone()));
             }
@@ -1145,10 +1146,10 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.add_space(S2);
                     if custom_order && al.title.is_some() {
-                        if widgets::icon_button(ui, Icon::Down).on_hover_text("move down").clicked() {
+                        if widgets::icon_button(ui, Icon::Down, "move down").clicked() {
                             edits.push(Edit::Move(ck.clone(), order_ids.clone(), n, 1));
                         }
-                        if widgets::icon_button(ui, Icon::Up).on_hover_text("move up").clicked() {
+                        if widgets::icon_button(ui, Icon::Up, "move up").clicked() {
                             edits.push(Edit::Move(ck.clone(), order_ids.clone(), n, -1));
                         }
                     }
