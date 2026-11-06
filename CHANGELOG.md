@@ -893,3 +893,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
   what Sync adds in the accent, what it takes off as an outline in the warning colour (that
   space comes free), and what's left free; past the end, in the warning colour, what doesn't
   fit. Hovering says each in figures. The library's strip shows it a little longer.
+
+### 75. A status bar at the foot of the window (2026-11-05)
+- Work under way (the reels turning, what it is, how far, the time left, **Stop**) and the
+  latest notice (with **Undo** when it offers one) used to appear in a strip under the tabs,
+  which pushed the whole page down as they came and went: whatever was under the pointer
+  moved. They now share one line at the foot of the window, always there, below the player.
+  A notice too long for it ends in "…" and shows whole on hover.
+- The same bar says how many songs, artists and albums the library has, and how many are
+  selected; the library's heading no longer repeats the counts.

@@ -152,13 +152,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         icons::paint(ui.painter(), rect, Icon::Folder, ink.text);
         let name = app.saved.source.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "not chosen".into());
         ui.label(RichText::new(name).size(18.0).color(ink.text)).on_hover_text(app.saved.source.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
-        let albums: usize = app.index.artists.iter().map(|a| a.albums.len()).sum();
-        let mut facts = format!("{} · {} · {}", plural(app.tracks.len(), "song"), plural(app.index.artists.len(), "artist"), plural(albums, "album"));
+        // The counts are in the status bar; corrections waiting for the files are said here.
         let dirty = app.dirty_count();
         if dirty > 0 {
-            facts.push_str(&format!(" · {} with corrected tags", plural(dirty, "song")));
+            muted(ui, format!("{} with corrected tags", plural(dirty, "song")));
         }
-        muted(ui, facts);
         if widgets::button_with(ui, Icon::Folder, "Change folder…").clicked() {
             app.picker = Some(crate::ui::folders::Picker::Source(crate::ui::navigator::Navigator::new(app.saved.source.as_deref())));
         }
