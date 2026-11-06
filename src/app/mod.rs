@@ -302,6 +302,8 @@ pub struct App {
     pub undo_notice: Option<String>,
     /// A dialog asking before a change that can't be undone.
     pub confirm: Option<Confirm>,
+    /// A folder dropped on the window while other work ran: checked once it's done.
+    pub pending_add: Option<PathBuf>,
     /// ⌘F was pressed: the open tab's search box takes the keyboard on its next frame.
     pub focus_search: bool,
     /// A song or album row (album table position) chosen from the keyboard, to scroll into view.
@@ -438,6 +440,7 @@ impl App {
             undo_stack: Vec::new(),
             undo_notice: None,
             confirm: None,
+            pending_add: None,
             focus_search: false,
             scroll_to_song: None,
             album_scroll_to: None,

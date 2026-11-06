@@ -4,6 +4,17 @@ use super::*;
 
 impl App {
     pub fn poll(&mut self) {
+        self.poll_messages();
+        // A folder dropped while other work ran, now that it's done.
+        if self.busy.is_none()
+            && !self.dialog_open()
+            && let Some(folder) = self.pending_add.take()
+        {
+            self.check_folder(folder);
+        }
+    }
+
+    fn poll_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::ScanProgress(n) => {

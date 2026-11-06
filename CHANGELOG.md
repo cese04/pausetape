@@ -1024,3 +1024,13 @@ Calibre's device view, for music: the library is where you choose what goes on t
   where it goes. *Move up* and *Move down* stay, for the keyboard. Each move can be undone.
 - The playlist's page no longer repeats the list of playlists (it's in the sidebar); how
   playlists reach the card is one line, the rest on hover.
+
+### 89. A folder dropped while work runs is kept, and notices show beside work (2026-11-06)
+- A folder dropped on the window while other work ran (writing tags, a Sync, a scan) was turned
+  away with a notice, and the status bar, showing the work, hid that notice: the drop seemed to
+  do nothing. It's now kept, the notice says it will be checked once that work is done, and it
+  is, by itself.
+- The status bar shows the latest notice beside work under way, not only once it's done.
+- *Write N corrected tags to source files* says on hover what takes long: a cover added makes
+  the tags bigger than the room kept for them, so the whole file is written again (about a
+  minute per gigabyte on a USB drive), and that it can be stopped and carried on.
