@@ -264,8 +264,9 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     });
 }
 
-/// What the last card operation couldn't do, one line per file, with the saved full list.
-fn problems(app: &mut App, ui: &mut Ui) {
+/// What the last card operation (or tag write) couldn't do, one line per file, with the
+/// saved full list; above the library and the card's albums.
+pub fn problems(app: &mut App, ui: &mut Ui) {
     let Some(p) = &app.problems else { return };
     let ink = ink(ui);
     let mut dismiss = false;

@@ -196,6 +196,11 @@ fn page(app: &mut App, ui: &mut Ui) {
             }
         });
     });
+    // What the last tag write (or card operation) couldn't do.
+    if app.problems.is_some() {
+        ui.add_space(S1);
+        super::card::problems(app, ui);
+    }
     // Songs the card's player can't play are said in their rows (a badge) and dealt with in the
     // card tab, where converting them is chosen.
     ui.add_space(S2);

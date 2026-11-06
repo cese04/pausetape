@@ -276,7 +276,8 @@ impl App {
                         let ids: Vec<PathBuf> = ok.iter().map(|&(i, _, _)| self.tracks[i].id()).collect();
                         let _ = db.drop_edits(ids.iter().map(PathBuf::as_path));
                     }
-                    self.notice(format!("tags written to {} files{}", ok.len(), if errors.is_empty() { String::new() } else { format!(" · {} failed", errors.len()) }));
+                    let failed = self.report_problems("writing tags", errors);
+                    self.notice(format!("tags written to {} files{failed}", ok.len()));
                 }
                 Msg::Cover(path, img, file) => {
                     if self.current().is_some_and(|i| self.tracks[i].path == path) {

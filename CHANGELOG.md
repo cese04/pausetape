@@ -1034,3 +1034,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - *Write N corrected tags to source files* says on hover what takes long: a cover added makes
   the tags bigger than the room kept for them, so the whole file is written again (about a
   minute per gigabyte on a USB drive), and that it can be stopped and carried on.
+- Songs whose tags couldn't be written are now listed, one line per file with why, at the top
+  of the library (and the card's view), with *Open the full list* (a text file in the data
+  folder); before, only how many failed was said. A cover that couldn't be made names the
+  song as well as the image.

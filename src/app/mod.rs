@@ -509,7 +509,7 @@ impl App {
         if errors.is_empty() {
             return String::new();
         }
-        let note = format!(" · {} {}, listed in the card tab", errors.len(), if errors.len() == 1 { "problem" } else { "problems" });
+        let note = format!(" · {} {}: see the list at the top of the page", errors.len(), if errors.len() == 1 { "problem" } else { "problems" });
         let log = card::save_problems(what, &errors);
         self.problems = Some(Problems { what: what.into(), list: errors, log });
         note

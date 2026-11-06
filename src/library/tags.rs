@@ -27,7 +27,7 @@ pub fn write_tags(t: &Track, path: &Path) -> Result<()> {
         if ty == primary
             && let Some(image) = &t.cover
         {
-            let jpeg = super::cover::for_embedding(image)?;
+            let jpeg = super::cover::for_embedding(image).with_context(|| format!("making the cover for {}", path.display()))?;
             tag.remove_picture_type(PictureType::CoverFront);
             tag.push_picture(Picture::unchecked(jpeg).pic_type(PictureType::CoverFront).mime_type(MimeType::Jpeg).build());
         }
