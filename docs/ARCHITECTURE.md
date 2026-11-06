@@ -126,6 +126,7 @@ src/
     ├── genres.rs      the genres view: every genre, each leading to its artists and albums
     ├── theme.rs       palette, fonts (assets/fonts, with system fallbacks), frames; style.spacing on the grid
     ├── layout.rs      the 8-point grid (S1–S6, row and control heights), the type scale (`font`) and `row`: left-to-right rows, centred
+    ├── motion.rs      how long changes take (hover, the player folding, the card's room), none when motion is reduced
     ├── icons.rs       drawn line icons (tabs and commands), no font needed
     ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
     ├── text.rs        durations, sizes, plurals, shortening, format notes and badges

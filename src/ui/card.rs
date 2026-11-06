@@ -147,7 +147,14 @@ fn space_bar(app: &App, ui: &mut Ui, need: u64, room: u64, width: f32) {
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW), Sense::hover());
     let bar = egui::Rect::from_center_size(rect.center(), vec2(width, 6.0));
     let scale = width / room.max(need).max(1) as f32;
-    let x = |bytes: u64| bar.left() + bytes as f32 * scale;
+    // Each edge goes to where it now is (after a Sync, what was added becomes what's there),
+    // rather than jumping.
+    let at = |bytes: u64| bar.left() + bytes as f32 * scale;
+    let time = super::motion::time(ui.ctx(), super::motion::SETTLE);
+    let (staying_at, need_at) = (staying.min(room), need.min(room));
+    let staying_x = ui.ctx().animate_value_with_time(resp.id.with("staying"), at(staying_at), time);
+    let need_x = ui.ctx().animate_value_with_time(resp.id.with("chosen"), at(need_at), time);
+    let x = |bytes: u64| if bytes == staying_at { staying_x } else if bytes == need_at { need_x } else { at(bytes) };
     let p = ui.painter();
     let span = |from: u64, to: u64| egui::Rect::from_x_y_ranges(x(from)..=x(to), bar.y_range());
     p.rect_filled(span(0, room), 3.0, ink.faint);

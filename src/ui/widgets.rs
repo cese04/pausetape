@@ -29,14 +29,28 @@ pub fn row_background(ui: &Ui, resp: &Response, rect: Rect, selected: bool) {
     if selected {
         p.rect_filled(rect, 4.0, ink.selected);
         p.rect_filled(Rect::from_min_size(rect.min, vec2(2.0, rect.height())), 1.0, ink.accent);
-    } else if hot(resp) {
-        p.rect_filled(rect, 4.0, ink.row_hover);
+    } else {
+        let t = heat(ui, resp);
+        if t > 0.0 {
+            p.rect_filled(rect, 4.0, ink.row_hover.gamma_multiply(t));
+        }
     }
 }
 
 /// Under the pointer or the keyboard's focus: either way, the control shows it's the one.
 fn hot(resp: &Response) -> bool {
     resp.hovered() || resp.has_focus()
+}
+
+/// How hot a control is, 0 to 1: it warms and cools over `motion::HOVER` (at once when motion
+/// is reduced), so a row or a link doesn't flicker as the pointer crosses it.
+fn heat(ui: &Ui, resp: &Response) -> f32 {
+    ui.ctx().animate_bool_with_time(resp.id.with("heat"), hot(resp), super::motion::time(ui.ctx(), super::motion::HOVER))
+}
+
+/// `cold`, warming to `warm` as the control does.
+fn warm(cold: Color32, warm: Color32, t: f32) -> Color32 {
+    cold.lerp_to_gamma(warm, t)
 }
 
 /// A quiet text link: muted, darkening and underlined on hover. A row tall, the words centred.
@@ -47,10 +61,11 @@ pub fn link(ui: &mut Ui, text: impl Into<String>) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x, ROW), Sense::click());
     name(ui, &resp, Role::Link, &text);
     focus_ring(ui, &resp, rect, 2.0);
-    let color = if hot(&resp) { ink.text } else { ink.muted };
+    let t = heat(ui, &resp);
+    let color = warm(ink.muted, ink.text, t);
     let top = rect.center().y - galley.size().y / 2.0;
-    if hot(&resp) {
-        ui.painter().hline(rect.x_range(), top + galley.size().y - 1.0, Stroke::new(0.8, color));
+    if t > 0.0 {
+        ui.painter().hline(rect.x_range(), top + galley.size().y - 1.0, Stroke::new(0.8, color.gamma_multiply(t)));
     }
     ui.painter().galley(pos2(rect.left(), top), galley, color);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -77,9 +92,10 @@ pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1, ROW), Sense::click());
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, 4.0);
-    let color = if hot(&resp) { ink.text } else { ink.muted };
-    if hot(&resp) {
-        ui.painter().rect_filled(rect, 4.0, ink.hover);
+    let t = heat(ui, &resp);
+    let color = warm(ink.muted, ink.text, t);
+    if t > 0.0 {
+        ui.painter().rect_filled(rect, 4.0, ink.hover.gamma_multiply(t));
     }
     let y = rect.center().y;
     icon_at(ui, rect.left() + S1, y, 1.5, icon, color);
@@ -100,10 +116,11 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ROW, ROW), Sense::click());
     name(ui, &resp, Role::Button, label);
     focus_ring(ui, &resp, rect, 4.0);
-    if hot(&resp) {
-        ui.painter().rect_filled(rect, 4.0, ink.hover);
+    let t = heat(ui, &resp);
+    if t > 0.0 {
+        ui.painter().rect_filled(rect, 4.0, ink.hover.gamma_multiply(t));
     }
-    icons::paint(ui.painter(), rect.shrink((ROW - ICON) / 2.0 + 1.0), icon, if hot(&resp) { ink.text } else { ink.muted });
+    icons::paint(ui.painter(), rect.shrink((ROW - ICON) / 2.0 + 1.0), icon, warm(ink.muted, ink.text, t));
     resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(label)
 }
 
@@ -115,8 +132,8 @@ pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) ->
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1 + S1, ROW), Sense::click());
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, rect.height() / 2.0);
-    let fill = if hot(&resp) { ink.hover } else { Color32::TRANSPARENT };
-    ui.painter().rect(rect, rect.height() / 2.0, fill, Stroke::new(1.0, if hot(&resp) { color } else { ink.faint }), egui::StrokeKind::Inside);
+    let t = heat(ui, &resp);
+    ui.painter().rect(rect, rect.height() / 2.0, ink.hover.gamma_multiply(t), Stroke::new(1.0, warm(ink.faint, color, t)), egui::StrokeKind::Inside);
     let y = rect.center().y;
     icon_at(ui, rect.left() + S1, y, 2.0, icon, color);
     words_at(ui, rect.left() + S1 + ICON + S1, y, galley, color);
@@ -142,10 +159,11 @@ pub fn search_field(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> R
         let clear = ui.interact(rect, r.id.with("clear"), Sense::click()).on_hover_text("clear (Esc)").on_hover_cursor(egui::CursorIcon::PointingHand);
         name(ui, &clear, Role::Button, "clear the search");
         focus_ring(ui, &clear, rect, ICON / 2.0);
-        if hot(&clear) {
-            ui.painter().circle_filled(rect.center(), ICON / 2.0, ink.faint);
+        let t = heat(ui, &clear);
+        if t > 0.0 {
+            ui.painter().circle_filled(rect.center(), ICON / 2.0, ink.faint.gamma_multiply(t));
         }
-        icons::paint(ui.painter(), rect.shrink(4.0), Icon::Close, if hot(&clear) { ink.text } else { ink.muted });
+        icons::paint(ui.painter(), rect.shrink(4.0), Icon::Close, warm(ink.muted, ink.text, t));
         if clear.clicked() {
             text.clear();
         }
@@ -204,7 +222,7 @@ pub fn tab(ui: &mut Ui, text: &str, active: bool) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x, ROW), Sense::click());
     resp.widget_info(|| WidgetInfo::selected(Role::Tab, ui.is_enabled(), active, text));
     focus_ring(ui, &resp, rect, 2.0);
-    let color = if active || hot(&resp) { ink.text } else { ink.muted };
+    let color = if active { ink.text } else { warm(ink.muted, ink.text, heat(ui, &resp)) };
     words_at(ui, rect.left(), rect.center().y, galley, color);
     if active {
         ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1.5, ink.accent));
@@ -250,12 +268,12 @@ fn framed(ui: &mut Ui, icon: Option<Icon>, text: String, primary: bool) -> Respo
     let (rect, resp) = ui.allocate_exact_size(vec2(S2 + lead + galley.size().x + S2, CONTROL), Sense::click());
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, 6.0);
+    let t = heat(ui, &resp);
     let fg = if primary {
-        ui.painter().rect_filled(rect, 6.0, if hot(&resp) { pressed(&ink) } else { ink.accent });
+        ui.painter().rect_filled(rect, 6.0, warm(ink.accent, pressed(&ink), t));
         ink.bg
     } else {
-        let stroke = if hot(&resp) { ink.text } else { ink.muted };
-        ui.painter().rect(rect, 6.0, if hot(&resp) { ink.hover } else { Color32::TRANSPARENT }, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
+        ui.painter().rect(rect, 6.0, ink.hover.gamma_multiply(t), Stroke::new(1.0, warm(ink.muted, ink.text, t)), egui::StrokeKind::Inside);
         ink.text
     };
     let y = rect.center().y;
@@ -291,12 +309,8 @@ pub fn media_button(ui: &mut Ui, icon: Media, size: f32, slot: f32, primary: boo
     focus_ring(ui, &resp, rect, size / 2.0);
     let c = rect.center();
     let r = size / 2.0 - 1.0;
-    let (bg, fg) = match (primary, hot(&resp)) {
-        (true, false) => (ink.accent, ink.bg),
-        (true, true) => (pressed(&ink), ink.bg),
-        (false, false) => (Color32::TRANSPARENT, ink.text),
-        (false, true) => (ink.hover, ink.text),
-    };
+    let t = heat(ui, &resp);
+    let (bg, fg) = if primary { (warm(ink.accent, pressed(&ink), t), ink.bg) } else { (ink.hover.gamma_multiply(t), ink.text) };
     ui.painter().circle(c, r, bg, Stroke::new(1.0, if primary { bg } else { ink.faint }));
     let s = size * 0.2;
     let tri = |pts: Vec<Pos2>| Shape::convex_polygon(pts, fg, Stroke::NONE);

@@ -15,6 +15,7 @@ mod keys;
 mod menu;
 pub mod icons;
 pub mod layout;
+pub mod motion;
 mod library;
 pub mod navigator;
 mod player;
@@ -57,7 +58,19 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let r = egui::Panel::bottom("status").frame(chrome(S5, S1 / 2.0)).exact_size(CONTROL + S1).show_separator_line(false).show(ui, |ui| status_bar(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
-    let r = egui::Panel::bottom("player").frame(chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 })).show_separator_line(false).show(ui, |ui| player::show(app, ui));
+    // The player: folding or unfolding, it grows or shrinks to its new height rather than jumping.
+    let frame = chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 });
+    let margins = frame.total_margin().sum().y;
+    let content_id = egui::Id::unique("player's height");
+    let mut panel = egui::Panel::bottom("player").frame(frame).show_separator_line(false);
+    if let Some(h) = ui.ctx().data(|d| d.get_temp::<f32>(content_id)) {
+        let time = motion::time(ui.ctx(), motion::RESIZE);
+        panel = panel.exact_size(ui.ctx().animate_value_with_time(egui::Id::unique("player folding"), h + margins, time));
+    }
+    let r = panel.show(ui, |ui| {
+        let h = ui.scope(|ui| player::show(app, ui)).response.rect.height();
+        ui.ctx().data_mut(|d| d.insert_temp(content_id, h));
+    });
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
     // The sidebar, between the top bar and the player, ruled off from the page.

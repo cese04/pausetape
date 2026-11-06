@@ -34,6 +34,29 @@ pub fn attach_console() {
     }
 }
 
+/// Whether the system asks apps for less motion: macOS's *Reduce motion*, Windows' *Animation
+/// effects* turned off, GNOME's animations turned off.
+pub fn reduce_motion() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let out = std::process::Command::new("defaults").args(["read", "com.apple.universalaccess", "reduceMotion"]).output();
+        out.is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "1")
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SPI_GETCLIENTAREAANIMATION, SystemParametersInfoW};
+        let mut on: i32 = 1;
+        // SAFETY: writes one BOOL into `on`, which outlives the call.
+        let ok = unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&raw mut on).cast(), 0) };
+        ok != 0 && on == 0
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let out = std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.interface", "enable-animations"]).output();
+        out.is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "false")
+    }
+}
+
 /// How to install ffmpeg here, for messages that ask for it.
 pub const FFMPEG_INSTALL: &str = if cfg!(target_os = "macos") {
     "brew install ffmpeg"

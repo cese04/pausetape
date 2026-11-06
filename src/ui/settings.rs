@@ -72,6 +72,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
             help(ui, "Compact packs songs and albums tight, as Calibre does: more of them in view.");
         });
+        setting(ui, "Motion", |ui| {
+            if app.system_reduce_motion {
+                ui.add_enabled(false, egui::Checkbox::new(&mut true, "reduce motion"));
+                help(ui, "Your system asks for less motion, so there's none: changes happen at once and the cassette's reels stay still.");
+            } else {
+                ui.checkbox(&mut app.saved.reduce_motion, "reduce motion");
+                help(ui, "Changes happen at once, without fading or sliding, and the cassette's reels stay still. Followed on its own when the system asks for it.");
+            }
+        });
 
         ui.add_space(S2);
         widgets::section(ui, Icon::Library, "Library");

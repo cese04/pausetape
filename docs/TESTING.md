@@ -135,7 +135,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 3. Settings › appearance: switching *paper* / *ink* works. *Text size*: *Larger* and *Smaller*
    step by a tenth (80–200%), ⌘+ / ⌘− / ⌘0 (Ctrl on Windows) too; the size is kept after a
    restart. *Lists › compact* packs the album table, an album's songs, the details panel's songs,
-   a playlist and the queue 24 points apart.
+   a playlist and the queue 24 points apart. Rows, links and buttons fade in and out under the
+   pointer; the player folds and unfolds smoothly (a click on its cover); after a Sync the card's
+   bar slides from "added" to "on the card". *Motion › reduce motion* (or the system's own
+   setting, read at start: macOS Accessibility › Display › Reduce motion; Windows › Accessibility
+   › Visual effects › Animation effects) makes all of it instant, and the reels stand still.
 
 ### B. Music folder and library
 4. The first time, the welcome › **Choose folder…** opens the in-app browser (Home, Music, Downloads buttons;

@@ -82,6 +82,8 @@ pub struct Saved {
     pub text_size: f32,
     /// Lists packed tight, their rows 24 apart rather than 32.
     pub compact: bool,
+    /// No movement: changes at once, the reels still (the system's wish is followed too).
+    pub reduce_motion: bool,
 }
 
 impl Default for Saved {
@@ -103,6 +105,7 @@ impl Default for Saved {
             compact_player: false,
             text_size: 1.0,
             compact: false,
+            reduce_motion: false,
         }
     }
 }
@@ -403,6 +406,8 @@ pub struct App {
     pub details_sheet: bool,
     /// The details panel had room beside the library on the last frame.
     pub details_beside: bool,
+    /// The system asks apps for less motion (read at start).
+    pub system_reduce_motion: bool,
     /// The first-run welcome (music folder, card) is open.
     pub welcome_open: bool,
     /// Songs' lyrics, by track id, as far as they're known (`lyrics_of`).
@@ -525,6 +530,7 @@ impl App {
             detail_cover: None,
             details_sheet: false,
             details_beside: false,
+            system_reduce_motion: crate::platform::reduce_motion(),
             renaming: None,
             db: Db::open_default().ok(),
             ctx,
@@ -603,6 +609,7 @@ impl eframe::App for App {
         self.watch_cards();
         // The text size as ⌘+ and ⌘− left it, kept for the next start.
         self.saved.text_size = ui.ctx().zoom_factor();
+        crate::ui::motion::set_reduced(ui.ctx(), self.saved.reduce_motion || self.system_reduce_motion);
         #[cfg(debug_assertions)]
         if let Some(mut s) = self.shooter.take() {
             s.tick(self, ui.ctx());
