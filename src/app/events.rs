@@ -273,6 +273,12 @@ impl App {
                         self.cover = Some((path, tex, file));
                     }
                 }
+                Msg::DetailCover(path, img) => {
+                    if self.detail_cover.as_ref().is_some_and(|(p, _)| *p == path) {
+                        let tex = img.map(|img| self.ctx.load_texture("detail cover", img, egui::TextureOptions::LINEAR));
+                        self.detail_cover = Some((path, tex));
+                    }
+                }
                 Msg::CoversFound(found, stopped) => {
                     self.busy = None;
                     self.covers_found(found, stopped);

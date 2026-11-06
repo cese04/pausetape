@@ -970,3 +970,15 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - The library's page starts with what it shows ("Albums", "Without a cover", "Searching
   “format:flac”"), and *Collapse all* or *Write N corrected tags* where they apply. The chips
   that led to what's worth a look became the sidebar's Review.
+
+### 83. The album table by default, and the details of what's selected (2026-11-05)
+- **Albums**, the sortable table, is the library's first view (in a new install; the view chosen
+  last is kept). **Artists**, the list with letters and every song, is the other, in the sidebar.
+- **The details panel**, at the right of the library where there's room for it (about 1000
+  points for the library), shows the album selected: its cover, the size of the panel; title,
+  artist (a click opens them in the library by artist), year, format, songs, size; where it
+  stands with the card; *Play*, *Send to the card*, *Edit tags*, *Look up*, *Find cover*, *Open
+  folder*; and its songs, a double click playing from one. Several albums selected: how many,
+  their songs and size, what to do with all of them. Nothing selected: what's playing.
+- Where there's no room beside the library, right-click › **Details** shows the same as a sheet
+  over the page.

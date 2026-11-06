@@ -144,6 +144,19 @@ fn album_minutes(tracks: &[Track], idxs: &[usize]) -> String {
 const RAIL_W: f32 = S4;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    // The details of what's selected, at the right edge, where there's room for them; the
+    // library in the rest.
+    app.details_beside = super::details::fits(ui.available_width()) && !app.tracks.is_empty();
+    if app.details_beside {
+        let mut actions = Vec::new();
+        let frame = egui::Frame::new().inner_margin(egui::Margin { left: S2 as i8, ..Default::default() });
+        egui::Panel::right("details").exact_size(super::details::WIDTH + S2).resizable(false).show_separator_line(false).frame(frame).show(ui, |ui| super::details::show(app, ui, &mut actions));
+        apply(app, actions);
+    }
+    egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| page(app, ui));
+}
+
+fn page(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
     // What's shown, in words, and what can be done with all of it. (The folder, the views and

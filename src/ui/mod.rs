@@ -7,6 +7,7 @@ mod artist_panel;
 mod card;
 mod cassette;
 mod confirm;
+mod details;
 pub mod folders;
 mod keys;
 mod menu;
@@ -86,6 +87,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     drop_to_add(app, ui);
     card::sync_confirm_dialog(app, ui);
     confirm::dialog(app, ui);
+    details::sheet(app, ui);
     folders::add_dialog(app, ui);
 }
 

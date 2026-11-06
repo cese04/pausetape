@@ -100,6 +100,13 @@ pub(super) fn music(app: &App, ui: &mut Ui, of: Of, actions: &mut Vec<Action>, e
     if let [(a, b)] = albums[..] {
         item(ui, actions, Icon::Search, "Look up on MusicBrainz".into(), Action::LookupAlbum(a, b));
     }
+    if let [(a, b)] = albums[..]
+        && !matches!(of, Of::Artist(_))
+        && widgets::icon_link(ui, Icon::Info, "Details").clicked()
+    {
+        actions.push(Action::Details(a, b));
+        ui.close();
+    }
     if let Some(dir) = app.tracks[songs[0]].path.parent()
         && widgets::icon_link(ui, Icon::Folder, "Open folder").clicked()
     {
