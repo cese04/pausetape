@@ -260,6 +260,8 @@ pub struct App {
     pub look_alikes_only: bool,
     /// Expanded artists in the library, by artist key.
     pub expanded: HashSet<String>,
+    /// Artists whose links to stores and sites are shown, by cluster key (folded otherwise).
+    pub artist_links_open: HashSet<String>,
     /// Songs chosen in the library (⌘-click), for editing their tags together.
     pub selected: BTreeSet<usize>,
     /// The song last clicked into the selection, where a shift-click run starts.
@@ -401,6 +403,7 @@ impl App {
             duplicates_only: false,
             look_alikes_only: false,
             expanded: HashSet::new(),
+            artist_links_open: HashSet::new(),
             selected: BTreeSet::new(),
             select_anchor: None,
             tag_edit: None,

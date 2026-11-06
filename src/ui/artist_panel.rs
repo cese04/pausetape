@@ -10,7 +10,7 @@ use super::theme::ink;
 use super::widgets::{chip, icon_link, muted, tag};
 use crate::app::{App, ArtistState};
 use crate::musicbrainz::{ArtistInfo, LinkUse};
-use super::layout::{S1, S2, row, row_wrapped};
+use super::layout::{S1, row, row_wrapped};
 
 /// Artists whose names look like `cluster`'s, each with a decision to make. Shown whether the
 /// artist is open or not: this is where the question comes up.
@@ -47,11 +47,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
         _ => None,
     };
     // A card of its own, so it reads apart from the albums under it.
-    let frame = egui::Frame::new()
-        .fill(ink.hover)
-        .stroke(egui::Stroke::new(1.0, ink.faint))
-        .corner_radius(8.0)
-        .inner_margin(egui::Margin::same(S2 as i8))
+    let frame = super::theme::panel_frame(ui)
         .outer_margin(egui::Margin { left: 0, right: 0, top: S1 as i8, bottom: S1 as i8 });
     frame.show(ui, |ui| {
         match state {
@@ -98,8 +94,13 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
             Some(ArtistState::Unasked) | None => {}
         }
         // Where to go for more: what MusicBrainz knows, and a search where it knows nothing.
+        // Folded until asked for (the command row below), so the albums stay near the name.
         let links = info.map(|i| i.links.as_slice()).unwrap_or_default();
+        let links_open = app.artist_links_open.contains(&c.key);
         for (kind, icon, label) in [(LinkUse::Buy, Icon::Buy, "buy"), (LinkUse::Listen, Icon::Listen, "listen"), (LinkUse::Discover, Icon::Discover, "discover")] {
+            if !links_open {
+                break;
+            }
             // (site, url, a search rather than the artist's own page)
             let mut row: Vec<(String, String, bool)> = links.iter().filter(|l| l.kind == kind).map(|l| (l.site.clone(), l.url.clone(), false)).collect();
             if kind == LinkUse::Buy {
@@ -149,6 +150,12 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                     actions.push(Action::StopRenaming);
                 }
                 return;
+            }
+            // The searches are always there, so there's always something to open.
+            let n = links.len() + searches(&c.name).iter().filter(|(site, _)| !links.iter().any(|l| l.kind == LinkUse::Buy && l.site == *site)).count();
+            let (text, icon) = if links_open { ("Hide the links".to_string(), Icon::Collapse) } else { (format!("Where to buy and listen ({n})"), Icon::Buy) };
+            if icon_link(ui, icon, text).on_hover_text("Stores, streaming services and sites about the artist").clicked() {
+                actions.push(Action::ToggleArtistLinks(c.key.clone()));
             }
             let hint = "Changes the artist and album artist of its songs, as corrections: written into the files when you write corrected tags, and into card copies.";
             if icon_link(ui, Icon::Rename, "Rename").on_hover_text(hint).clicked() {

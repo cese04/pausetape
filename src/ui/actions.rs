@@ -22,6 +22,8 @@ pub(super) enum Action {
     Renaming(usize, String),
     Rename(usize, String),
     StopRenaming,
+    /// Show an artist's links to stores and sites, or fold them away (by cluster key).
+    ToggleArtistLinks(String),
     /// Artist and album by index: on the card or off it, at the next Sync.
     CardAlbum(usize, usize, bool),
     /// The whole artist on the card or off it.
@@ -87,6 +89,11 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::ChooseArtist(c) => app.choose_artist(c),
             Action::Renaming(c, text) => app.renaming = Some((c, text)),
             Action::StopRenaming => app.renaming = None,
+            Action::ToggleArtistLinks(k) => {
+                if !app.artist_links_open.remove(&k) {
+                    app.artist_links_open.insert(k);
+                }
+            }
             Action::CardAlbum(a, b, on) => app.card_album(a, b, on),
             Action::CardArtist(a, on) => app.card_artist(a, on),
             Action::TrashRepeats(pairs) => app.trash_repeats(pairs),

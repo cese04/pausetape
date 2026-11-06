@@ -916,3 +916,16 @@ Calibre's device view, for music: the library is where you choose what goes on t
   the sparkline, the time, the queue, the volume), and back; the choice is kept. A window lower
   than 640 points always has the one-line player, so the page keeps most of it: at 760 × 540 the
   library now shows its list.
+
+### 77. An artist's links folded away until asked for (2026-11-05)
+- Opening an artist showed up to 17 buttons to stores, streaming services and sites (Buy,
+  Listen, Discover) before its albums. They're now behind **Where to buy and listen (N)**, in
+  the artist's line of commands beside *Rename*; **Hide the links** folds them again. Genres,
+  country and years stay in view. Each artist is remembered open or folded until the app quits.
+
+### 78. Flat panels (2026-11-05)
+- Panels (the card's strip, the selection bars, an artist's facts, MusicBrainz suggestions, the
+  folders tab's steps, the views of duplicates and look-alikes) were marked twice, with a
+  background and an outline, at 8-point corners. Following the flat design, each is now set
+  apart by its background alone, the tint of the tab bar, at 4-point corners. Warnings keep
+  their outline, which is what marks them.

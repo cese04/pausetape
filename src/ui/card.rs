@@ -177,7 +177,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
     let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable().is_none();
-    let frame = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
+    let frame = super::theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
     frame.show(ui, |ui| {
         row(ui, |ui| {
             let button_w = if can_sync { 100.0 } else { 0.0 };

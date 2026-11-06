@@ -248,10 +248,11 @@ pub fn install(ctx: &egui::Context) {
     }
 }
 
-/// A softly outlined panel used to group one step of a task.
+/// A panel grouping one step of a task, or what belongs to one thing: set apart by its
+/// background alone (the tint of the tab bar), with no outline, as the design is flat.
 pub fn panel_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().fill(ink.hover).stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::same(S2 as i8))
+    egui::Frame::new().fill(ink.bar).corner_radius(4.0).inner_margin(egui::Margin::same(S2 as i8))
 }
 
 /// A dialog over the app: the paper, with a grid's breadth of room inside.
@@ -263,7 +264,7 @@ pub fn dialog_frame(ui: &Ui) -> egui::Frame {
 /// Outlined in the warning colour: something the user should know before it surprises them.
 pub fn warning_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
+    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(4.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
 }
 
 #[cfg(test)]

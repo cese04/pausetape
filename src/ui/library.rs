@@ -786,7 +786,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
             }
             Lookup::Ready { label, changes } => {
                 let n = changes.iter().filter(|c| c.accept).count();
-                let card = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
+                let card = theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
                 card.show(ui, |ui| {
                     row_wrapped(ui, |ui| {
                         widgets::icon(ui, Icon::Search, ink.accent);
