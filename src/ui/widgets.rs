@@ -21,6 +21,19 @@ pub fn focus_ring(ui: &Ui, resp: &Response, rect: Rect, radius: f32) {
     }
 }
 
+/// The background of a song or album row: the selection's tint with a bar of the accent at
+/// its left edge, or a darker step under the pointer or the keyboard's focus.
+pub fn row_background(ui: &Ui, resp: &Response, rect: Rect, selected: bool) {
+    let ink = ink(ui);
+    let p = ui.painter();
+    if selected {
+        p.rect_filled(rect, 4.0, ink.selected);
+        p.rect_filled(Rect::from_min_size(rect.min, vec2(2.0, rect.height())), 1.0, ink.accent);
+    } else if hot(resp) {
+        p.rect_filled(rect, 4.0, ink.row_hover);
+    }
+}
+
 /// Under the pointer or the keyboard's focus: either way, the control shows it's the one.
 fn hot(resp: &Response) -> bool {
     resp.hovered() || resp.has_focus()

@@ -874,3 +874,15 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - What the app called a *write* (what a card gets, its names and order, its record of what's
   there) is a **card setup** wherever it's shown: the card tab's list is *Card setups*, and
   "this write" became "this setup". The code keeps its names.
+
+### 73. Teal by default, warnings apart from it; edges and selections that show (2026-11-05)
+- **The default accent is teal.** Brick, the accent until now, was also the colour of every
+  warning, so the Sync button, the playhead and the open tab looked like "none", "taken off"
+  and "isn't formatted FAT32". Warnings and what can't be undone stay brick red. An accent
+  chosen in Settings is kept (an install that never chose one keeps the brick it saved).
+- **Fields, checkboxes and dropdowns have an edge you can see**, 3:1 or more against the page
+  in both themes (it was 1.3:1); the faint colour stays for rules and dividers.
+- **A selected song or album** is tinted with the accent and has a bar of it at its left edge,
+  instead of the grey chip the hover nearly matched; grey text on it stays at 4.5:1 or more
+  with every accent. **A row under the pointer** (or with the keyboard's focus) is now a
+  visible step darker; before, its background was 1.08:1 against the page.
