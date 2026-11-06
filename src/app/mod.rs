@@ -351,6 +351,8 @@ pub struct App {
     pub card_filter: String,
     /// The card tab lists only the albums the next Sync adds or takes off.
     pub card_changes_only: bool,
+    /// The card view shows how the card is set up, rather than what's on it.
+    pub card_setup_open: bool,
     pub card_expanded: HashSet<String>,
     /// Inline rename on the card tab: ("artist"/"album", key, text).
     pub card_renaming: Option<(bool, String, String)>,
@@ -461,6 +463,7 @@ impl App {
             dest_label: None,
             card_filter: String::new(),
             card_changes_only: false,
+            card_setup_open: false,
             card_expanded: HashSet::new(),
             card_renaming: None,
             audio,

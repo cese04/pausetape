@@ -982,3 +982,17 @@ Calibre's device view, for music: the library is where you choose what goes on t
   their songs and size, what to do with all of them. Nothing selected: what's playing.
 - Where there's no room beside the library, right-click › **Details** shows the same as a sheet
   over the page.
+
+### 84. The card's view: what's on it, and how it's set up (2026-11-05)
+- **On the card** shows the albums on the card, or going on or off at the next Sync, in the
+  same table as the library (sorting, selecting, ⌘D, the right-click menu), and the search box
+  narrows them; **What the next Sync changes** keeps only those. The comparison with the card,
+  and music on it that this setup didn't put there, are above it. With nothing chosen yet, it
+  says how to choose.
+- **Setup** holds the rest, once set: the card's name, where it is, the player and its test,
+  playlists on it, folders and options, and, folded, the folder names and order artist by
+  artist (the list with ticks that used to fill the tab).
+- With one card setup, its list (and *New*, *Duplicate*) is gone: **Another card setup… ▾**
+  beside the name makes a second, new or a copy. From two, the list is back, and each setup
+  is an entry under *Card* in the sidebar.
+- The search box takes `card:all`: albums on the card, going on or off.

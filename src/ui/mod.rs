@@ -135,11 +135,12 @@ fn header(app: &mut App, ui: &mut Ui) {
         let width = (ui.available_width() * 0.45).clamp(160.0, 420.0);
         let before = app.filter.clone();
         let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", width).on_hover_text(crate::library::search::HELP);
-        if app.focus_search && app.tab != Tab::Card {
+        if app.focus_search {
             app.focus_search = false;
             r.request_focus();
         }
-        if app.filter != before && app.tab != Tab::Library {
+        // The card's albums are searched where they are; anywhere else, typing opens the library.
+        if app.filter != before && app.tab != Tab::Library && !(app.tab == Tab::Card && !app.card_setup_open) {
             app.tab = Tab::Library;
             app.duplicates_only = false;
             app.look_alikes_only = false;

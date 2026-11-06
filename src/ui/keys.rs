@@ -17,7 +17,7 @@ pub const UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key
 pub fn list(ctx: &egui::Context) -> Vec<(String, &'static str)> {
     let f = |s: &KeyboardShortcut| ctx.format_shortcut(s);
     vec![
-        (f(&SEARCH), "search the library (the card tab: its filter)"),
+        (f(&SEARCH), "search the library (on the card's view: its albums)"),
         ("↑ ↓".into(), "select the song or album above or below; with Shift, add it to the selection"),
         ("Enter".into(), "play what's selected"),
         (f(&SELECT_ALL), "select everything shown"),
@@ -62,7 +62,7 @@ pub fn global(app: &mut App, ui: &Ui) {
         app.undo_last();
     }
     if pressed(ui, &SEARCH) {
-        if app.tab != Tab::Card {
+        if !matches!(app.tab, Tab::Library | Tab::Card) {
             app.tab = Tab::Library;
         }
         app.focus_search = true;

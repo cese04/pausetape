@@ -150,6 +150,8 @@ impl Shooter {
                 let next: Vec<usize> = other.tracks.iter().take(2).copied().collect();
                 app.play_next(&next);
             }
+            // PAUSETAPE_SHOT_CARD_SETUP=1: the card's view on its setup rather than its albums.
+            app.card_setup_open = std::env::var_os("PAUSETAPE_SHOT_CARD_SETUP").is_some();
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
             if std::env::var_os("PAUSETAPE_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();
