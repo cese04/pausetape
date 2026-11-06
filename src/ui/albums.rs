@@ -35,7 +35,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     } else if !query.is_empty() && !rows.is_empty() {
         row(ui, |ui| {
             muted(ui, format!("{} match", plural(rows.len(), "album")));
-            if widgets::icon_link(ui, Icon::Check, "select them all").on_hover_text("to send them to the card, edit their tags or find their covers together").clicked() {
+            if widgets::icon_link(ui, Icon::Check, "Select them all").on_hover_text("to send them to the card, edit their tags or find their covers together").clicked() {
                 actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
             }
         });
@@ -139,10 +139,10 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             right(6, text::bytes(row.bytes));
             let card_word = match mark {
                 None => String::new(),
-                Some(Mark::On) => "on card".into(),
-                Some(Mark::Adding) => "at next sync".into(),
+                Some(Mark::On) => "on the card".into(),
+                Some(Mark::Adding) => "added at Sync".into(),
                 Some(Mark::ByHand) => "by hand".into(),
-                Some(Mark::Removing) => "coming off".into(),
+                Some(Mark::Removing) => "taken off at Sync".into(),
             };
             text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
             if row.cover {
@@ -231,23 +231,23 @@ fn selection_bar(app: &App, ui: &mut Ui, rows: &[AlbumRow], actions: &mut Vec<Ac
             }
             ui.label(RichText::new(what).color(ink.text));
             ui.add_space(S1);
-            if widgets::icon_link(ui, Icon::Add, "send to card").on_hover_text(format!("copied at the next Sync ({} sends or takes off)", ui.ctx().format_shortcut(&super::keys::CARD))).clicked() {
+            if widgets::icon_link(ui, Icon::Add, "Send to the card").on_hover_text(format!("copied at the next Sync ({} sends or takes off)", ui.ctx().format_shortcut(&super::keys::CARD))).clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), true));
             }
-            if widgets::icon_link(ui, Icon::Remove, "take off card").on_hover_text("taken off at the next Sync").clicked() {
+            if widgets::icon_link(ui, Icon::Remove, "Take off the card").on_hover_text("taken off at the next Sync").clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), false));
             }
-            if widgets::icon_link(ui, Icon::Rename, "edit tags").on_hover_text(format!("set album artist, year… for all their songs ({})", ui.ctx().format_shortcut(&super::keys::EDIT_TAGS))).clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "Edit tags").on_hover_text(format!("set album artist, year… for all their songs ({})", ui.ctx().format_shortcut(&super::keys::EDIT_TAGS))).clicked() {
                 actions.push(Action::EditTags(songs.clone()));
             }
             let coverless: Vec<(usize, usize)> = chosen.iter().filter(|r| !r.cover).map(|r| (r.artist, r.album)).collect();
-            if !coverless.is_empty() && app.busy.is_none() && widgets::icon_link(ui, Icon::Image, format!("find covers ({})", coverless.len())).clicked() {
+            if !coverless.is_empty() && app.busy.is_none() && widgets::icon_link(ui, Icon::Image, format!("Find covers ({})", coverless.len())).clicked() {
                 actions.push(Action::FindCovers(coverless));
             }
-            if widgets::icon_link(ui, Icon::Play, "play").clicked() {
+            if widgets::icon_link(ui, Icon::Play, "Play").clicked() {
                 actions.push(Action::Play(songs, 0));
             }
-            if widgets::icon_link(ui, Icon::Close, "clear").on_hover_text("or press Esc").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Clear").on_hover_text("or press Esc").clicked() {
                 actions.push(Action::ClearAlbums);
             }
         });

@@ -45,7 +45,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 }
             }
             ui.add_space(S1);
-            if icon_link(ui, Icon::Add, "new playlist").clicked() {
+            if icon_link(ui, Icon::Add, "New playlist").clicked() {
                 todo.push(Do::New);
             }
             ui.add_space(S2);
@@ -74,14 +74,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                     ui.data_mut(|d| d.remove::<String>(draft_id));
                 }
-                if !r.has_focus() && icon_button(ui, Icon::Rename, "rename").clicked() {
+                if !r.has_focus() && icon_button(ui, Icon::Rename, "Rename").clicked() {
                     r.request_focus();
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if icon_link(ui, Icon::Trash, "delete").on_hover_text("undo brings it back").clicked() {
+                    if icon_link(ui, Icon::Trash, "Delete").on_hover_text("undo brings it back").clicked() {
                         todo.push(Do::Delete(pi));
                     }
-                    if icon_link(ui, Icon::Play, "play").clicked() {
+                    if icon_link(ui, Icon::Play, "Play").clicked() {
                         play = Some(0);
                     }
                 });
@@ -119,13 +119,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             }
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if icon_button(ui, Icon::Close, "remove from the playlist").clicked() {
+                            if icon_button(ui, Icon::Close, "Remove from the playlist").clicked() {
                                 todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
                             }
-                            if n + 1 < pl.tracks.len() && icon_button(ui, Icon::Down, "move down").clicked() {
+                            if n + 1 < pl.tracks.len() && icon_button(ui, Icon::Down, "Move down").clicked() {
                                 todo.push(Do::Swap(pi, n, n + 1, format!("moving “{title}” down")));
                             }
-                            if n > 0 && icon_button(ui, Icon::Up, "move up").clicked() {
+                            if n > 0 && icon_button(ui, Icon::Up, "Move up").clicked() {
                                 todo.push(Do::Swap(pi, n, n - 1, format!("moving “{title}” up")));
                             }
                         });

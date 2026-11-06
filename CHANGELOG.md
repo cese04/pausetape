@@ -861,3 +861,16 @@ Calibre's device view, for music: the library is where you choose what goes on t
   where the offer comes back (taking a card over), or **Done** where there's nothing to cancel.
 - In the card tab the card's path gives way to *Change card…*, shortened with "…" and shown
   whole on hover, so the button is never pushed out of a narrow window.
+
+### 72. Commands in sentence case; one word for each thing (2026-11-05)
+- Every command now starts with a capital, as buttons did already: *Rescan*, *Edit tags*,
+  *Find cover*, *Open folder*, *Tick all*, the tabs (*Library*, *Card*…), *Artists* and
+  *Albums*. Before, buttons were capitalised and the links beside them weren't. Descriptions
+  and states stay in lower case.
+- The card's states are said one way everywhere: *on the card*, *added at the next Sync*,
+  *taken off at the next Sync* (in the album table, shortened to *added at Sync* and *taken off
+  at Sync*); before, the same state was also *on card*, *at next sync* or *coming off*. Sync is
+  always written with a capital, as on its button. *Send to card* became **Send to the card**.
+- What the app called a *write* (what a card gets, its names and order, its record of what's
+  there) is a **card setup** wherever it's shown: the card tab's list is *Card setups*, and
+  "this write" became "this setup". The code keeps its names.

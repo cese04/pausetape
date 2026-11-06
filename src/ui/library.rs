@@ -189,23 +189,23 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }
         filters_menu(app, ui);
         let typed = app.filter.trim().to_string();
-        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "save").on_hover_text("keep this search for later, beside the box").clicked() {
+        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "Save").on_hover_text("keep this search for later, beside the box").clicked() {
             app.saved.searches.push(typed);
         }
         saved_searches(app, ui);
         ui.add_space(S1);
-        if widgets::tab(ui, "artists", !app.saved.album_table).on_hover_text("albums by artist, with their songs").clicked() {
+        if widgets::tab(ui, "Artists", !app.saved.album_table).on_hover_text("albums by artist, with their songs").clicked() {
             app.saved.album_table = false;
         }
-        if widgets::tab(ui, "albums", app.saved.album_table).on_hover_text("a table of albums: sort by any column, select several").clicked() {
+        if widgets::tab(ui, "Albums", app.saved.album_table).on_hover_text("a table of albums: sort by any column, select several").clicked() {
             app.saved.album_table = true;
         }
         ui.add_space(S1);
-        if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "collapse all").clicked() {
+        if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
             app.expanded.clear();
         }
         let dirty = app.dirty_in_files();
-        if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("write {dirty} corrected tags to source files")).clicked() {
+        if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("Write {dirty} corrected tags to source files")).clicked() {
             app.save_tags_to_source();
         }
     });
@@ -304,7 +304,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         theme::panel_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             row_wrapped(ui, |ui| {
-                if widgets::button_with(ui, Icon::Back, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                if widgets::button_with(ui, Icon::Back, "Back to the whole library").on_hover_text("or press Esc").clicked() {
                     app.look_alikes_only = false;
                 }
                 ui.add_space(S1);
@@ -320,7 +320,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         theme::panel_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             row_wrapped(ui, |ui| {
-                if widgets::button_with(ui, Icon::Back, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                if widgets::button_with(ui, Icon::Back, "Back to the whole library").on_hover_text("or press Esc").clicked() {
                     app.duplicates_only = false;
                 }
                 ui.add_space(S1);
@@ -331,7 +331,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.add_space(S1);
                 let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
                 let hint = "Each copy goes only while the copy that covers it is still there: its folder, or only its songs if the folder holds other music. You can put them back from the Trash.";
-                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("move all {} covered copies to the Trash ({})", spare.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("Move all {} covered copies to the Trash ({})", spare.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
                     actions.push(Action::TrashCopies(spare));
                 }
             }
@@ -340,7 +340,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.add_space(S1);
                 let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
                 let hint = "Each extra copy is checked against the copy that stays first, and goes only if they're still the same file. You can put them back from the Trash.";
-                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("Move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
                     actions.push(Action::TrashRepeats(repeats));
                 }
             }
@@ -407,7 +407,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 let r = ui
                     .horizontal(|ui| {
                         let meta = format!("{} · {}", plural(artist.albums.len(), "album"), plural(n_tracks, "track"));
-                        let card_link = if whole { "take all off the card" } else { "send all to the card" };
+                        let card_link = if whole { "Take all off the card" } else { "Send all to the card" };
                         let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - widgets::text_width(ui, card_link, 14.0) - 70.0;
                         let name = RichText::new(&artist.name).size(20.0).color(ink.text);
                         let r = widgets::fitted(ui, name, name_w, Sense::click()).on_hover_text(&artist.name);
@@ -478,9 +478,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         let chosen = app.write().custom.includes(ck, al, &artist.albums);
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             let (text, hint) = if chosen {
-                                ("take off card", "Takes it off the card at the next Sync.")
+                                ("Take off the card", "Takes it off the card at the next Sync.")
                             } else {
-                                ("send to card", "Copies it to the card at the next Sync. Of several editions, this one goes.")
+                                ("Send to the card", "Copies it to the card at the next Sync. Of several editions, this one goes.")
                             };
                             if widgets::icon_link(ui, if chosen { Icon::Remove } else { Icon::Add }, text).on_hover_text(hint).clicked() {
                                 actions.push(Action::CardAlbum(ai, bi, !chosen));
@@ -489,28 +489,28 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             if chosen
                                 && let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()).filter(|s| s.higher)
                                 && let Some(better) = artist.albums.iter().position(|o| o.base_id(ck) == al.base_id(ck) && o.edition.as_ref().is_some_and(|e| e.rank == s.rank))
-                                && widgets::icon_link(ui, Icon::Copy, format!("use the {} copy", s.format))
+                                && widgets::icon_link(ui, Icon::Copy, format!("Use the {} copy", s.format))
                                     .on_hover_text(format!("{} has all these songs in higher quality. It replaces this copy on the card at the next Sync.", s.label))
                                     .clicked()
                             {
                                 actions.push(Action::CardAlbum(ai, better, true));
                             }
-                            if widgets::icon_link(ui, Icon::Rename, "edit tags")
+                            if widgets::icon_link(ui, Icon::Rename, "Edit tags")
                                 .on_hover_text("Album, artists, year, numbers and titles. To edit any songs together, ⌘-click them.")
                                 .clicked()
                             {
                                 actions.push(Action::EditTags(al.tracks.clone()));
                             }
-                            if widgets::icon_link(ui, Icon::Search, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
+                            if widgets::icon_link(ui, Icon::Search, "Look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
                                 actions.push(Action::LookupAlbum(ai, bi));
                             }
                             if no_cover
                                 && app.busy.is_none()
-                                && widgets::icon_link(ui, Icon::Image, "find cover").on_hover_text(covers_hint(device, "No cover in the songs. Looks in the album's folder, then on the Cover Art Archive.")).clicked()
+                                && widgets::icon_link(ui, Icon::Image, "Find cover").on_hover_text(covers_hint(device, "No cover in the songs. Looks in the album's folder, then on the Cover Art Archive.")).clicked()
                             {
                                 actions.push(Action::FindCovers(vec![(ai, bi)]));
                             }
-                            if widgets::icon_link(ui, Icon::Play, "play").clicked() {
+                            if widgets::icon_link(ui, Icon::Play, "Play").clicked() {
                                 actions.push(Action::Play(al.tracks.clone(), 0));
                             }
                         });
@@ -655,11 +655,11 @@ pub(super) fn album_status(app: &App, ck: &str, artist: &crate::library::groupin
         (0, _) => {
             // Another copy of the album taking its place?
             let swapped = artist.albums.iter().any(|o| o.base_id(ck) == al.base_id(ck) && o.tracks.iter().any(|i| cs.planned.contains(i)));
-            (Some(Mark::Removing), if swapped { "swapped for the other copy at the next sync" } else { "taken off at the next sync" }.into())
+            (Some(Mark::Removing), if swapped { "swapped for the other copy at the next Sync" } else { "taken off at the next Sync" }.into())
         }
-        (p, _) if staying == p => (Some(Mark::On), "on card".into()),
-        (_, 0) => (Some(Mark::Adding), "added at the next sync".into()),
-        (p, _) => (Some(Mark::Adding), format!("{staying} of {p} on card, the rest at the next sync")),
+        (p, _) if staying == p => (Some(Mark::On), "on the card".into()),
+        (_, 0) => (Some(Mark::Adding), "added at the next Sync".into()),
+        (p, _) => (Some(Mark::Adding), format!("{staying} of {p} on the card, the rest at the next Sync")),
     }
 }
 
@@ -712,7 +712,7 @@ fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::lib
         ui.label(RichText::new(format!("Edition {} has all these songs {how}; this copy could go ({}).", s.rank + 1, text::bytes(bytes))).size(12.5).italics().color(ink.text))
             .on_hover_text(format!("Edition {}: {}.\nUntil this copy goes, the card gets only one edition anyway.", s.rank + 1, s.label));
         let hint = "Moves this copy's folder to the Trash (or only its songs, if the folder holds other music), as long as the copy that covers it is still there. You can put it back from the Trash.";
-        if can_trash && widgets::icon_link(ui, Icon::Trash, "move it to the Trash").on_hover_text(hint).clicked() {
+        if can_trash && widgets::icon_link(ui, Icon::Trash, "Move it to the Trash").on_hover_text(hint).clicked() {
             trash();
         }
     });
@@ -738,7 +738,7 @@ fn repeats_note(ui: &mut Ui, app: &App, al: &crate::library::grouping::AlbumNode
         let songs = if n == 1 { "1 song is".to_string() } else { format!("{n} songs are") };
         ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(12.5).italics().color(ink.warn));
         let hint = "Moves the extra copies to the Trash, each only if it's still the same file as the copy that stays (the one with the shorter name). You can put them back from the Trash.";
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, "move the extra copies to the Trash").on_hover_text(hint).clicked() {
+        if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, "Move the extra copies to the Trash").on_hover_text(hint).clicked() {
             actions.push(Action::TrashRepeats(al.repeats.clone()));
         }
     });
@@ -762,7 +762,7 @@ fn album_folders(ui: &mut Ui, tracks: &[Track], idxs: &[usize], root: &Path) {
             n => format!("{} and {} more folders", text::shorten(&rel(first), FOLDER_CHARS - 20), n - 1),
         };
         // "open folder" goes first so a long path can never push it out of view.
-        if widgets::icon_link(ui, Icon::Folder, "open folder").clicked() {
+        if widgets::icon_link(ui, Icon::Folder, "Open folder").clicked() {
             crate::platform::reveal(first);
         }
         if idxs.iter().any(|&i| tracks[i].cue.is_some()) {
@@ -785,7 +785,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
             Lookup::Failed(e) => {
                 row_wrapped(ui, |ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
-                    if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
+                    if widgets::icon_link(ui, Icon::Close, "Dismiss").clicked() {
                         actions.push(Action::Dismiss(id.to_string()));
                     }
                 });
@@ -806,7 +806,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                         row(ui, |ui| {
                             widgets::icon(ui, Icon::Check, ink.muted);
                             muted(ui, "Your tags already agree.");
-                            if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
+                            if widgets::icon_link(ui, Icon::Close, "Dismiss").clicked() {
                                 actions.push(Action::Dismiss(id.to_string()));
                             }
                         });
@@ -836,19 +836,19 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                     ui.add_space(S1);
                     row(ui, |ui| {
                         ui.add_enabled_ui(n > 0, |ui| {
-                            let text = if n == 0 { "apply".to_string() } else { format!("apply {}", plural(n, "change")) };
+                            let text = if n == 0 { "Apply".to_string() } else { format!("Apply {}", plural(n, "change")) };
                             if widgets::primary_with(ui, Icon::Check, text).on_hover_text("Corrects these tags in the library; the files change when you write the corrected tags.").clicked() {
                                 actions.push(Action::ApplyLookup(id.to_string()));
                             }
                         });
-                        if widgets::button_with(ui, Icon::Close, "dismiss").on_hover_text("Keeps your tags as they are.").clicked() {
+                        if widgets::button_with(ui, Icon::Close, "Dismiss").on_hover_text("Keeps your tags as they are.").clicked() {
                             actions.push(Action::Dismiss(id.to_string()));
                         }
                         ui.add_space(S1);
-                        if n < changes.len() && link(ui, "choose all").clicked() {
+                        if n < changes.len() && link(ui, "Choose all").clicked() {
                             changes.iter_mut().for_each(|c| c.accept = true);
                         }
-                        if n > 0 && link(ui, "none").clicked() {
+                        if n > 0 && link(ui, "None").clicked() {
                             changes.iter_mut().for_each(|c| c.accept = false);
                         }
                     });
@@ -928,7 +928,7 @@ const QUICK_FILTERS: &[(&str, &str)] = &[
 /// A menu of common search terms; ticking one adds it to the search box, unticking removes it.
 fn filters_menu(app: &mut App, ui: &mut Ui) {
     let active = QUICK_FILTERS.iter().filter(|(term, _)| app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term))).count();
-    let label = if active > 0 { format!("filters ({active})") } else { "filters".to_string() };
+    let label = if active > 0 { format!("Filters ({active})") } else { "Filters".to_string() };
     ui.menu_button(RichText::new(label).color(ink(ui).muted), |ui| {
         for (term, what) in QUICK_FILTERS {
             let mut on = app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term));
@@ -956,11 +956,11 @@ fn covers_panel(app: &mut App, ui: &mut Ui, query: &crate::library::search::Quer
             ui.label(RichText::new(what).color(ink.text));
             if !albums.is_empty() && app.busy.is_none() {
                 let hint = "For each album: an image in its folder (cover.jpg, folder.jpg…) if there is one, else the front cover of the matching MusicBrainz release, from the Cover Art Archive (about two seconds an album). Nothing changes in your files until you write corrected tags.";
-                if widgets::button_with(ui, Icon::Image, format!("find covers for {}", if albums.len() == 1 { "it".to_string() } else { format!("these {}", albums.len()) })).on_hover_text(hint).clicked() {
+                if widgets::button_with(ui, Icon::Image, format!("Find covers for {}", if albums.len() == 1 { "it".to_string() } else { format!("these {}", albums.len()) })).on_hover_text(hint).clicked() {
                     actions.push(Action::FindCovers(albums.clone()));
                 }
             }
-            if widgets::icon_link(ui, Icon::Close, "show everything").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Show everything").clicked() {
                 app.filter.clear();
             }
         });
@@ -988,7 +988,7 @@ fn saved_searches(app: &mut App, ui: &mut Ui) {
             app.filter = if active { String::new() } else { s.clone() };
         }
         r.context_menu(|ui| {
-            if widgets::icon_link(ui, Icon::Close, "forget this search").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Forget this search").clicked() {
                 forget = Some(i);
                 ui.close();
             }

@@ -176,7 +176,7 @@ App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
 ## Safety rules the code keeps
 
 - The **music folder is read-only** unless the user runs *Reorganise* (with preview and undo),
-  *write corrected tags to source files*, *add music* (copies into `Added`), or moves extra
+  *write corrected tags to source files*, *Add music…* (copies into `Added`), or moves extra
   copies to the Trash (only while the copy that stays is there; recoverable from the Trash).
 - A **card write never deletes a file it didn't create**, and not even those if the size
   changed since. *Take over the card* only moves files on the card (with an undo record), on

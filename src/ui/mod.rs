@@ -128,11 +128,11 @@ fn header(app: &mut App, ui: &mut Ui) {
         // In a narrow window only the open tab keeps its name; the others show their icon.
         let compact = ui.available_width() < 900.0;
         for (t, icon, name) in [
-            (Tab::Folders, Icon::Folder, "folders"),
-            (Tab::Library, Icon::Library, "library"),
-            (Tab::Card, Icon::Card, "card"),
-            (Tab::Playlists, Icon::Playlists, "playlists"),
-            (Tab::Settings, Icon::Settings, "settings"),
+            (Tab::Folders, Icon::Folder, "Folders"),
+            (Tab::Library, Icon::Library, "Library"),
+            (Tab::Card, Icon::Card, "Card"),
+            (Tab::Playlists, Icon::Playlists, "Playlists"),
+            (Tab::Settings, Icon::Settings, "Settings"),
         ] {
             let active = app.tab == t;
             if widgets::nav_tab(ui, icon, name, !compact || active, active).on_hover_text(name).clicked() {
@@ -189,10 +189,10 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
         ui.allocate_ui(egui::vec2(ui.available_width() - S5 - undo_w, 0.0), |ui| {
             ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
         });
-        if offers_undo && widgets::icon_link(ui, Icon::Back, "undo (⌘Z)").clicked() {
+        if offers_undo && widgets::icon_link(ui, Icon::Back, "Undo (⌘Z)").clicked() {
             app.undo_last();
         }
-        if widgets::icon_button(ui, Icon::Close, "dismiss").clicked() {
+        if widgets::icon_button(ui, Icon::Close, "Dismiss").clicked() {
             app.notices.clear();
         }
     });

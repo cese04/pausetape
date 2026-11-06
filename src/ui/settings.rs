@@ -54,10 +54,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             help(ui, "Rescans only open files that are new or changed since they were last read.");
             ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(12.0).color(ink(ui).muted)).truncate());
             row(ui, |ui| {
-                if app.busy.is_none() && icon_link(ui, Icon::Rescan, "read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
+                if app.busy.is_none() && icon_link(ui, Icon::Rescan, "Read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
                     app.read_all_again();
                 }
-                if icon_link(ui, Icon::Trash, "forget stored tags").on_hover_text("asks first; unsaved corrections are kept").clicked() {
+                if icon_link(ui, Icon::Trash, "Forget stored tags").on_hover_text("asks first; unsaved corrections are kept").clicked() {
                     app.confirm = Some(crate::app::Confirm::ForgetTags);
                 }
             });
@@ -76,7 +76,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             for (i, (a, b)) in p.merges.iter().enumerate() {
                 row(ui, |ui| {
                     ui.label(format!("“{}” and “{}”: the same artist", name(a), name(b)));
-                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                    if icon_link(ui, Icon::Close, "Undo").clicked() {
                         undo = Some(Undo::Merge(i));
                     }
                 });
@@ -84,7 +84,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             for (a, b) in &p.rejected {
                 row(ui, |ui| {
                     ui.label(format!("“{}” and “{}”: different artists", name(a), name(b)));
-                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                    if icon_link(ui, Icon::Close, "Undo").clicked() {
                         undo = Some(Undo::Reject(a.clone(), b.clone()));
                     }
                 });
@@ -92,7 +92,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             for (k, n) in &p.names {
                 row(ui, |ui| {
                     ui.label(format!("{k} shown as “{n}”"));
-                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                    if icon_link(ui, Icon::Close, "Undo").clicked() {
                         undo = Some(Undo::Name(k.clone()));
                     }
                 });

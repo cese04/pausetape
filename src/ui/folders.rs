@@ -121,7 +121,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         ui.set_width(ui.available_width());
         step_title(ui, "2", "Your SD card");
         if app.saved.writes.len() > 1 {
-            muted(ui, format!("for the write “{write_name}”"));
+            muted(ui, format!("for the card setup “{write_name}”"));
         }
         ui.add_space(S1);
         match &dest {
@@ -309,7 +309,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     muted(
         ui,
-        "You don't need this to use the card: writes read your music wherever it is. Use it only if you want the folder on this computer renamed into Artist / Album / Track as well. It moves files, and can be undone.",
+        "You don't need this to use the card: Sync reads your music wherever it is. Use it only if you want the folder on this computer renamed into Artist / Album / Track as well. It moves files, and can be undone.",
     );
     if app.saved.source.is_none() || app.tracks.is_empty() {
         return;
@@ -333,7 +333,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
         if app.tidy_plan.is_some() && app.busy.is_none() && button_with(ui, Icon::Folder, "Reorganise now").clicked() {
             app.run_tidy();
         }
-        if crate::card::latest_journal().is_some() && icon_link(ui, Icon::Back, "undo last reorganise").clicked() {
+        if crate::card::latest_journal().is_some() && icon_link(ui, Icon::Back, "Undo last reorganise").clicked() {
             app.undo();
         }
     });

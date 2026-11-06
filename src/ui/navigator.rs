@@ -186,7 +186,7 @@ impl Navigator {
                 }
             }
             let picker = if is_computer(&self.dir) { rfd::FileDialog::new() } else { rfd::FileDialog::new().set_directory(&self.dir) };
-            if link(ui, "system picker…").clicked()
+            if link(ui, "System picker…").clicked()
                 && let Some(p) = picker.pick_folder()
             {
                 go = Some(p);

@@ -145,7 +145,7 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 8. Narrow the window to its minimum: nothing overlaps the A–Z rail; long names end in "…".
 
 ### C. Playback and formats
-9. Click a track: it plays; the waveform appears; cover art shows if the album has any.
+9. Double-click a track: it plays (a single click selects it); the waveform appears; cover art shows if the album has any.
 10. Previous / play-pause / next buttons, seeking by clicking the waveform, space, ←/→, N/P.
 11. An M4A (AAC) plays and shows a "M4A · not on RECHO" badge. With ffmpeg: an Opus or Dolby
     file plays after a short "converting with ffmpeg…".
@@ -174,20 +174,21 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     album's year changes, those songs say *edited*, and the toolbar offers *write N corrected
     tags*. ⌘-click (Ctrl-click) two songs of different albums, then **edit their tags**: boxes
     whose values differ say "several values"; type an artist, save: both songs move under it.
-    Right-click a song: the menu offers editing it, its album, or the selection. Esc clears the
-    selection; a year like "nineties" keeps **Save** off.
+    Right-click a song: the same menu as on an album's title or an artist's name (Play, Add
+    to playlist ▸, Send to the card, Edit tags…), for the whole selection if the song is in
+    one. Esc clears the selection; a year like "nineties" keeps **Save** off.
 14d. Library › **N albums without a cover** › **find covers for these** (try a few first, with
     **find cover** on one album): the line under the tabs counts albums; afterwards the message
     says how many came from folders and from the Cover Art Archive, and those not found are
     listed. Play one: the player shows the new cover and offers **don't**. Sync: the card copies
     have it embedded (the Echo Mini shows it).
-14e. Search `format:flac year:1990..1999`, then `-format:flac`, `cover:no`, `card:on`; **filters**
+14e. Search `format:flac year:1990..1999`, then `-format:flac`, `cover:no`, `card:on`; **Filters**
     ticks and unticks the same terms; **save** keeps a search as a button beside the box.
 14f. **albums**: a table of albums. Sort by size (largest first), by year, by format. Click,
-    ⌘-click and shift-click to select; the bar's **send to card** marks them for the next Sync.
+    ⌘-click and shift-click to select; the bar's **Send to the card** marks them for the next Sync.
 14g. Duplicates view › **move it to the Trash** on a covered copy: its folder is in the Trash
     (only its songs, if the folder holds other music), and the library rescans.
-14h. **add music** › choose a folder with an album the library doesn't have and one it has: the
+14h. **Add music…** › choose a folder with an album the library doesn't have and one it has: the
     dialog counts them apart; **Add them** copies the new one under `Added` and rescans.
 
 ### E. The card
@@ -217,15 +218,15 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     stick. Choose **all lossless songs as MP3 320**: FLAC songs are MP3s on the stick, and the
     space chosen drops to about a quarter. With more chosen than fits, the card tab lists the
     savings and the artists taking most room; **leave out** unticks one. After
-    a write, the library shows "on card" on the albums written.
+    a write, the library shows "on the card" on the albums written.
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).
-19a. In the library, **take off card** on an album that's on the card: its songs get a struck red
-    ring and "taken off at the next sync"; **send to card** on another: rings and "added at the
-    next sync". The strip above the list and the card tab's pinned panel count both. **Sync**
+19a. In the library, **Take off the card** on an album that's on the card: its songs get a struck red
+    ring and "taken off at the next Sync"; **Send to the card** on another: rings and "added at
+    the next Sync". The strip above the list and the card tab's pinned panel count both. **Sync**
     (on either): the marks become dots, and the card has exactly that change. With the card
     unplugged, the marks and counts stay the same; *Sync* says "card not connected".
-19b. **New** write: nothing is chosen. **send all to the card** on an artist: all its albums
+19b. **New** write: nothing is chosen. **Send all to the card** on an artist: all its albums
     (one edition each) are chosen; a new album of that artist added to the music folder is
     chosen after a rescan.
 19c. An album whose songs name different artists (a duet without an album-artist tag, a
@@ -251,7 +252,7 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     converted (AAC, APE, WMA and Ogg go as they are), and the library's badges and the card
     tab's *Formats … can't play* say "the Echo Mini" instead of "RECHO". Switch back to RECHO
     and the counts return.
-20b. **test it on the player** › **Write the test folder to the card**: the card gets
+20b. **Test it on the player** › **Write the test folder to the card**: the card gets
     `Pausetape format test/` (17 samples, or 16 without an APE song in the library) and
     `Pausetape format test.m3u8`. The card tab doesn't count them as music the write didn't put
     there. Try them on the player and tick yes or no; the text at the bottom says what changes.
@@ -272,7 +273,29 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 21. Create a playlist, add tracks with the **+** at the end of a track row, reorder, include
     it in the write (card tab), write: a numbered folder appears under `_Playlists`.
 
-### G. Odds and ends
+### G. Keyboard, undo and asking first
+21a. Press Tab a few times: a ring in the accent moves from control to control; Space presses
+    the one with the ring. A mouse click never shows the ring. With VoiceOver (⌘F5) or Narrator
+    (Ctrl+Win+Enter), controls are read with their names ("Rescan, button").
+21b. Library: click a song (it's highlighted, nothing plays), ↓ and ↑ move the highlight and
+    scroll to it, Shift+↓ adds the next song, **Enter** plays. In **Albums**, the same with
+    rows. **⌘A** (Ctrl+A) selects all shown, **⌘I** opens the tag editor, **⌘D** sends the
+    selected albums to the card (again: takes them off). **⌘F** jumps to the search box,
+    **⌘⇧S** syncs. Settings › Keyboard lists them with the right key names for your system.
+21c. Delete a playlist: the notice offers **Undo (⌘Z)**; press it, the playlist is back (also
+    ticked in the card tab if it was). Send an album to the card, then ⌘Z: it's off again.
+    While typing in a field, ⌘Z undoes the typing only.
+21d. Rename a playlist to the name of another (or to nothing): a notice refuses and the old
+    name stays.
+21e. Card tab › with two card setups, **Delete** one: a dialog says what goes with it and asks
+    first. Settings › **Forget stored tags** asks first too.
+21f. Drag a folder of music from Explorer / the file manager over the window: the page says to
+    drop it; drop it: the *add music* dialog checks it against the library. A single file is
+    turned down with a note to drop its folder.
+21g. Right-click an artist's name, an album's title, a row of the album table and a playlist's
+    song: the same menu each time. **Add to playlist ▸ New playlist** makes one with those songs.
+
+### H. Odds and ends
 22. HiDPI / scaled display (125%, 150%): crisp text, nothing cut off.
 23. Names with accents (Beyoncé) and, if you have any, Chinese/Japanese/Korean titles.
 24. Quit and reopen: the music folder, card, writes and playlists are remembered.

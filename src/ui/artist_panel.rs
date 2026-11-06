@@ -23,10 +23,10 @@ pub(super) fn look_alikes(app: &App, ui: &mut Ui, cluster: usize, actions: &mut 
             ui.add_space(S1);
             ui.label(RichText::new("≈").color(ink.warn));
             muted(ui, format!("looks like “{}” ({})", other.name, plural(songs, "song")));
-            if icon_link(ui, Icon::Check, "same artist").on_hover_text("One artist from now on, under the name most songs use.").clicked() {
+            if icon_link(ui, Icon::Check, "Same artist").on_hover_text("One artist from now on, under the name most songs use.").clicked() {
                 actions.push(Action::Merge(s.a, s.b));
             }
-            if icon_link(ui, Icon::Close, "different artists").on_hover_text("Not asked again. Settings › Artist decisions can undo it.").clicked() {
+            if icon_link(ui, Icon::Close, "Different artists").on_hover_text("Not asked again. Settings › Artist decisions can undo it.").clicked() {
                 actions.push(Action::Reject(s.a, s.b));
             }
         });
@@ -78,7 +78,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
             Some(ArtistState::Failed(e)) => {
                 row_wrapped(ui, |ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
-                    if icon_link(ui, Icon::Rescan, "try again").clicked() {
+                    if icon_link(ui, Icon::Rescan, "Try again").clicked() {
                         actions.push(Action::AskArtistInfo(cluster, None));
                     }
                 });
@@ -87,7 +87,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                 muted(ui, if hits.is_empty() { "MusicBrainz has no artist by this name." } else { "Which of these MusicBrainz artists is it?" });
                 for h in hits {
                     row(ui, |ui| {
-                        if icon_link(ui, Icon::Check, "this one").clicked() {
+                        if icon_link(ui, Icon::Check, "This one").clicked() {
                             actions.push(Action::AskArtistInfo(cluster, Some(h.id.clone())));
                         }
                         ui.label(&h.name);
@@ -142,37 +142,37 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                     actions.push(Action::Renaming(cluster, text.clone()));
                 }
                 let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if enter || icon_link(ui, Icon::Check, "rename in the tags").clicked() {
+                if enter || icon_link(ui, Icon::Check, "Rename in the tags").clicked() {
                     actions.push(Action::Rename(cluster, text));
                 }
-                if icon_link(ui, Icon::Close, "cancel").clicked() {
+                if icon_link(ui, Icon::Close, "Cancel").clicked() {
                     actions.push(Action::StopRenaming);
                 }
                 return;
             }
             let hint = "Changes the artist and album artist of its songs, as corrections: written into the files when you write corrected tags, and into card copies.";
-            if icon_link(ui, Icon::Rename, "rename").on_hover_text(hint).clicked() {
+            if icon_link(ui, Icon::Rename, "Rename").on_hover_text(hint).clicked() {
                 actions.push(Action::Renaming(cluster, c.name.clone()));
             }
             if let Some(i) = info
                 && !i.name.is_empty()
                 && i.name != c.name
-                && icon_link(ui, Icon::Check, format!("use MusicBrainz's name “{}”", i.name)).on_hover_text(hint).clicked()
+                && icon_link(ui, Icon::Check, format!("Use MusicBrainz's name “{}”", i.name)).on_hover_text(hint).clicked()
             {
                 actions.push(Action::Rename(cluster, i.name.clone()));
             }
             match state {
                 Some(ArtistState::Unasked) => {
-                    if icon_link(ui, Icon::Search, "look up on MusicBrainz").on_hover_text("Who they are, and where to buy or hear more of their music.").clicked() {
+                    if icon_link(ui, Icon::Search, "Look up on MusicBrainz").on_hover_text("Who they are, and where to buy or hear more of their music.").clicked() {
                         actions.push(Action::AskArtistInfo(cluster, None));
                     }
                 }
                 Some(ArtistState::Found { info, fetched }) => {
-                    if icon_link(ui, Icon::Search, "not this artist?").on_hover_text("Choose another MusicBrainz artist by this name.").clicked() {
+                    if icon_link(ui, Icon::Search, "Not this artist?").on_hover_text("Choose another MusicBrainz artist by this name.").clicked() {
                         actions.push(Action::ChooseArtist(cluster));
                     }
                     let since = super::text::ago(*fetched);
-                    if icon_link(ui, Icon::Rescan, "refresh").on_hover_text(format!("Asked {since}.")).clicked() {
+                    if icon_link(ui, Icon::Rescan, "Refresh").on_hover_text(format!("Asked {since}.")).clicked() {
                         actions.push(Action::AskArtistInfo(cluster, Some(info.mbid.clone())));
                     }
                 }

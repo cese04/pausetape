@@ -35,9 +35,9 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 - **Leads to more of an artist's music.** Open an artist for their genres and years and links
   to buy it (Bandcamp, Qobuz, Discogs…), hear it first (Spotify, Tidal…) and find what's
   related (last.fm, Rate Your Music), from MusicBrainz.
-- **Writes to the card the way you want it.** Saved *writes* choose which artists, albums and
-  playlists go on a card, what they're called there and in what order. Rewrites copy only what
-  changed and remove only files they put there themselves.
+- **Writes to the card the way you want it.** Saved *card setups* choose which artists, albums
+  and playlists go on a card, what they're called there and in what order. Each Sync copies only
+  what changed and removes only files it put there itself.
 - **Playlists for a player without playlists:** folders of numbered copies (FAT/exFAT cards
   can't hold symlinks).
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks

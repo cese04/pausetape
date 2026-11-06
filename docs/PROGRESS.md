@@ -205,8 +205,8 @@ Smaller items, ordered by value.
 
 ### Library
 
-- **Keyboard navigation:** ↑/↓ through tracks, Enter to play, `/` or ⌘F to jump to the filter,
-  Esc to clear it. *S*
+- ~~**Keyboard navigation.**~~ *Done 2026-11-05:* ↑/↓ through songs or albums, Enter to play,
+  ⌘F to the search box, ⌘A, ⌘I, ⌘D, ⌘⇧S, ⌘Z; listed in Settings › Keyboard.
 - **Cover thumbnails** next to album titles; optionally an album grid view. *M*
 - **Remember expanded artists and scroll position** between launches. *S*
 - **Look up every album** in one go, as a queue with progress, then review the suggestions
