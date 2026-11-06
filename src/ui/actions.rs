@@ -52,6 +52,8 @@ pub(super) enum Action {
     ShowGenre(String),
     /// An album selected, its details shown (beside the library, or as a sheet).
     Details(usize, usize),
+    /// Find these songs' lyrics ahead of time.
+    FindLyrics(Vec<usize>),
     /// Songs after the one playing; at the end of the queue.
     PlayNext(Vec<usize>),
     AddToQueue(Vec<usize>),
@@ -163,6 +165,7 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                 app.details_sheet = !app.details_beside;
             }
             Action::PlayNext(songs) => app.play_next(&songs),
+            Action::FindLyrics(songs) => app.find_lyrics(&songs),
             Action::AddToQueue(songs) => app.add_to_queue(&songs),
             Action::NewPlaylistWith(songs) => {
                 app.new_playlist();

@@ -9,6 +9,7 @@ mod app;
 mod audio;
 mod card;
 mod library;
+mod lyrics;
 mod musicbrainz;
 mod platform;
 mod ui;

@@ -36,6 +36,8 @@ impl App {
             && i < self.queue.len()
         {
             self.qpos = i;
+            // The lyrics follow the song that's begun, not one chosen before it.
+            self.lyrics_song = None;
             self.show_current();
         }
     }

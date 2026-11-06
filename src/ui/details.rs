@@ -7,12 +7,12 @@ use egui::{Align2, FontId, RichText, ScrollArea, Sense, Ui, vec2};
 
 use super::actions::Action;
 use super::icons::Icon;
-use super::layout::{ROW, S1, S2, S3};
+use super::layout::{ROW, S1, S2, S3, row};
 use super::library::{Mark, album_status};
 use super::text::{self, plural};
 use super::theme::ink;
 use super::widgets;
-use crate::app::App;
+use crate::app::{App, LyricsState};
 
 /// The panel's width, and the least the library keeps beside it.
 pub const WIDTH: f32 = 300.0;
@@ -184,8 +184,21 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         super::library::lookup_block(ui, &app.tracks, &id, l, actions);
     }
     ui.add_space(S2);
-    widgets::caps(ui, "songs");
-    ui.add_space(S1 / 2.0);
+    // Its songs, or one song's lyrics.
+    row(ui, |ui| {
+        if widgets::tab(ui, "Songs", !app.details_lyrics).clicked() {
+            app.details_lyrics = false;
+        }
+        ui.add_space(S2);
+        if widgets::tab(ui, "Lyrics", app.details_lyrics).on_hover_text("the words of the song playing (in time), or of another of the album's").clicked() {
+            app.details_lyrics = true;
+        }
+    });
+    ui.add_space(S1);
+    if app.details_lyrics {
+        lyrics(app, ui, &tracks, actions);
+        return;
+    }
     let current = app.current();
     for (pos, &t) in tracks.iter().enumerate() {
         let track = &app.tracks[t];
@@ -207,6 +220,111 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
             actions.push(Action::Play(tracks.clone(), pos));
         }
         resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
+    }
+}
+
+/// One of the album's songs' lyrics: the song playing (following the singing, a click on a
+/// line going there), else the one chosen with the arrows, the one selected, or the first.
+fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action>) {
+    let ink = ink(ui);
+    let current = app.current().filter(|c| tracks.contains(c));
+    let selected = tracks.iter().copied().find(|t| app.selected.contains(t));
+    let t = app.lyrics_song.filter(|t| tracks.contains(t)).or(current).or(selected).unwrap_or(tracks[0]);
+    let pos = tracks.iter().position(|&x| x == t).unwrap_or(0);
+    // Which song: its title between arrows to the one before and after.
+    row(ui, |ui| {
+        ui.add_enabled_ui(pos > 0, |ui| {
+            if widgets::icon_button(ui, Icon::Back, "The song before").clicked() {
+                app.lyrics_song = Some(tracks[pos - 1]);
+            }
+        });
+        let title = app.tracks[t].display_title();
+        let w = ui.available_width() - ROW - S1;
+        widgets::fitted(ui, RichText::new(&title).size(15.0).color(if current == Some(t) { ink.accent } else { ink.text }), w, Sense::hover()).on_hover_text(&title);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_enabled_ui(pos + 1 < tracks.len(), |ui| {
+                if widgets::icon_button(ui, Icon::Forward, "The song after").clicked() {
+                    app.lyrics_song = Some(tracks[pos + 1]);
+                }
+            });
+        });
+    });
+    ui.add_space(S1);
+    let state = app.lyrics_of(t).clone();
+    let mut again = false;
+    match state {
+        LyricsState::Looking => {
+            row(ui, |ui| {
+                super::cassette::spinner(ui, 12.0);
+                widgets::muted(ui, "looking for the lyrics…");
+            });
+        }
+        LyricsState::None => {
+            widgets::muted(ui, "No lyrics for this song, in it or on LRCLIB.");
+            again = widgets::link(ui, "Try again").on_hover_text("ask LRCLIB once more (lyrics are added there over time)").clicked();
+        }
+        LyricsState::Failed(e) => {
+            ui.add(egui::Label::new(RichText::new(format!("Couldn't look: {e}")).size(13.0).color(ink.muted)).wrap());
+            again = widgets::link(ui, "Try again").clicked();
+        }
+        LyricsState::Found(l) if l.instrumental && l.plain.is_empty() => {
+            widgets::muted(ui, "Instrumental: no words to show.");
+        }
+        LyricsState::Found(l) => {
+            let playing = current == Some(t) && !l.synced.is_empty();
+            if playing {
+                // In time: the line being sung in the accent, those sung in grey; it stays in view.
+                let now = l.line_at(app.audio.status().pos);
+                let follow_id = egui::Id::unique("lyrics line followed");
+                let followed = ui.data(|d| d.get_temp::<Option<usize>>(follow_id)).flatten();
+                for (i, (at, line)) in l.synced.iter().enumerate() {
+                    let color = match now {
+                        Some(n) if n == i => ink.accent,
+                        Some(n) if i < n => ink.muted,
+                        _ => ink.text,
+                    };
+                    let words = if line.is_empty() { "·".to_string() } else { line.clone() };
+                    let r = ui.add(egui::Label::new(RichText::new(words).size(15.0).color(color)).wrap().sense(Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand);
+                    if r.clicked() {
+                        app.audio.seek(*at);
+                    }
+                    if now == Some(i) && followed != Some(i) {
+                        r.scroll_to_me(Some(egui::Align::Center));
+                        ui.data_mut(|d| d.insert_temp(follow_id, Some(i)));
+                    }
+                }
+            } else {
+                ui.add(egui::Label::new(RichText::new(&l.plain).size(14.5).color(ink.text)).wrap());
+                if !l.synced.is_empty() {
+                    ui.add_space(S1);
+                    row(ui, |ui| {
+                        widgets::muted(ui, "In time while it plays ·");
+                        if widgets::link(ui, "Play it").clicked() {
+                            actions.push(Action::Play(tracks.to_vec(), pos));
+                        }
+                    });
+                }
+            }
+            ui.add_space(S1);
+            let from = match l.source {
+                Some(crate::lyrics::Source::File) => "from the .lrc file beside the song",
+                Some(crate::lyrics::Source::Tags) => "from the song's tags",
+                _ => "from LRCLIB (lrclib.net)",
+            };
+            row(ui, |ui| {
+                widgets::help(ui, from);
+                if l.source == Some(crate::lyrics::Source::Lrclib) && widgets::link(ui, "Not right?").on_hover_text("look again on LRCLIB").clicked() {
+                    again = true;
+                }
+            });
+        }
+    }
+    if again {
+        app.lyrics_again(t);
+    }
+    ui.add_space(S1);
+    if app.busy.is_none() && widgets::icon_link(ui, Icon::Search, "Find lyrics for the whole album").on_hover_text("ahead of time, kept to read offline").clicked() {
+        actions.push(Action::FindLyrics(tracks.to_vec()));
     }
 }
 

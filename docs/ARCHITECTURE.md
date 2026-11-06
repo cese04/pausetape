@@ -71,6 +71,7 @@ src/
 │                      console programs without a console window (Windows)
 ├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive);
 │                      an artist's entry: genres, years, links sorted into buy / listen / discover
+├── lyrics.rs        lyrics: LRC lines with their times; a song's own (.lrc, tags), else LRCLIB's
 ├── library/           reading and understanding the music folder
 │   ├── track.rs       Track; which formats play on RECHO / here / not at all
 │   ├── scan.rs        incremental scan (database reuse), tag reading, folder-name inference
@@ -114,6 +115,7 @@ src/
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── undo.rs        ⌘Z: taking back changes to playlists and to what goes on the card (not to files)
 │   ├── genres.rs      an album's genres (its songs', else its artist's), every genre with its albums
+│   ├── lyrics.rs      lyrics for the details panel: one worker, the database first, kept once found
 │   ├── playback.rs    play queue (play next, add, move, take out), waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen

@@ -321,6 +321,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     the artist's genre". The details panel shows an album's genres; a click opens one. *Look
     up* on an album suggests MusicBrainz's genres with the other tags; applied, they're written
     with *Write corrected tags*. The search box takes `genre:trip-hop` and `genre:none`.
+21p. Details panel › **Lyrics**, with an album playing: the song's lyrics from LRCLIB (or a
+    `.lrc` beside it, or its tags), the line being sung in the accent and kept in view; a click
+    on a line goes there. The arrows show the album's other songs (not in time). A song with
+    none says so, with *Try again*. *Find lyrics for the whole album* (or right-click › Find
+    lyrics) fetches them ahead, counted in the status bar. Offline, lyrics found before still
+    show.
 21n. A fresh start (empty data folder): a welcome asks for the music folder, then the card
     (which can wait); *Start* closes it. Music already on the card is explained after it.
 

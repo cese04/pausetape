@@ -285,6 +285,18 @@ impl App {
                         self.cover = Some((path, tex, file));
                     }
                 }
+                Msg::Lyrics(id, found) => self.lyrics_found(id, found),
+                Msg::LyricsDone(found, none, failed) => {
+                    self.busy = None;
+                    let mut s = format!("lyrics found for {found} songs");
+                    if none > 0 {
+                        s.push_str(&format!(" · {none} without on LRCLIB"));
+                    }
+                    if failed > 0 {
+                        s.push_str(&format!(" · {failed} not looked for (no connection, or stopped)"));
+                    }
+                    self.notice(s);
+                }
                 Msg::DetailCover(path, img) => {
                     if self.detail_cover.as_ref().is_some_and(|(p, _)| *p == path) {
                         let tex = img.map(|img| self.ctx.load_texture("detail cover", img, egui::TextureOptions::LINEAR));

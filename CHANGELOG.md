@@ -1063,3 +1063,19 @@ Calibre's device view, for music: the library is where you choose what goes on t
   was before anything was laid out, what's too wide is cut there rather than drawn over the
   details, and the problems list fits the page.
 - The screenshot demo gets `PAUSETAPE_SHOT_PROBLEMS=1`, a list of problems with long paths.
+
+### 91. Lyrics, in time with the song (2026-11-06)
+- **The details panel shows lyrics**: *Songs* | *Lyrics* above the album's songs. For the song
+  playing, lyrics with times follow it: the line being sung in the accent, those sung in grey,
+  kept in view; a click on a line goes to that moment. The arrows show the album's other songs'
+  lyrics, as plain text (*Play it* to have them in time).
+- **Where they come from:** the song's own first (a `.lrc` file with its name beside it, or the
+  lyrics in its tags), else **LRCLIB** (lrclib.net, an open lyrics database matched by artist,
+  title, album and length within 2 seconds, then by artist and title within 3). The panel says
+  which; *Not right?* asks LRCLIB again.
+- **When:** a song's are looked for when they're shown, one request; **Find lyrics** (in the
+  panel, for the album, and in every right-click menu, for a selection) fetches them ahead,
+  counted in the status bar, and can be stopped. Requests go one at a time, apart, and say who's
+  asking, as LRCLIB asks.
+- **Kept**: in the library database, found or not found, so they show offline after and nothing
+  is asked twice. The music folder isn't touched, and nothing goes on the card for now.
