@@ -79,7 +79,7 @@ fn number_column(ui: &Ui, numbers: &[String]) -> f32 {
 fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str, f32), show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, t.display_title()));
     widgets::focus_ring(ui, &resp, rect, 4.0);
     widgets::row_background(ui, &resp, rect, selected);
@@ -144,111 +144,51 @@ fn album_minutes(tracks: &[Track], idxs: &[usize]) -> String {
 const RAIL_W: f32 = S4;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    // The details of what's selected, at the right edge, where there's room for them; the
+    // library in the rest.
+    app.details_beside = super::details::fits(ui.available_width()) && !app.tracks.is_empty();
+    if app.details_beside {
+        let mut actions = Vec::new();
+        let frame = egui::Frame::new().inner_margin(egui::Margin { left: S2 as i8, ..Default::default() });
+        egui::Panel::right("details").exact_size(super::details::WIDTH + S2).resizable(false).show_separator_line(false).frame(frame).show(ui, |ui| super::details::show(app, ui, &mut actions));
+        apply(app, actions);
+    }
+    egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| page(app, ui));
+}
+
+fn page(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
-    // The music folder and what's in it.
+    // What's shown, in words, and what can be done with all of it. (The folder, the views and
+    // what's worth a look are in the sidebar; the search box is in the top bar.)
     row_wrapped(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
-        icons::paint(ui.painter(), rect, Icon::Folder, ink.text);
-        let name = app.saved.source.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "not chosen".into());
-        ui.label(RichText::new(name).size(18.0).color(ink.text)).on_hover_text(app.saved.source.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
-        // The counts are in the status bar; corrections waiting for the files are said here.
-        let dirty = app.dirty_count();
-        if dirty > 0 {
-            muted(ui, format!("{} with corrected tags", plural(dirty, "song")));
-        }
-        if widgets::button_with(ui, Icon::Folder, "Change folder…").clicked() {
-            app.picker = Some(crate::ui::folders::Picker::Source(crate::ui::navigator::Navigator::new(app.saved.source.as_deref())));
-        }
-        let since = app.library_read.map(|t| format!(" (read {})", text::ago(t))).unwrap_or_default();
-        if app.busy.is_none() && widgets::button_with(ui, Icon::Rescan, "Rescan").on_hover_text(format!("pick up files added, changed or removed by other programs since the folder was last read{since}")).clicked() {
-            app.scan();
-        }
+        let title = if app.duplicates_only {
+            "Duplicates".to_string()
+        } else if app.look_alikes_only {
+            "Artists that look alike".to_string()
+        } else {
+            match app.filter.trim() {
+                "" if app.saved.album_table => "Albums".to_string(),
+                "" => "Artists".to_string(),
+                "cover:no" => "Without a cover".to_string(),
+                "damaged:yes" => "Damaged files".to_string(),
+                "edited:yes" => "Corrected, not in the files".to_string(),
+                f => format!("Searching “{f}”"),
+            }
+        };
+        ui.label(RichText::new(title).size(20.0).color(ink.text));
         if app.source_missing {
-            ui.label(RichText::new("can't reach this folder: is its drive connected? It's read again once it's back").color(ink.warn));
+            ui.label(RichText::new("can't reach the music folder: is its drive connected? It's read again once it's back").color(ink.warn));
         }
-        if app.busy.is_none() && widgets::button_with(ui, Icon::Add, "Add music…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
-            app.picker = Some(crate::ui::folders::Picker::AddFrom(crate::ui::navigator::Navigator::new(crate::ui::folders::dirs_downloads().as_deref())));
-        }
-    });
-    ui.add_space(S1);
-    // Searching, and how the library is shown.
-    row_wrapped(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), Sense::hover());
-        icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", 260.0).on_hover_text(crate::library::search::HELP);
-        if app.focus_search && app.tab == crate::app::Tab::Library {
-            app.focus_search = false;
-            r.request_focus();
-        }
-        filters_menu(app, ui);
-        let typed = app.filter.trim().to_string();
-        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "Save").on_hover_text("keep this search for later, beside the box").clicked() {
-            app.saved.searches.push(typed);
-        }
-        saved_searches(app, ui);
-        ui.add_space(S1);
-        if widgets::tab(ui, "Artists", !app.saved.album_table).on_hover_text("albums by artist, with their songs").clicked() {
-            app.saved.album_table = false;
-        }
-        if widgets::tab(ui, "Albums", app.saved.album_table).on_hover_text("a table of albums: sort by any column, select several").clicked() {
-            app.saved.album_table = true;
-        }
-        ui.add_space(S1);
-        if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
-            app.expanded.clear();
-        }
-        let dirty = app.dirty_in_files();
-        if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("Write {dirty} corrected tags to source files")).clicked() {
-            app.save_tags_to_source();
-        }
-    });
-    // What's worth a look: each chip shows only that part of the library.
-    row_wrapped(ui, |ui| {
-        let spare = app.index.superseded();
-        if !spare.is_empty() {
-            let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
-            let copies = if spare.len() == 1 { "album copy" } else { "album copies" };
-            let hint = "Copies whose songs are all in another copy of the album, in the same or higher quality. Click to show only them.";
-            if widgets::chip(ui, Icon::Copy, format!("{} {copies} covered by another ({})", spare.len(), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
-                app.duplicates_only = true;
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let dirty = app.dirty_in_files();
+            if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("Write {dirty} corrected tags to source files")).clicked() {
+                app.save_tags_to_source();
             }
-        }
-        let repeats = app.index.repeats();
-        if !repeats.is_empty() {
-            let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
-            let hint = "Songs kept twice in the same album, like the copies a backup tool leaves. Click to show only their albums.";
-            if widgets::chip(ui, Icon::Copy, format!("{} stored twice ({})", plural(repeats.len(), "song"), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
-                app.duplicates_only = true;
+            if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
+                app.expanded.clear();
             }
-        }
-        // Files a failing card or disk left blank: nothing here or on the card can use them.
-        let damaged: std::collections::HashSet<&std::path::Path> = app.tracks.iter().filter(|t| t.damaged).map(|t| t.path.as_path()).collect();
-        if !damaged.is_empty()
-            && widgets::chip(ui, Icon::Remove, format!("{} damaged", plural(damaged.len(), "file")), ink.warn)
-                .on_hover_text("These files start blank where their audio should be, as files a failing card or disk lost do. They can't be played or written to the card; replace them from a backup or the original. Click to show their albums.")
-                .clicked()
-        {
-            app.filter = "damaged:yes".into();
-            app.duplicates_only = false;
-        }
-        let coverless = app.albums_without_cover().len();
-        if coverless > 0
-            && widgets::chip(ui, Icon::Image, format!("{} without a cover", plural(coverless, "album")), ink.text)
-                .on_hover_text(covers_hint(device, "Click to show only these albums, and find covers for them."))
-                .clicked()
-        {
-            app.filter = "cover:no".into();
-            app.duplicates_only = false;
-        }
-        if !app.index.suggestions.is_empty()
-            && widgets::chip(ui, Icon::Artists, format!("{} artists that look alike", app.index.suggestions.len()), ink.text)
-                .on_hover_text("Artists whose names look alike (“Jimi Hendrix” / “Jimmy Hendrix”). Click to show only them, and say which are the same.")
-                .clicked()
-        {
-            app.look_alikes_only = true;
-            app.duplicates_only = false;
-        }
+        });
     });
     // Songs the card's player can't play are said in their rows (a badge) and dealt with in the
     // card tab, where converting them is chosen.
@@ -256,7 +196,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
         // An unreachable folder is said in red above.
         if !app.source_missing {
-            muted(ui, "Choose the folder that holds your music in the folders tab. It can be as messy as it likes; nothing in it changes unless you ask.");
+            muted(ui, "Choose the folder that holds your music: the menu at the top of the sidebar, or Settings › Music folder. It can be as messy as it likes; nothing in it changes unless you ask.");
         }
         return;
     }
@@ -559,6 +499,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         if scroll_to == Some(ti) {
                             r.scroll_to_me(None);
                         }
+                        // Dragged onto a playlist: the selection it's in, or the song.
+                        super::drag::songs_from(&r, || if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] });
                         // As in the album table and any file list: a click selects, a double click
                         // plays (from this song to the album's end).
                         if r.double_clicked() {
@@ -778,7 +720,7 @@ fn album_folders(ui: &mut Ui, tracks: &[Track], idxs: &[usize], root: &Path) {
 }
 
 /// MusicBrainz suggestions under an album. Identical changes across tracks collapse into one line.
-fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions: &mut Vec<Action>) {
+pub(super) fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions: &mut Vec<Action>) {
     let ink = ink(ui);
     ui.indent(id, |ui| {
         match l {
@@ -837,7 +779,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                         }
                     }
                     ui.add_space(S1);
-                    row(ui, |ui| {
+                    row_wrapped(ui, |ui| {
                         ui.add_enabled_ui(n > 0, |ui| {
                             let text = if n == 0 { "Apply".to_string() } else { format!("Apply {}", plural(n, "change")) };
                             if widgets::primary_with(ui, Icon::Check, text).on_hover_text("Corrects these tags in the library; the files change when you write the corrected tags.").clicked() {
@@ -887,9 +829,11 @@ fn suggestion_row(ui: &mut Ui, c: &crate::musicbrainz::FieldChange, scope: &str,
     let small = FontId::proportional(12.5);
     let font = FontId::proportional(14.5);
     let mut x = rect.left() + S1 + ICON + S2;
-    let what = truncated(ui, format!("{} · {scope}", c.field.label()), small.clone(), ink.muted, 160.0);
+    // What changes takes up to a third of the row; the values, the rest.
+    let label_w = (width * 0.3).clamp(72.0, 160.0);
+    let what = truncated(ui, format!("{} · {scope}", c.field.label()), small.clone(), ink.muted, label_w);
     p.galley(egui::pos2(x, y - what.size().y / 2.0), what, ink.muted);
-    x += 160.0 + S2;
+    x += label_w + S2;
     let room = (rect.right() - x - S1).max(0.0);
     let struck = |text: &str, color, max_w| {
         let mut job = egui::text::LayoutJob::default();
@@ -929,7 +873,7 @@ const QUICK_FILTERS: &[(&str, &str)] = &[
 ];
 
 /// A menu of common search terms; ticking one adds it to the search box, unticking removes it.
-fn filters_menu(app: &mut App, ui: &mut Ui) {
+pub(super) fn filters_menu(app: &mut App, ui: &mut Ui) {
     let active = QUICK_FILTERS.iter().filter(|(term, _)| app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term))).count();
     let label = if active > 0 { format!("Filters ({active})") } else { "Filters".to_string() };
     ui.menu_button(RichText::new(label).color(ink(ui).muted), |ui| {
@@ -979,25 +923,4 @@ fn covers_panel(app: &mut App, ui: &mut Ui, query: &crate::library::search::Quer
         }
     });
     ui.add_space(S1);
-}
-
-/// Searches kept for later: click one to search again; right-click to forget it.
-fn saved_searches(app: &mut App, ui: &mut Ui) {
-    let mut forget = None;
-    for (i, s) in app.saved.searches.iter().enumerate() {
-        let active = app.filter.trim() == s;
-        let r = widgets::tab(ui, &text::shorten(s, 28), active).on_hover_text(format!("{s}\nClick to search again (again to clear); right-click to forget."));
-        if r.clicked() {
-            app.filter = if active { String::new() } else { s.clone() };
-        }
-        r.context_menu(|ui| {
-            if widgets::icon_link(ui, Icon::Close, "Forget this search").clicked() {
-                forget = Some(i);
-                ui.close();
-            }
-        });
-    }
-    if let Some(i) = forget {
-        app.saved.searches.remove(i);
-    }
 }

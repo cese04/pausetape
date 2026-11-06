@@ -12,9 +12,9 @@ use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
 const TABS: [(Tab, &str); 15] = [
-    (Tab::Folders, "folders"),
-    (Tab::Folders, "picker"),
-    (Tab::Folders, "cardpicker"),
+    (Tab::Library, "folders"),
+    (Tab::Library, "picker"),
+    (Tab::Library, "cardpicker"),
     (Tab::Library, "library"),
     (Tab::Library, "tageditor"),
     (Tab::Library, "job"),
@@ -150,6 +150,8 @@ impl Shooter {
                 let next: Vec<usize> = other.tracks.iter().take(2).copied().collect();
                 app.play_next(&next);
             }
+            // PAUSETAPE_SHOT_CARD_SETUP=1: the card's view on its setup rather than its albums.
+            app.card_setup_open = std::env::var_os("PAUSETAPE_SHOT_CARD_SETUP").is_some();
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
             if std::env::var_os("PAUSETAPE_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();
@@ -209,6 +211,8 @@ impl Shooter {
                     app.set_tested(s, Some(a));
                 }
             }
+            // The first-run welcome, and the folder dialogs over it.
+            app.welcome_open = matches!(TABS[n].1, "folders" | "picker" | "cardpicker");
             app.sync_confirm = (TABS[n].1 == "syncconfirm").then(|| (app.write().id.clone(), 4100, 4412));
             if TABS[n].1 == "cardowner" {
                 // Another setup's card where this one writes: the note, and no Sync.

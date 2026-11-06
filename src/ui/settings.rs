@@ -10,6 +10,10 @@ use super::layout::{S1, S2, row};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+        widgets::section(ui, Icon::Folder, "Music folder");
+        ui.add_space(S1);
+        super::folders::settings_section(app, ui);
+        ui.add_space(S2);
         widgets::section(ui, Icon::Settings, "Appearance");
         ui.add_space(S1);
         setting(ui, "Colours", |ui| {

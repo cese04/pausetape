@@ -115,7 +115,10 @@ src/
 │   ├── playback.rs    play queue (play next, add, move, take out), waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
-    ├── mod.rs         panels, tab bar, running job (time left, Stop), message line, tab dispatch
+    ├── mod.rs         panels: top bar (name, search), sidebar, status bar (work, notices), player; view dispatch
+    ├── sidebar.rs     the sidebar: the library's views, Review, saved searches, playlists, the card, settings
+    ├── details.rs     the details of what's selected (cover, songs, card state, commands), beside the library or as a sheet
+    ├── drag.rs        dragging songs and albums onto playlists, and a playlist's songs into order
     ├── theme.rs       palette, fonts, frames; style.spacing on the grid
     ├── layout.rs      the 8-point grid (S1–S6, row and control heights) and `row`: left-to-right rows, centred
     ├── icons.rs       drawn line icons (tabs and commands), no font needed

@@ -46,6 +46,10 @@ pub(super) enum Action {
     /// Songs to the end of a playlist (by position); into a new playlist.
     AddToPlaylist(usize, Vec<usize>),
     NewPlaylistWith(Vec<usize>),
+    /// An artist's albums in the library by artist, opened (from the details panel).
+    ShowArtist(usize),
+    /// An album selected, its details shown (beside the library, or as a sheet).
+    Details(usize, usize),
     /// Songs after the one playing; at the end of the queue.
     PlayNext(Vec<usize>),
     AddToQueue(Vec<usize>),
@@ -76,7 +80,14 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                     }
                 }
             }
-            Action::LookupAlbum(a, b) => app.lookup_album(a, b),
+            Action::LookupAlbum(a, b) => {
+                app.lookup_album(a, b);
+                // In the album table, suggestions aren't under the album: say where they are.
+                if app.saved.album_table || app.tab != crate::app::Tab::Library {
+                    let title = app.index.artists[a].albums[b].title.clone().unwrap_or_else(|| "these songs".into());
+                    app.notice(format!("asking MusicBrainz about “{title}”: its suggestions show in its details and in Review › Suggested tags"));
+                }
+            }
             Action::ApplyLookup(id) => app.apply_lookup(&id),
             Action::Dismiss(id) => {
                 app.lookups.remove(&id);
@@ -122,6 +133,29 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             }
             Action::ToggleCard(albums) => app.toggle_on_card(albums),
             Action::AddToPlaylist(i, songs) => app.add_songs_to_playlist(i, &songs),
+            Action::ShowArtist(a) => {
+                let name = app.index.artists[a].name.clone();
+                app.expanded.insert(crate::library::names::artist_key(&name));
+                app.tab = crate::app::Tab::Library;
+                app.saved.album_table = false;
+                (app.duplicates_only, app.look_alikes_only) = (false, false);
+                app.filter = name;
+                app.details_sheet = false;
+            }
+            Action::Details(a, b) => {
+                let artist = &app.index.artists[a];
+                let al = &artist.albums[b];
+                let id = al.id(&app.index.clusters[artist.cluster].key);
+                let first = al.tracks[0];
+                if app.saved.album_table {
+                    app.selected_albums = [id.clone()].into();
+                    app.album_anchor = Some(id);
+                } else {
+                    app.selected = [first].into();
+                    app.select_anchor = Some(first);
+                }
+                app.details_sheet = !app.details_beside;
+            }
             Action::PlayNext(songs) => app.play_next(&songs),
             Action::AddToQueue(songs) => app.add_to_queue(&songs),
             Action::NewPlaylistWith(songs) => {

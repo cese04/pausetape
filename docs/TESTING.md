@@ -103,7 +103,7 @@ unchecked.
 | 2 | **Windows** | *Fixed 2026-10-31, seen working on Windows 11:* free space and filesystem ("FAT32", "exFAT", "NTFS"); NTFS counts as not FAT. | — |
 | 3 | **Windows** | *Fixed 2026-11-01, run on Windows 11:* no **console window** opens behind the app. Started from a terminal, it prints there; but the terminal doesn't wait for it. | Use `cargo run`, or add `\| Out-Host` in PowerShell: `pausetape --version \| Out-Host`. Debug builds keep their console. |
 | 4 | **Windows** | *Fixed 2026-11-02, seen on Windows 11:* the in-app browser's **Drives** opens "Computer", a list of every drive with its free space; "back up" from a drive's top folder goes there too. | — |
-| 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9`. *On Windows 11 the app writes and reads them* (`Aux\`, `CON.mp3`, `COM1` were tried); Windows 10 and Explorer may not open them. | Rename it for that write in the card tab. Rare. |
+| 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9`. *On Windows 11 the app writes and reads them* (`Aux\`, `CON.mp3`, `COM1` were tried); Windows 10 and Explorer may not open them. | Rename it for that write in the card's view. Rare. |
 | 6 | **Windows** | Card paths can exceed 260 characters with very long names. *On Windows 11 the app wrote and read a 374-character path;* Explorer may not open it. | Rename long albums for the card. |
 | 7 | **Linux** | **Every** mounted drive under `/media/$USER` or `/run/media/$USER` is listed as a possible card, and the "not FAT32/exFAT" warning never appears (filesystem type isn't read on Linux yet). | Pick the right one by name and size. |
 | 8 | **Linux** | Fonts: the serif look depends on DejaVu Serif at the Debian/Ubuntu path. On Fedora/Arch the app falls back to a sans font, and Chinese/Japanese/Korean names may show as boxes. | Cosmetic only. |
@@ -134,9 +134,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 3. Settings › appearance: switching *paper* / *ink* works.
 
 ### B. Music folder and library
-4. Folders › **Choose folder…** opens the in-app browser (Home, Music, Downloads buttons;
+4. The first time, the welcome › **Choose folder…** opens the in-app browser (Home, Music, Downloads buttons;
    breadcrumb; song counts per folder). Pick your test folder with **Use "…"**.
-5. The status line reports songs read; the library tab lists artists with letter headings
+5. The status line reports songs read; the library lists albums (Artists, in the sidebar, lists them with letter headings
    and the A–Z rail on the right.
 6. Each album shows its folder and **open folder** opens Explorer / your file manager there.
 7. **Rescan**: the status line says the songs came from the library database and "0 read
@@ -164,7 +164,7 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     one leaves it out (its new value struck through), and **apply N changes** marks the chosen
     ones on the tracks as edited. Quit and reopen: the edits are still there (library database).
 14a. If the same album is in two folders: the library shows "edition 1 of 2" and "2 of 2" with
-    their formats; the card tab ticks one, and ticking the other switches. If one copy has the
+    their formats; the card's view ticks one, and ticking the other switches. If one copy has the
     same songs in the same or lower quality, it says "this copy could go", and the library's
     "album copies covered by another" chip lists them.
 14b. Play an album whose cover is a `folder.jpg`/`Front.jpg` (not embedded): the player says
@@ -177,14 +177,14 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     Right-click a song: the same menu as on an album's title or an artist's name (Play, Add
     to playlist ▸, Send to the card, Edit tags…), for the whole selection if the song is in
     one. Esc clears the selection; a year like "nineties" keeps **Save** off.
-14d. Library › **N albums without a cover** › **find covers for these** (try a few first, with
-    **find cover** on one album): the line under the tabs counts albums; afterwards the message
+14d. Sidebar › Review › **Without a cover** › **find covers for these** (try a few first, with
+    **find cover** on one album): the status bar counts albums; afterwards the message
     says how many came from folders and from the Cover Art Archive, and those not found are
     listed. Play one: the player shows the new cover and offers **don't**. Sync: the card copies
     have it embedded (the Echo Mini shows it).
 14e. Search `format:flac year:1990..1999`, then `-format:flac`, `cover:no`, `card:on`; **Filters**
     ticks and unticks the same terms; **save** keeps a search as a button beside the box.
-14f. **albums**: a table of albums. Sort by size (largest first), by year, by format. Click,
+14f. **Albums** (sidebar): the table of albums. Sort by size (largest first), by year, by format. Click,
     ⌘-click and shift-click to select; the bar's **Send to the card** marks them for the next Sync.
 14g. Duplicates view › **move it to the Trash** on a covered copy: its folder is in the Trash
     (only its songs, if the folder holds other music), and the library rescans.
@@ -192,9 +192,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     dialog counts them apart; **Add them** copies the new one under `Added` and rescans.
 
 ### E. The card
-15. Folders › **Choose card…**: Linux lists the stick by name; Windows uses the workaround
+15. The card (sidebar) › **Setup** › **Choose card…** (or the welcome's step 2): Linux lists the stick by name; Windows uses the workaround
     (gap #1). Step 2 then shows the card.
-16. Card tab › **Compare with the card**: counts of files to copy appear.
+16. The card (sidebar) › **Compare with the card**: counts of files to copy appear.
 17. **Write to the card**. Then check the stick in Explorer / the file manager:
     `Artist/1997 - Album/01 - Title.ext`, no `._` files, playlists under `_Playlists`.
 18. Write again: "0 copied", everything "unchanged".
@@ -206,7 +206,7 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     whether this ffmpeg can make MP3s (the Windows `winget` and Linux distribution builds can).
 18c. On a stick that already has music copied by hand, never written to: **Compare with the
     card** opens *Music already on the card* by itself (once; later, **go through them**);
-    **Check them against the library** sorts them, and the card tab marks the albums found
+    **Check them against the library** sorts them, and the card's view marks the albums found
     there *on the card, copied by hand*; with a new setup (nothing ticked), **Tick them** ticks
     just those; **Take
     over the card** moves the copies into the layout (and, if ticked, the rest into
@@ -216,14 +216,14 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     library under `From the card` in the music folder.
 18d. Choose **hi-res songs at CD quality** (Saving space): 24-bit songs are 16-bit FLAC on the
     stick. Choose **all lossless songs as MP3 320**: FLAC songs are MP3s on the stick, and the
-    space chosen drops to about a quarter. With more chosen than fits, the card tab lists the
+    space chosen drops to about a quarter. With more chosen than fits, the card's view lists the
     savings and the artists taking most room; **leave out** unticks one. After
     a write, the library shows "on the card" on the albums written.
 19. Untick one album, write again: that album's folder is removed; nothing else on the stick
     is touched (put an extra file there beforehand to check).
 19a. In the library, **Take off the card** on an album that's on the card: its songs get a struck red
     ring and "taken off at the next Sync"; **Send to the card** on another: rings and "added at
-    the next Sync". The strip above the list and the card tab's pinned panel count both. **Sync**
+    the next Sync". The strip above the list and the card's view's pinned panel count both. **Sync**
     (on either): the marks become dots, and the card has exactly that change. With the card
     unplugged, the marks and counts stay the same; *Sync* says "card not connected".
 19b. **New** write: nothing is chosen. **Send all to the card** on an artist: all its albums
@@ -235,35 +235,35 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     twice*, and **move the extra copies to the Trash** puts them in the Trash (Finder shows
     them there) and rescans. A repeat already on the card gets a struck red ring, and the next
     Sync takes it off.
-19d. The tabs sit on a tinted bar, each with an icon; the open one is filled. Narrow the window
-    below ~1000 px: the other tabs show only their icon (hover names them). Start a scan: its
-    progress shows on a line under the bar, and the result appears on the line below with a
-    close button. Commands (play, look up, rename, Sync…) have icons and a background on hover;
-    the card tab's and settings tab's options are named on the left with smaller explanations.
-19e. Start a long write: the line under the tab bar counts files and, after a few seconds, the
+19d. The sidebar holds the library's views, Review, searches, playlists, the card and Settings;
+    what's shown is tinted. Narrow the window below ~900 points: the sidebar keeps only its
+    icons (hover names them). Start a scan: its progress shows in the status bar at the foot,
+    and the result stays there with a close button. Commands (play, look up, rename, Sync…) have
+    icons and a background on hover; the card's Setup and Settings name each option on the left.
+19e. Start a long write: the status bar counts files and, after a few seconds, the
     time left. **Stop**: it says "stopping…", then the message says what was copied. **Sync**
     again: it carries on (what's done is unchanged) and finishes with the playlists.
-19f. Card tab › *What goes on the card*: beside each album's tick, a mark and words say what
+19f. The card (sidebar) › *What goes on the card*: beside each album's tick, a mark and words say what
     the next Sync does (● on the card, ○ added, struck red ring taken off, its title struck
     through); each artist counts them. **what the next Sync changes** lists only those albums,
     opened; once Sync is done it goes back to **everything**.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
-20a. Card tab › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
+20a. The card (sidebar) › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
     converted (AAC, APE, WMA and Ogg go as they are), and the library's badges and the card
     tab's *Formats … can't play* say "the Echo Mini" instead of "RECHO". Switch back to RECHO
     and the counts return.
 20b. **Test it on the player** › **Write the test folder to the card**: the card gets
     `Pausetape format test/` (17 samples, or 16 without an APE song in the library) and
-    `Pausetape format test.m3u8`. The card tab doesn't count them as music the write didn't put
+    `Pausetape format test.m3u8`. The card's view doesn't count them as music the write didn't put
     there. Try them on the player and tick yes or no; the text at the bottom says what changes.
     Untick a format the player couldn't play and **Compare** converts it. **take it off the card**
     removes only the test's files.
 20c. **Sync** to the card, then look at its top folder (⇧⌘. shows hidden files): `.pausetape`
-    names the card setup. Make a second setup (**duplicate**), switch to it: the card tab says the
+    names the card setup. Make a second setup (**duplicate**), switch to it: the card's view says the
     card belongs to the first and offers **switch to** and **use it for this setup**; Sync is gone.
     Eject the card, switch back to the second setup, plug the card in: within a few seconds the
     app switches to the first setup and says so.
-20d. Card tab › **Names on the card**: type `{albumartist} - {album} [({year})]/{track} {title}`.
+20d. The card (sidebar) › **Names on the card**: type `{albumartist} - {album} [({year})]/{track} {title}`.
     The example under it and the folder names in the list follow as you type; a broken pattern
     (`{album}/[{year}`) says what's wrong and changes nothing. The sync line says how many songs
     will be renamed on the card. **Sync**: they're moved, not copied (quick), and the old folders
@@ -271,7 +271,7 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 
 ### F. Playlists
 21. Create a playlist, add tracks with the **+** at the end of a track row, reorder, include
-    it in the write (card tab), write: a numbered folder appears under `_Playlists`.
+    it in the write (card's view), write: a numbered folder appears under `_Playlists`.
 
 ### G. Keyboard, undo and asking first
 21a. Press Tab a few times: a ring in the accent moves from control to control; Space presses
@@ -283,11 +283,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     selected albums to the card (again: takes them off). **⌘F** jumps to the search box,
     **⌘⇧S** syncs. Settings › Keyboard lists them with the right key names for your system.
 21c. Delete a playlist: the notice offers **Undo (⌘Z)**; press it, the playlist is back (also
-    ticked in the card tab if it was). Send an album to the card, then ⌘Z: it's off again.
+    ticked in the card's view if it was). Send an album to the card, then ⌘Z: it's off again.
     While typing in a field, ⌘Z undoes the typing only.
 21d. Rename a playlist to the name of another (or to nothing): a notice refuses and the old
     name stays.
-21e. Card tab › with two card setups, **Delete** one: a dialog says what goes with it and asks
+21e. The card (sidebar) › with two card setups, **Delete** one: a dialog says what goes with it and asks
     first. Settings › **Forget stored tags** asks first too.
 21f. Drag a folder of music from Explorer / the file manager over the window: the page says to
     drop it; drop it: the *add music* dialog checks it against the library. A single file is
@@ -299,6 +299,23 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     one out, double-click one: it plays. **Add to the queue** puts songs at the end.
 21i. Click the player's cover: it folds to one line (and back). Make the window lower than about
     640 points: it folds by itself, and the cover says why it won't open out.
+21j. Sidebar: **Albums** and **Artists** switch views; Review entries (without a cover,
+    duplicates, look-alike artists, damaged, corrected-not-written, suggested tags) show only
+    what there is, with counts; a saved search (top bar › Save) appears under Searches and is
+    forgotten with right-click. The folder's menu (top of the sidebar) changes, rescans, adds.
+21k. Make the window wide (about 1400 points or more): the details panel shows the album
+    selected (cover, songs, card state, commands, suggested tags if looked up), several albums
+    as a summary, nothing selected as what's playing. Narrower: right-click › **Details** opens
+    the same as a sheet.
+21l. The card (sidebar) › **On the card**: the table lists the albums on the card or going on
+    or off; the search box narrows it; *What the next Sync changes* keeps only those. **Setup**
+    holds the rest; with one setup there's no list of setups, only *Another card setup… ▾*.
+21m. Drag an album from the table (or songs from Artists) onto a playlist in the sidebar: it's
+    outlined while held over it, and the songs are added (Undo in the status bar). Onto *New
+    playlist*: a new one with them. In a playlist, drag a song by its handle: a line shows
+    where it goes.
+21n. A fresh start (empty data folder): a welcome asks for the music folder, then the card
+    (which can wait); *Start* closes it. Music already on the card is explained after it.
 
 ### H. Odds and ends
 22. HiDPI / scaled display (125%, 150%): crisp text, nothing cut off.
@@ -321,7 +338,7 @@ $env:PAUSETAPE_SHOT = "C:\temp\shots"; cargo run
 PAUSETAPE_SHOT=/tmp/shots cargo run
 ```
 
-It opens the app, steps through the tabs (with a short demo: plays a track, opens dialogs),
+It opens the app, steps through the views (with a short demo: plays a track, opens dialogs),
 saves `folders.ppm`, `library.ppm`, … and quits. Add `PAUSETAPE_SHOT_SIZE=720x600` to check
 a small window, and `PAUSETAPE_SHOT_FILTER=<text>` to filter the library first. PPM opens in
 GIMP or IrfanView, or convert with `ffmpeg -i library.ppm library.png`. The demo plays a track,

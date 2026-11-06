@@ -148,6 +148,25 @@ impl App {
         }
     }
 
+    /// The cover of the album whose first song is `p`, for the details panel, unless it's the
+    /// one shown or on its way.
+    pub fn want_detail_cover(&mut self, p: &std::path::Path) {
+        if self.detail_cover.as_ref().is_some_and(|(q, _)| q == p) {
+            return;
+        }
+        self.detail_cover = Some((p.to_path_buf(), None));
+        let p = p.to_path_buf();
+        let pending = self.tracks.iter().find(|t| t.path == p).and_then(|t| t.cover.clone());
+        self.spawn(move |tx| {
+            let rgba = match pending {
+                Some(f) => crate::library::cover::load_image(&f),
+                None => crate::library::cover::load(&p).map(|(img, _)| img),
+            };
+            let img = rgba.map(|rgba| egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw()));
+            let _ = tx.send(Msg::DetailCover(p, img));
+        });
+    }
+
     pub fn next(&mut self) {
         if self.qpos + 1 < self.queue.len() {
             self.audio.jump(self.qpos + 1);

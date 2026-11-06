@@ -62,7 +62,7 @@ impl App {
 
     /// A dialog is open over the tab: keys are its own.
     pub fn dialog_open(&self) -> bool {
-        self.tag_edit.is_some() || self.confirm.is_some() || self.sync_confirm.is_some() || self.picker.is_some() || self.take_over_open || self.player_test_open || self.adding.is_some()
+        self.welcome_open || self.tag_edit.is_some() || self.confirm.is_some() || self.sync_confirm.is_some() || self.picker.is_some() || self.take_over_open || self.player_test_open || self.adding.is_some()
     }
 
     pub fn write(&self) -> &WriteProfile {

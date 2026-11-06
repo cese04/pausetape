@@ -87,7 +87,7 @@ impl Default for Saved {
             volume: 0.8,
             theme: ThemePref::System,
             accent: Default::default(),
-            album_table: false,
+            album_table: true,
             searches: Vec::new(),
             compact_player: false,
         }
@@ -96,8 +96,9 @@ impl Default for Saved {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
-    Folders,
     Library,
+    /// MusicBrainz suggestions for every album looked up, to go through.
+    Suggestions,
     Card,
     Playlists,
     Settings,
@@ -147,6 +148,8 @@ enum Msg {
     Envelope(PathBuf, Vec<f32>),
     /// Cover for a track path, and the image file it came from if it isn't embedded.
     Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
+    /// Cover of the album the details panel shows, by its first song's path.
+    DetailCover(PathBuf, Option<egui::ColorImage>),
     /// Covers found for albums without one, and whether the search was stopped.
     CoversFound(Vec<FoundCover>, bool),
     /// The test card's samples written to the card: what each became.
@@ -349,6 +352,8 @@ pub struct App {
     pub card_filter: String,
     /// The card tab lists only the albums the next Sync adds or takes off.
     pub card_changes_only: bool,
+    /// The card view shows how the card is set up, rather than what's on it.
+    pub card_setup_open: bool,
     pub card_expanded: HashSet<String>,
     /// Inline rename on the card tab: ("artist"/"album", key, text).
     pub card_renaming: Option<(bool, String, String)>,
@@ -364,6 +369,15 @@ pub struct App {
     /// Cover of the playing track; `None` inside once looked up and none was found.
     pub cover: Option<(PathBuf, Option<egui::TextureHandle>, Option<PathBuf>)>,
     pub active_playlist: Option<usize>,
+    /// The cover the details panel shows, by its album's first song (`None` inside while it
+    /// loads, or when there's none).
+    pub detail_cover: Option<(PathBuf, Option<egui::TextureHandle>)>,
+    /// The details of what's selected, as a sheet over the page (when it has no room beside).
+    pub details_sheet: bool,
+    /// The details panel had room beside the library on the last frame.
+    pub details_beside: bool,
+    /// The first-run welcome (music folder, card) is open.
+    pub welcome_open: bool,
     pub renaming: Option<(usize, String)>,
     /// UI-thread connection to the library database (scans open their own).
     pub db: Option<Db>,
@@ -398,7 +412,8 @@ impl App {
             saved,
             tracks: Vec::new(),
             index: Index::default(),
-            tab: if first_run { Tab::Folders } else { Tab::Library },
+            tab: Tab::Library,
+            welcome_open: first_run,
             filter: String::new(),
             duplicates_only: false,
             look_alikes_only: false,
@@ -452,6 +467,7 @@ impl App {
             dest_label: None,
             card_filter: String::new(),
             card_changes_only: false,
+            card_setup_open: false,
             card_expanded: HashSet::new(),
             card_renaming: None,
             audio,
@@ -461,6 +477,9 @@ impl App {
             qpos: 0,
             envelope: None,
             cover: None,
+            detail_cover: None,
+            details_sheet: false,
+            details_beside: false,
             renaming: None,
             db: Db::open_default().ok(),
             ctx,

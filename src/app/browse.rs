@@ -50,7 +50,14 @@ impl App {
         CardFacts { on, changing, better, chosen: chosen || planned }
     }
 
-    /// What the search box looks at in album `bi` of artist `ai`.
+    /// The album (artist, album) with this id (`AlbumNode::id`).
+    pub fn album_by_id(&self, id: &str) -> Option<(usize, usize)> {
+        self.index.artists.iter().enumerate().find_map(|(ai, a)| {
+            let ck = &self.index.clusters[a.cluster].key;
+            a.albums.iter().position(|al| al.id(ck) == id).map(|bi| (ai, bi))
+        })
+    }
+
     /// The albums (artist, album) these songs belong to, in library order.
     pub fn albums_of(&self, songs: &BTreeSet<usize>) -> Vec<(usize, usize)> {
         let mut out = Vec::new();
@@ -81,6 +88,7 @@ impl App {
         self.card_albums(&albums, on);
     }
 
+    /// What the search box looks at in album `bi` of artist `ai`.
     pub fn album_facts(&self, ai: usize, bi: usize) -> AlbumFacts<'_> {
         let a = &self.index.artists[ai];
         let al = &a.albums[bi];

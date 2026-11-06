@@ -26,7 +26,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         writes_bar(app, ui);
         ui.add_space(S2);
         let why = if app.saved.source.is_none() {
-            "Choose your music folder in the folders tab first."
+            "Choose your music folder first: Settings › Music folder."
         } else if app.source_missing {
             "Can't reach the music folder: is its drive connected? The card waits until it's back."
         } else if app.busy.is_some() {
@@ -46,21 +46,68 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
         sync_row(app, ui);
     });
-    ui.add_space(S1);
-    ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+    ui.add_space(S2);
+    // What's on the card, as the library shows albums; or how this card is set up.
+    row(ui, |ui| {
+        if widgets::tab(ui, "On the card", !app.card_setup_open).on_hover_text("the albums on the card, or going on or off at the next Sync").clicked() {
+            app.card_setup_open = false;
+        }
         ui.add_space(S2);
-        writes_bar(app, ui);
-        ui.add_space(S2);
-        problems(app, ui);
-        comparison(app, ui);
-        ui.add_space(S3);
-        selection(app, ui, &sizes);
-        ui.add_space(S3);
-        playlists(app, ui);
-        ui.add_space(S3);
-        layout_options(app, ui);
-        ui.add_space(S2);
+        if widgets::tab(ui, "Setup", app.card_setup_open).on_hover_text("where it is, what player, names and order, formats, playlists").clicked() {
+            app.card_setup_open = true;
+        }
     });
+    ui.add_space(S1);
+    if app.card_setup_open {
+        ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+            ui.add_space(S1);
+            writes_bar(app, ui);
+            ui.add_space(S3);
+            playlists(app, ui);
+            ui.add_space(S3);
+            layout_options(app, ui);
+            ui.add_space(S3);
+            egui::CollapsingHeader::new(RichText::new("Folder names and order on the card, artist by artist").color(ink(ui).text)).id_salt("card tree").show(ui, |ui| selection(app, ui, &sizes));
+            ui.add_space(S2);
+        });
+    } else {
+        on_card(app, ui);
+    }
+}
+
+/// The albums on the card, or going on or off at the next Sync, in the library's table (the
+/// search box narrows them too); or only what the next Sync changes.
+fn on_card(app: &mut App, ui: &mut Ui) {
+    problems(app, ui);
+    comparison(app, ui);
+    let changes = app.card_state.added + app.card_state.replaced + app.card_state.removed;
+    if changes == 0 {
+        app.card_changes_only = false;
+    }
+    row(ui, |ui| {
+        if widgets::tab(ui, "Everything", !app.card_changes_only).clicked() {
+            app.card_changes_only = false;
+        }
+        ui.add_space(S2);
+        let label = format!("What the next Sync changes ({changes})");
+        if changes > 0 && widgets::tab(ui, &label, app.card_changes_only).on_hover_text("Only the albums Sync adds or takes off, to look over before it runs.").clicked() {
+            app.card_changes_only = true;
+        } else if changes == 0 {
+            muted(ui, "no album changes at the next Sync");
+        }
+    });
+    ui.add_space(S1);
+    let scope = if app.card_changes_only { "card:sync" } else { "card:all" };
+    let query = crate::library::search::Query::parse(&format!("{scope} {}", app.filter));
+    if app.album_rows(&query).is_empty() && app.filter.trim().is_empty() {
+        ui.add_space(S2);
+        let keys = ui.ctx().format_shortcut(&super::keys::CARD);
+        muted(ui, format!("Nothing chosen for the card yet. In the library, select albums and press {keys}, or right-click › Send to the card."));
+        return;
+    }
+    let mut actions = Vec::new();
+    super::albums::show(app, ui, &query, &mut actions);
+    super::actions::apply(app, actions);
 }
 
 /// What Sync changes on the card, in words, or None if nothing.
@@ -254,6 +301,9 @@ fn problems(app: &mut App, ui: &mut Ui) {
 
 fn writes_bar(app: &mut App, ui: &mut Ui) {
     let mut select = None;
+    // With one card, its setups are only its setup: the list shows from two (also in the sidebar).
+    let several = app.saved.writes.len() > 1;
+    if several {
     row_wrapped(ui, |ui| {
         caps(ui, "card setups");
         for (i, w) in app.saved.writes.iter().enumerate() {
@@ -273,6 +323,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
             app.confirm = Some(crate::app::Confirm::DeleteWrite(app.write().id.clone()));
         }
     });
+    }
     if let Some(i) = select {
         app.select_write(i);
     }
@@ -280,10 +331,23 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     row(ui, |ui| {
         let w = &mut app.saved.writes[app.saved.active_write];
         let old = w.name.clone();
-        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::proportional(22.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0));
+        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::proportional(22.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0)).on_hover_text("click to rename this card");
         // Names identify writes for background replies; keep them unique and non-empty.
         if r.lost_focus() && (w.name.trim().is_empty() || app.saved.writes.iter().filter(|x| x.name == app.saved.writes[app.saved.active_write].name).count() > 1) {
             app.saved.writes[app.saved.active_write].name = old;
+        }
+        if !several {
+            let button = ui.add(egui::Button::new(RichText::new("Another card setup… ▾").color(ink.muted)).frame(false)).on_hover_text("for a second card, or another selection for this one");
+            egui::Popup::menu(&button).show(|ui| {
+                if widgets::icon_link(ui, Icon::Add, "New, with nothing chosen").clicked() {
+                    app.new_write(false);
+                    ui.close();
+                }
+                if widgets::icon_link(ui, Icon::Copy, "A copy of this one").clicked() {
+                    app.new_write(true);
+                    ui.close();
+                }
+            });
         }
     });
     let w = app.write();
@@ -835,7 +899,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                 }
             }
         });
-        widgets::help(ui, "By year (oldest first), by title, or numbered in your own order: use the arrows in the list above.");
+        widgets::help(ui, "By year (oldest first), by title, or numbered in your own order: use the arrows in “Folder names and order on the card”, below.");
     });
     widgets::setting(ui, "Names on the card", |ui| {
         let mut text = app.pattern_draft.clone().unwrap_or_else(|| w.options.pattern_text().to_string());
@@ -1294,4 +1358,10 @@ fn rename_widget(ui: &mut Ui, renaming: &Option<(bool, String, String)>, is_arti
             }
         }
     }
+}
+
+/// How many albums the next Sync adds, swaps or takes off, for the sidebar.
+pub fn pending_count(app: &App) -> usize {
+    let s = &app.card_state;
+    s.added + s.replaced + s.removed
 }

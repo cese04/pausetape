@@ -42,6 +42,8 @@ pub enum OnCard {
     Changing,
     /// Chosen, while another copy has its songs in higher quality.
     Better,
+    /// On the card, or chosen for it: what the card view lists (including what Sync takes off).
+    Listed,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -76,7 +78,7 @@ pub struct AlbumFacts<'a> {
 pub const HELP: &str = "Words find artists, albums and song titles. Narrow by what albums are:\n\
     format:flac   format:m4a   format:alac\n\
     quality:lossless   quality:lossy   quality:hires\n\
-    card:on   card:off   card:sync (changes at the next Sync)   card:better (a better copy exists)\n\
+    card:on   card:off   card:sync (changes at the next Sync)   card:all (on it, going on or off)   card:better (a better copy exists)\n\
     cover:no   cover:yes\n\
     year:1979   year:1979..1985   year:..1990\n\
     edited:yes   damaged:yes\n\
@@ -113,6 +115,7 @@ impl Query {
                     "off" | "no" => Some(Filter::Card(OnCard::Off)),
                     "sync" | "changing" | "pending" => Some(Filter::Card(OnCard::Changing)),
                     "better" => Some(Filter::Card(OnCard::Better)),
+                    "all" | "any" => Some(Filter::Card(OnCard::Listed)),
                     _ => None,
                 },
                 "cover" => yes_no(&value).map(Filter::Cover),
@@ -171,6 +174,7 @@ impl Filter {
             Filter::Card(OnCard::Off) => !a.card.on && !a.card.chosen,
             Filter::Card(OnCard::Changing) => a.card.changing,
             Filter::Card(OnCard::Better) => a.card.better,
+            Filter::Card(OnCard::Listed) => a.card.on || a.card.chosen,
             Filter::Cover(has) => a.cover == *has,
             Filter::Year(from, to) => a.year.is_some_and(|y| from.is_none_or(|f| y >= f) && to.is_none_or(|t| y <= t)),
             Filter::Edited(e) => a.tracks.iter().any(|t| t.dirty) == *e,
@@ -243,6 +247,7 @@ mod tests {
         assert!(m("quality:lossless", &flac_only) && !m("quality:lossless", &mixed) && m("quality:lossy", &mixed));
         assert!(m("year:1979", &mixed) && m("year:1970..1980", &mixed) && !m("year:1980..", &mixed));
         assert!(m("cover:no card:off", &mixed) && !m("cover:yes", &mixed) && !m("card:on", &mixed));
+        assert!(!m("card:all", &mixed), "neither on the card nor chosen");
         assert!(!m("edited:yes", &mixed));
         let q = Query::parse("joy candidate");
         assert!(!q.names_match("Joy Division", "Unknown Pleasures") && q.song_matches("Joy Division", "Unknown Pleasures", "Candidate"));

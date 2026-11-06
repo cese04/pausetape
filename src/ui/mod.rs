@@ -7,6 +7,8 @@ mod artist_panel;
 mod card;
 mod cassette;
 mod confirm;
+mod details;
+mod drag;
 pub mod folders;
 mod keys;
 mod menu;
@@ -20,6 +22,7 @@ mod playlists;
 #[cfg(debug_assertions)]
 pub mod screenshots;
 mod settings;
+mod sidebar;
 mod tag_editor;
 pub mod text;
 pub mod theme;
@@ -32,15 +35,15 @@ use text::plural;
 use theme::ink;
 use icons::Icon;
 use widgets::hairline_progress;
-use layout::{CONTROL, ICON, S1, S2, S3, S4, S5, margin, row};
+use layout::{CONTROL, ICON, S1, S2, S4, S5, margin, row};
 
 const MAX_W: f32 = 820.0;
 
 const ROW_H: f32 = layout::ROW;
 
-/// The panels, top to bottom: the tab bar; a strip for work under way and the latest notice;
-/// the open tab; the player. The tab bar and the player are the app's frame: tinted and ruled
-/// off, so they never read as content. Everything inside keeps to the page's side margin.
+/// The panels: the top bar (name and search); at the foot, the status bar and above it the
+/// player; the sidebar on the left; the open view in the rest. The bars, the sidebar and the
+/// player are the app's frame: tinted and ruled off, so they never read as content.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     keys::global(app, ui);
@@ -56,6 +59,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let r = egui::Panel::bottom("player").frame(chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 })).show_separator_line(false).show(ui, |ui| player::show(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
+    // The sidebar, between the top bar and the player, ruled off from the page.
+    let side_w = if sidebar::narrow(ui.ctx()) { sidebar::NARROW } else { sidebar::WIDE };
+    let r = egui::Panel::left("sidebar").frame(egui::Frame::new().fill(ink.bar)).exact_size(side_w).resizable(false).show_separator_line(false).show(ui, |ui| sidebar::show(app, ui));
+    let edge = r.response.rect;
+    ui.painter().vline(edge.right(), edge.y_range(), Stroke::new(1.0, ink.faint));
     let page = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S2 as i8, bottom: S2 as i8 });
     egui::CentralPanel::default().frame(page).show(ui, |ui| {
         // The library uses the whole width (its A–Z rail belongs at the window's edge); the other
@@ -64,13 +72,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.set_max_width(ui.available_width().min(MAX_W));
         }
         match app.tab {
-            Tab::Folders => folders::show(app, ui),
             Tab::Library => library::show(app, ui),
+            Tab::Suggestions => suggestions(app, ui),
             Tab::Card => card::show(app, ui),
             Tab::Playlists => playlists::show(app, ui),
             Tab::Settings => settings::show(app, ui),
         }
     });
+    folders::welcome(app, ui);
     folders::pickers(app, ui);
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
@@ -80,7 +89,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     drop_to_add(app, ui);
     card::sync_confirm_dialog(app, ui);
     confirm::dialog(app, ui);
+    details::sheet(app, ui);
     folders::add_dialog(app, ui);
+    drag::ghost(ui);
 }
 
 /// A folder dropped on the window is music to add, as "add music" would: while it's held over
@@ -94,7 +105,7 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
         p.rect_filled(area, 8.0, ink.bg.gamma_multiply(0.92));
         p.rect_filled(area, 8.0, ink.accent.gamma_multiply(0.10));
         p.rect_stroke(area, 8.0, Stroke::new(1.5, ink.accent), egui::StrokeKind::Inside);
-        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first (folders tab), then drop music to add" };
+        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first, then drop music to add" };
         p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(20.0), ink.text);
         p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(14.0), ink.muted);
     }
@@ -114,29 +125,68 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
     }
 }
 
-/// The tab bar: the app's name, the tabs, and what's running in the background.
+/// Every album looked up on MusicBrainz, with its suggestions to apply or dismiss, one after
+/// another (the library by artist shows each under its album; the details panel too).
+fn suggestions(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    ui.label(RichText::new("Suggested tags, from MusicBrainz").size(20.0).color(ink.text));
+    ui.add_space(S1);
+    let mut ids: Vec<(String, String, String)> = app
+        .lookups
+        .keys()
+        .map(|id| match app.album_by_id(id) {
+            Some((a, b)) => (app.index.artists[a].name.clone(), app.index.artists[a].albums[b].title.clone().unwrap_or_else(|| "Loose tracks".into()), id.clone()),
+            None => (String::new(), id.clone(), id.clone()),
+        })
+        .collect();
+    ids.sort();
+    if ids.is_empty() {
+        widgets::muted(ui, "Nothing to go through. Right-click an album › Look up on MusicBrainz, and its suggestions come here.");
+        return;
+    }
+    let mut actions = Vec::new();
+    egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+        for (artist, album, id) in ids {
+            ui.add_space(S2);
+            row(ui, |ui| {
+                ui.label(RichText::new(album).italics().size(17.0).color(ink.text));
+                widgets::muted(ui, artist);
+            });
+            if let Some(l) = app.lookups.get_mut(&id) {
+                library::lookup_block(ui, &app.tracks, &id, l, &mut actions);
+            }
+        }
+    });
+    actions::apply(app, actions);
+}
+
+/// The top bar: the app's name, and the search box, which looks through the library from
+/// anywhere (typing in it opens the library).
 fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     row(ui, |ui| {
         cassette::mark(ui, 18.0);
         ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
-        ui.add_space(S3);
-        // In a narrow window only the open tab keeps its name; the others show their icon.
-        let compact = ui.available_width() < 900.0;
-        for (t, icon, name) in [
-            (Tab::Folders, Icon::Folder, "Folders"),
-            (Tab::Library, Icon::Library, "Library"),
-            (Tab::Card, Icon::Card, "Card"),
-            (Tab::Playlists, Icon::Playlists, "Playlists"),
-            (Tab::Settings, Icon::Settings, "Settings"),
-        ] {
-            let active = app.tab == t;
-            if widgets::nav_tab(ui, icon, name, !compact || active, active).on_hover_text(name).clicked() {
-                app.tab = t;
-                // The library tab always opens on the whole library.
-                app.duplicates_only = false;
-                app.look_alikes_only = false;
-            }
+        ui.add_space(S4);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
+        let width = (ui.available_width() * 0.45).clamp(160.0, 420.0);
+        let before = app.filter.clone();
+        let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", width).on_hover_text(crate::library::search::HELP);
+        if app.focus_search {
+            app.focus_search = false;
+            r.request_focus();
+        }
+        // The card's albums are searched where they are; anywhere else, typing opens the library.
+        if app.filter != before && app.tab != Tab::Library && !(app.tab == Tab::Card && !app.card_setup_open) {
+            app.tab = Tab::Library;
+            app.duplicates_only = false;
+            app.look_alikes_only = false;
+        }
+        library::filters_menu(app, ui);
+        let typed = app.filter.trim().to_string();
+        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "Save").on_hover_text("keep this search in the sidebar").clicked() {
+            app.saved.searches.push(typed);
         }
     });
 }

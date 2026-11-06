@@ -955,3 +955,72 @@ Calibre's device view, for music: the library is where you choose what goes on t
   time, the volume and the end of the cover note were pushed off its right edge. The time now
   keeps its place, and the title, then artist · album · year, shorten with "…" to the room
   there is (whole on hover).
+
+### 82. A sidebar in place of the tabs (2026-11-05)
+- The tabs across the top are gone. A sidebar on the left holds the whole app, as Calibre's
+  tag browser does: the music folder (a menu to change it, rescan it or add music), the
+  library's two views (**Albums**, **Artists**, with how many), **Review** (what's worth a look:
+  albums without a cover, duplicates, artists that look alike, damaged files, corrections not
+  yet in the files; only what there is, with how many), saved **Searches** (right-click to
+  forget one), **Playlists** (and *New playlist*), the **Card** (with how many albums the next
+  Sync changes), and **Settings** at the foot. What's shown is filled in with the accent's tint.
+  In a window narrower than 900 points it keeps only its icons, their names on hover.
+- **The search box is in the top bar**, beside the app's name, with *Filters* and *Save*: it
+  searches the library from anywhere (typing opens the library).
+- The library's page starts with what it shows ("Albums", "Without a cover", "Searching
+  “format:flac”"), and *Collapse all* or *Write N corrected tags* where they apply. The chips
+  that led to what's worth a look became the sidebar's Review.
+
+### 83. The album table by default, and the details of what's selected (2026-11-05)
+- **Albums**, the sortable table, is the library's first view (in a new install; the view chosen
+  last is kept). **Artists**, the list with letters and every song, is the other, in the sidebar.
+- **The details panel**, at the right of the library where there's room for it (about 1000
+  points for the library), shows the album selected: its cover, the size of the panel; title,
+  artist (a click opens them in the library by artist), year, format, songs, size; where it
+  stands with the card; *Play*, *Send to the card*, *Edit tags*, *Look up*, *Find cover*, *Open
+  folder*; and its songs, a double click playing from one. Several albums selected: how many,
+  their songs and size, what to do with all of them. Nothing selected: what's playing.
+- Where there's no room beside the library, right-click › **Details** shows the same as a sheet
+  over the page.
+
+### 84. The card's view: what's on it, and how it's set up (2026-11-05)
+- **On the card** shows the albums on the card, or going on or off at the next Sync, in the
+  same table as the library (sorting, selecting, ⌘D, the right-click menu), and the search box
+  narrows them; **What the next Sync changes** keeps only those. The comparison with the card,
+  and music on it that this setup didn't put there, are above it. With nothing chosen yet, it
+  says how to choose.
+- **Setup** holds the rest, once set: the card's name, where it is, the player and its test,
+  playlists on it, folders and options, and, folded, the folder names and order artist by
+  artist (the list with ticks that used to fill the tab).
+- With one card setup, its list (and *New*, *Duplicate*) is gone: **Another card setup… ▾**
+  beside the name makes a second, new or a copy. From two, the list is back, and each setup
+  is an entry under *Card* in the sidebar.
+- The search box takes `card:all`: albums on the card, going on or off.
+
+### 85. A welcome the first time, in place of the folders tab (2026-11-05)
+- The folders tab, which was first among the tabs for good after being needed once, is gone.
+  The first time (no music folder yet), a **Welcome** over the page asks for the two things:
+  your music folder, then the SD card, which can wait (**Start, and choose the card later**).
+- After that, the music folder (with *Change folder…*, *Rescan*, *Add music…*) and reorganising
+  it (*Advanced*) are in **Settings › Music folder**, and the folder's menu is at the top of the
+  sidebar; the card is chosen in the card's *Setup*.
+- Music already on a card is explained after the welcome, not over it.
+
+### 86. Suggested tags where you'll see them (2026-11-05)
+- MusicBrainz suggestions showed only under their album in the library by artist, so with the
+  album table (now the first view) a *Look up* seemed to do nothing. They now show in three
+  places: under the album in the library by artist, as before; in the album's details; and in
+  **Review › Suggested tags**, which lists every album looked up, one after another, to apply
+  or dismiss. A *Look up* from the table says where its suggestions will be.
+- In a narrow space (the details panel) a suggestion's field takes less room, leaving it to the
+  old and new values; its buttons wrap.
+
+### 87. Drag music onto a playlist; drag a playlist's songs into order (2026-11-05)
+- Songs (library by artist) and albums (the table) can be dragged onto a playlist in the
+  sidebar, which is outlined while they're held over it; on **New playlist**, they make one.
+  A selection goes whole when it's what's dragged. What's held follows the pointer, in words
+  ("6 songs · drop on a playlist").
+- In a playlist, each song has a handle at its left: drag it, and a line in the accent shows
+  where it goes. *Move up* and *Move down* stay, for the keyboard. Each move can be undone.
+- The playlist's page no longer repeats the list of playlists (it's in the sidebar); how
+  playlists reach the card is one line, the rest on hover.
