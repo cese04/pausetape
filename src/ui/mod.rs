@@ -8,6 +8,7 @@ mod card;
 mod cassette;
 mod confirm;
 mod details;
+mod drag;
 pub mod folders;
 mod keys;
 mod menu;
@@ -90,6 +91,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     confirm::dialog(app, ui);
     details::sheet(app, ui);
     folders::add_dialog(app, ui);
+    drag::ghost(ui);
 }
 
 /// A folder dropped on the window is music to add, as "add music" would: while it's held over

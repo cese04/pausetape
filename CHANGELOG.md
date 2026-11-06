@@ -1014,3 +1014,13 @@ Calibre's device view, for music: the library is where you choose what goes on t
   or dismiss. A *Look up* from the table says where its suggestions will be.
 - In a narrow space (the details panel) a suggestion's field takes less room, leaving it to the
   old and new values; its buttons wrap.
+
+### 87. Drag music onto a playlist; drag a playlist's songs into order (2026-11-05)
+- Songs (library by artist) and albums (the table) can be dragged onto a playlist in the
+  sidebar, which is outlined while they're held over it; on **New playlist**, they make one.
+  A selection goes whole when it's what's dragged. What's held follows the pointer, in words
+  ("6 songs · drop on a playlist").
+- In a playlist, each song has a handle at its left: drag it, and a line in the accent shows
+  where it goes. *Move up* and *Move down* stay, for the keyboard. Each move can be undone.
+- The playlist's page no longer repeats the list of playlists (it's in the sidebar); how
+  playlists reach the card is one line, the rest on hover.

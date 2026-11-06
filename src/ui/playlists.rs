@@ -10,18 +10,14 @@ use egui::{Align, FontId, Layout, RichText, ScrollArea, Ui};
 use super::text;
 use super::theme::ink;
 use super::icons::Icon;
-use super::widgets::{self, caps, icon_button, icon_link, muted};
+use super::widgets::{self, icon_button, icon_link, muted};
 use crate::app::App;
 use crate::library::Track;
-use super::layout::{S1, S2, S3, row};
+use super::layout::{S1, S2, row};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
-    muted(
-        ui,
-        "The Echo Mini has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is exported as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware.",
-    );
     if device.browses_by_tags() {
         ui.label(RichText::new(playlist_copies_warning(device)).size(13.0).color(ink.warn));
     }
@@ -30,33 +26,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
     let by_path: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
     let by_index: HashMap<&Path, usize> = ids.iter().enumerate().map(|(i, id)| (id.as_path(), i)).collect();
-    let mut select = None;
     let mut play = None;
     // What was asked, done once drawing is over (the rows borrow the library's songs).
     let mut todo: Vec<Do> = Vec::new();
     let mut actions = Vec::new();
+    // The playlists are in the sidebar; this is the one open.
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
-            ui.set_width(200.0);
-            caps(ui, "playlists");
-            for (i, p) in app.saved.playlists.iter().enumerate() {
-                if widgets::tab(ui, &p.name, app.active_playlist == Some(i)).clicked() {
-                    select = Some(i);
-                }
-            }
-            ui.add_space(S1);
-            if icon_link(ui, Icon::Add, "New playlist").clicked() {
-                todo.push(Do::New);
-            }
-            ui.add_space(S2);
-            let total: u64 = app.saved.playlists.iter().map(|p| p.bytes(&by_path)).sum();
-            muted(ui, format!("copies need {}", text::bytes(total)));
-            ui.label(RichText::new("choose which playlists go on a card in the card tab").size(12.0).color(ink.muted));
-        });
-        ui.add_space(S3);
-        ui.vertical(|ui| {
             let Some(pi) = app.active_playlist.filter(|&i| i < app.saved.playlists.len()) else {
-                muted(ui, "Create a playlist, then use the + at the end of any track row in the library.");
+                muted(ui, "No playlist open. Make one with New playlist in the sidebar, or drag songs or albums onto it.");
                 return;
             };
             row(ui, |ui| {
@@ -88,12 +66,20 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
             let pl = &app.saved.playlists[pi];
             let dur: Duration = pl.tracks.iter().filter_map(|p| by_path.get(p.as_path())).map(|t| t.duration).sum();
-            muted(ui, format!("{} tracks · {} · {}", pl.tracks.len(), text::duration(dur), text::bytes(pl.bytes(&by_path))));
+            let how = "The Echo Mini has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is written to the card as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware. Which playlists go on a card: the card's Setup.";
+            muted(ui, format!("{} tracks · {} · on the card, a folder of copies ({})", pl.tracks.len(), text::duration(dur), text::bytes(pl.bytes(&by_path)))).on_hover_text(how);
             ui.add_space(S1);
             ScrollArea::vertical().auto_shrink(false).max_height(ui.available_height() - 40.0).show(ui, |ui| {
                 for (n, path) in pl.tracks.iter().enumerate() {
                     let title = by_path.get(path.as_path()).map(|t| t.display_title()).unwrap_or_else(|| "a missing song".into());
-                    row(ui, |ui| {
+                    let line = row(ui, |ui| {
+                        // A handle to drag the song to another place in the list.
+                        let (handle, h) = ui.allocate_exact_size(egui::vec2(S2, 18.0), egui::Sense::drag());
+                        let dot = if h.hovered() || h.dragged() { ink.text } else { ink.faint };
+                        for (dx, dy) in [(0.0, -4.0), (0.0, 0.0), (0.0, 4.0), (5.0, -4.0), (5.0, 0.0), (5.0, 4.0)] {
+                            ui.painter().circle_filled(handle.center() + egui::vec2(dx - 2.5, dy), 1.2, dot);
+                        }
+                        h.on_hover_text("drag to move").dnd_set_drag_payload(super::drag::PlaylistSong(pi, n));
                         ui.add_sized([28.0, 18.0], egui::Label::new(RichText::new(format!("{}", n + 1)).color(ink.muted)));
                         match by_path.get(path.as_path()) {
                             Some(t) => {
@@ -130,6 +116,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             }
                         });
                     });
+                    // Another of this list's songs held over the row: a line where it would go
+                    // (above when it comes from below, and the other way); let go, it goes there.
+                    let r = line.response;
+                    if let Some(held) = r.dnd_hover_payload::<super::drag::PlaylistSong>()
+                        && held.0 == pi
+                        && held.1 != n
+                    {
+                        let y = if held.1 > n { r.rect.top() } else { r.rect.bottom() };
+                        ui.painter().hline(r.rect.x_range(), y, egui::Stroke::new(2.0, ink.accent));
+                    }
+                    if let Some(held) = r.dnd_release_payload::<super::drag::PlaylistSong>()
+                        && held.0 == pi
+                        && held.1 != n
+                    {
+                        todo.push(Do::Move(pi, held.1, n, "moving a song".into()));
+                    }
                 }
             });
         });
@@ -137,7 +139,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     super::actions::apply(app, actions);
     for d in todo {
         match d {
-            Do::New => app.new_playlist(),
             Do::Rename(i, name) => {
                 app.rename_playlist(i, &name);
             }
@@ -150,10 +151,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 app.remember_playlists(what);
                 app.saved.playlists[i].tracks.swap(a, b);
             }
+            Do::Move(i, from, to, what) => {
+                app.remember_playlists(what);
+                let tracks = &mut app.saved.playlists[i].tracks;
+                let song = tracks.remove(from);
+                tracks.insert(to.min(tracks.len()), song);
+            }
         }
-    }
-    if let Some(i) = select {
-        app.active_playlist = Some(i);
     }
     if let Some(start) = play
         && let Some(pl) = app.active_playlist.and_then(|i| app.saved.playlists.get(i))
@@ -166,12 +170,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
 /// A change to the playlists, asked for while drawing them.
 enum Do {
-    New,
     Rename(usize, String),
     Delete(usize),
     /// Playlist, song, and how undo will name it.
     Remove(usize, usize, String),
     Swap(usize, usize, usize, String),
+    /// Playlist, from, to: the song taken out and put back at `to`.
+    Move(usize, usize, usize, String),
 }
 
 /// A player that lists songs from their tags also lists a playlist's copies.

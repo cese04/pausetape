@@ -31,6 +31,9 @@ enum Go {
     Suggestions,
     Playlist(usize),
     NewPlaylist,
+    /// Songs dropped on a playlist, or on "New playlist".
+    AddTo(usize, Vec<usize>),
+    NewWith(Vec<usize>),
     Card(usize),
     Settings,
 }
@@ -91,6 +94,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         Go::NewPlaylist => {
             app.tab = Tab::Playlists;
             app.new_playlist();
+        }
+        Go::AddTo(i, songs) => app.add_songs_to_playlist(i, &songs),
+        Go::NewWith(songs) => {
+            app.new_playlist();
+            if let Some(i) = app.active_playlist {
+                app.add_songs_to_playlist(i, &songs);
+            }
         }
         Go::Card(i) => {
             app.tab = Tab::Card;
@@ -242,11 +252,17 @@ fn playlists(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
     heading(ui, "playlists", narrow);
     for (i, p) in app.saved.playlists.iter().enumerate() {
         let active = app.tab == Tab::Playlists && app.active_playlist == Some(i);
-        if item(ui, Icon::Playlists, &p.name, Some(text::count(p.tracks.len())), active, narrow).clicked() {
+        let r = item(ui, Icon::Playlists, &p.name, Some(text::count(p.tracks.len())), active, narrow);
+        if let Some(songs) = super::drag::songs_to(ui, &r, r.rect) {
+            *go = Some(Go::AddTo(i, songs));
+        } else if r.clicked() {
             *go = Some(Go::Playlist(i));
         }
     }
-    if item(ui, Icon::Add, "New playlist", None, false, narrow).clicked() {
+    let r = item(ui, Icon::Add, "New playlist", None, false, narrow).on_hover_text("or drop songs here to make one with them");
+    if let Some(songs) = super::drag::songs_to(ui, &r, r.rect) {
+        *go = Some(Go::NewWith(songs));
+    } else if r.clicked() {
         *go = Some(Go::NewPlaylist);
     }
 }

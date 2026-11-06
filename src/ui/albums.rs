@@ -101,7 +101,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         drawn = range.clone();
         for n in range {
             let row = &rows[n];
-            let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+            let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click_and_drag());
             let selected = app.selected_albums.contains(&row.id);
             resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Row, true, selected, format!("{}, {}", row.artist_name, row.title)));
             widgets::focus_ring(ui, &resp, rect, 4.0);
@@ -157,6 +157,8 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             } else if resp.clicked() {
                 actions.push(Action::OnlyAlbum(row.id.clone()));
             }
+            // Dragged onto a playlist: the selection it's in, or the album.
+            super::drag::songs_from(&resp, || if selected && app.selected_albums.len() > 1 { app.selected_album_songs(&rows) } else { al.tracks.clone() });
             // On an album in the selection, the menu is for the whole selection.
             resp.context_menu(|ui| {
                 let of = if selected && app.selected_albums.len() > 1 { super::menu::Of::Songs(app.selected_album_songs(&rows)) } else { super::menu::Of::Album(row.artist, row.album) };

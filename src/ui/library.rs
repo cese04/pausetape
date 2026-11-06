@@ -79,7 +79,7 @@ fn number_column(ui: &Ui, numbers: &[String]) -> f32 {
 fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str, f32), show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, t.display_title()));
     widgets::focus_ring(ui, &resp, rect, 4.0);
     widgets::row_background(ui, &resp, rect, selected);
@@ -499,6 +499,8 @@ fn page(app: &mut App, ui: &mut Ui) {
                         if scroll_to == Some(ti) {
                             r.scroll_to_me(None);
                         }
+                        // Dragged onto a playlist: the selection it's in, or the song.
+                        super::drag::songs_from(&r, || if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] });
                         // As in the album table and any file list: a click selects, a double click
                         // plays (from this song to the album's end).
                         if r.double_clicked() {
