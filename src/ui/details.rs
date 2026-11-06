@@ -271,39 +271,25 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
             widgets::muted(ui, "Instrumental: no words to show.");
         }
         LyricsState::Found(l) => {
-            let playing = current == Some(t) && !l.synced.is_empty();
-            if playing {
-                // In time: the line being sung in the accent, those sung in grey; it stays in view.
-                let now = l.line_at(app.audio.status().pos);
-                let follow_id = egui::Id::unique("lyrics line followed");
-                let followed = ui.data(|d| d.get_temp::<Option<usize>>(follow_id)).flatten();
-                for (i, (at, line)) in l.synced.iter().enumerate() {
-                    let color = match now {
-                        Some(n) if n == i => ink.accent,
-                        Some(n) if i < n => ink.muted,
-                        _ => ink.text,
-                    };
-                    let words = if line.is_empty() { "·".to_string() } else { line.clone() };
-                    let r = ui.add(egui::Label::new(RichText::new(words).size(15.0).color(color)).wrap().sense(Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand);
-                    if r.clicked() {
-                        app.audio.seek(*at);
-                    }
-                    if now == Some(i) && followed != Some(i) {
-                        r.scroll_to_me(Some(egui::Align::Center));
-                        ui.data_mut(|d| d.insert_temp(follow_id, Some(i)));
+            let playing = current == Some(t);
+            // What kind they are, said first: in time or not looks the same until a line lights.
+            row(ui, |ui| {
+                if l.synced.is_empty() {
+                    widgets::help(ui, "Words only: these aren't in time with the song");
+                } else if playing {
+                    widgets::help(ui, "In time · click a line to go to it");
+                } else {
+                    widgets::help(ui, "In time while it plays ·");
+                    if widgets::link(ui, "Play it").clicked() {
+                        actions.push(Action::Play(tracks.to_vec(), pos));
                     }
                 }
-            } else {
+            });
+            ui.add_space(S1);
+            if l.synced.is_empty() {
                 ui.add(egui::Label::new(RichText::new(&l.plain).size(14.5).color(ink.text)).wrap());
-                if !l.synced.is_empty() {
-                    ui.add_space(S1);
-                    row(ui, |ui| {
-                        widgets::muted(ui, "In time while it plays ·");
-                        if widgets::link(ui, "Play it").clicked() {
-                            actions.push(Action::Play(tracks.to_vec(), pos));
-                        }
-                    });
-                }
+            } else {
+                in_time(app, ui, &l, t, playing);
             }
             ui.add_space(S1);
             let from = match l.source {
@@ -326,6 +312,76 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
     if app.busy.is_none() && widgets::icon_link(ui, Icon::Search, "Find lyrics for the whole album").on_hover_text("ahead of time, kept to read offline").clicked() {
         actions.push(Action::FindLyrics(tracks.to_vec()));
     }
+}
+
+/// Synced lyrics, line by line, with the breaks where nothing is sung. Playing, the line being
+/// sung is in the accent, those sung in grey, and it stays in view; a break under way fills its
+/// three dots and counts down to the words.
+fn in_time(app: &mut App, ui: &mut Ui, l: &crate::lyrics::Lyrics, t: usize, playing: bool) {
+    let ink = ink(ui);
+    let st = app.audio.status();
+    let length = if playing { st.len.filter(|d| !d.is_zero()).unwrap_or(app.tracks[t].duration) } else { app.tracks[t].duration };
+    let parts = l.stretches(length);
+    let now = if playing { crate::lyrics::stretch_at(&parts, st.pos) } else { None };
+    let follow_id = egui::Id::unique("lyrics line followed");
+    let followed = ui.data(|d| d.get_temp::<Option<usize>>(follow_id)).flatten();
+    for (i, part) in parts.iter().enumerate() {
+        let end = parts.get(i + 1).map_or(length, |n| n.at);
+        let sung = now.is_some_and(|n| i < n);
+        let r = match &part.words {
+            Some(words) => {
+                let color = if now == Some(i) { ink.accent } else if sung { ink.muted } else { ink.text };
+                ui.add(egui::Label::new(RichText::new(words).size(15.0).color(color)).wrap().sense(if playing { Sense::click() } else { Sense::hover() }))
+            }
+            None => {
+                let done = (now == Some(i)).then(|| (st.pos.saturating_sub(part.at).as_secs_f32() / end.saturating_sub(part.at).as_secs_f32().max(0.1)).min(1.0));
+                let left = text::duration(end.saturating_sub(st.pos) + std::time::Duration::from_millis(999));
+                let long = text::duration(end.saturating_sub(part.at));
+                let words = match (done.is_some(), i == 0, i + 1 == parts.len()) {
+                    (true, true, _) => format!("the words start in {left}"),
+                    (true, _, true) => format!("no more words · {left} to the end"),
+                    (true, ..) => format!("the next line in {left}"),
+                    (false, true, _) => format!("{long} before the words"),
+                    (false, _, true) => format!("{long} to the end, without words"),
+                    (false, ..) => format!("{long} without words"),
+                };
+                pause_row(ui, done, sung, &words, playing)
+            }
+        };
+        if playing {
+            let r = r.on_hover_cursor(egui::CursorIcon::PointingHand);
+            if r.clicked() {
+                app.audio.seek(part.at);
+            }
+            if now == Some(i) && followed != Some(i) {
+                r.scroll_to_me(Some(egui::Align::Center));
+                ui.data_mut(|d| d.insert_temp(follow_id, Some(i)));
+            }
+        }
+    }
+}
+
+/// A break in the lyrics: three dots, filled in the accent as it goes by (`done`, while it's
+/// under way), and what it is in words beside them.
+fn pause_row(ui: &mut Ui, done: Option<f32>, sung: bool, words: &str, playing: bool) -> egui::Response {
+    let ink = ink(ui);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), if playing { Sense::click() } else { Sense::hover() });
+    let p = ui.painter();
+    let y = rect.center().y;
+    for k in 0..3 {
+        let c = egui::pos2(rect.left() + 4.0 + 10.0 * k as f32, y);
+        let color = match done {
+            Some(d) => ink.muted.lerp_to_gamma(ink.accent, (d * 3.0 - k as f32).clamp(0.0, 1.0)),
+            None if sung => ink.faint,
+            None => ink.muted,
+        };
+        p.circle_filled(c, 2.5, color);
+    }
+    let color = if done.is_some() { ink.accent } else { ink.muted };
+    let x = rect.left() + 34.0;
+    let g = p.layout_no_wrap(words.to_string(), FontId::proportional(12.5), color);
+    p.galley(egui::pos2(x, y - g.size().y / 2.0), g, color);
+    resp
 }
 
 fn several(app: &App, ui: &mut Ui, albums: &[(usize, usize)], actions: &mut Vec<Action>) {

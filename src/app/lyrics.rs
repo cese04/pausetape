@@ -1,7 +1,7 @@
 //! Lyrics for the details panel: asked for when a song's are shown, or an album's at once.
-//! One worker, one song at a time: what the library database keeps, else the song's own (a
-//! `.lrc` beside it, its tags), else LRCLIB's, kept in the database once found (or not found),
-//! so they're there offline after.
+//! One worker, one song at a time: the song's own (a `.lrc` beside it, its tags), else what the
+//! library database keeps, else LRCLIB's, kept in the database once found (or not found), so
+//! they're there offline after.
 
 use super::*;
 use crate::lyrics::{self, Lyrics};
@@ -120,17 +120,13 @@ fn lyrics_worker(jobs: Receiver<LyricsJob>, tx: Sender<Msg>, ctx: egui::Context,
             if job.stop.is_some() {
                 let _ = tx.send(Msg::WriteProgress(n, total));
             }
-            let kept = if job.again { None } else { db.as_ref().and_then(|db| db.lyrics(&id).ok().flatten()) };
-            let result = match kept {
+            // The song's own first, as they are now (a `.lrc` put beside it later wins).
+            let kept = || if job.again { None } else { db.as_ref().and_then(|db| db.lyrics(&id).ok().flatten()) };
+            let result = match lyrics::local(&path).map(Some).or_else(kept) {
                 Some(k) => Ok(k),
                 None => {
-                    let looked = match lyrics::local(&path) {
-                        Some(own) => Ok(Some(own)),
-                        None => {
-                            lyrics::pause();
-                            lyrics::fetch(&agent, &user_agent, &query).map_err(|e| format!("{e:#}"))
-                        }
-                    };
+                    lyrics::pause();
+                    let looked = lyrics::fetch(&agent, &user_agent, &query).map_err(|e| format!("{e:#}"));
                     // Kept found or not found, not failed (it's asked again next time).
                     if let (Ok(l), Some(db)) = (&looked, db.as_mut()) {
                         let _ = db.save_lyrics(&id, l.as_ref(), crate::card::now());

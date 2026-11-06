@@ -45,10 +45,48 @@ impl Lyrics {
         (!plain.is_empty()).then_some(Lyrics { synced, plain, instrumental: false, source: Some(source) })
     }
 
-    /// The line being sung at `pos` (the last that has started), for synced lyrics.
-    pub fn line_at(&self, pos: Duration) -> Option<usize> {
-        self.synced.iter().rposition(|(at, _)| *at <= pos)
+    /// Synced lyrics as the song goes, in a song `length` long: each line, and the breaks where
+    /// nothing is sung (before the first line, a solo, after the last), so a song that's in time
+    /// shows it before its first words. A break is where an empty line says one starts, or, a
+    /// while into a line, when the next is long in coming. Breaks too short to matter are left out.
+    pub fn stretches(&self, length: Duration) -> Vec<Stretch> {
+        let mut all = vec![Stretch { at: Duration::ZERO, words: None }];
+        for (i, (at, words)) in self.synced.iter().enumerate() {
+            if words.is_empty() {
+                all.push(Stretch { at: *at, words: None });
+                continue;
+            }
+            all.push(Stretch { at: *at, words: Some(words.clone()) });
+            let next = self.synced.get(i + 1);
+            let until = next.map_or(length, |n| n.0);
+            if until > *at + BREAK_AFTER && !next.is_some_and(|n| n.1.is_empty()) {
+                all.push(Stretch { at: *at + SUNG_FOR, words: None });
+            }
+        }
+        // One break for breaks in a row, the first; then those long enough.
+        all.dedup_by(|b, a| a.words.is_none() && b.words.is_none());
+        let ends: Vec<Duration> = all.iter().skip(1).map(|s| s.at).chain([length]).collect();
+        all.into_iter().zip(ends).filter(|(s, end)| s.words.is_some() || end.saturating_sub(s.at) >= SHORTEST_BREAK).map(|(s, _)| s).collect()
     }
+}
+
+/// Nothing new sung for this long after a line starts: a break is shown.
+const BREAK_AFTER: Duration = Duration::from_secs(10);
+/// How long a line is taken to be sung for, when nothing marks where it ends.
+const SUNG_FOR: Duration = Duration::from_secs(5);
+/// Breaks shorter than this aren't shown: a breath between lines.
+const SHORTEST_BREAK: Duration = Duration::from_secs(4);
+
+/// A line sung from `at`, or a break where none is (`words` None); it lasts until the next.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stretch {
+    pub at: Duration,
+    pub words: Option<String>,
+}
+
+/// The stretch under way at `pos` (the last that has started).
+pub fn stretch_at(stretches: &[Stretch], pos: Duration) -> Option<usize> {
+    stretches.iter().rposition(|s| s.at <= pos)
 }
 
 /// LRC lines into (time, words), sorted by time: "[01:23.45]" or "[1:23]" or "[01:23:45]"; a
@@ -212,9 +250,21 @@ mod tests {
     #[test]
     fn the_line_being_sung() {
         let l = Lyrics::from_text("[00:01]a\n[00:05]b\n[00:09]c", Source::Lrclib).unwrap();
-        assert_eq!(l.line_at(Duration::from_millis(500)), None);
-        assert_eq!(l.line_at(Duration::from_secs(5)), Some(1));
-        assert_eq!(l.line_at(Duration::from_secs(60)), Some(2));
+        let s = l.stretches(Duration::from_secs(12));
+        assert_eq!(s.len(), 3, "no breaks: the first line comes at once, the song ends soon after");
+        assert_eq!(stretch_at(&s, Duration::from_millis(500)), None);
+        assert_eq!(stretch_at(&s, Duration::from_secs(5)), Some(1));
+        assert_eq!(stretch_at(&s, Duration::from_secs(60)), Some(2));
+    }
+
+    #[test]
+    fn breaks_where_nothing_is_sung() {
+        // An intro, a line long before the next, an empty line ending one, a short gap, an outro.
+        let l = Lyrics::from_text("[00:20]a\n[00:22]b\n[00:50]c\n[00:53]\n[01:10]d\n[01:12]\n[01:14]e", Source::Lrclib).unwrap();
+        let s = l.stretches(Duration::from_secs(120));
+        let got: Vec<(u64, Option<&str>)> = s.iter().map(|s| (s.at.as_secs(), s.words.as_deref())).collect();
+        assert_eq!(got, [(0, None), (20, Some("a")), (22, Some("b")), (27, None), (50, Some("c")), (53, None), (70, Some("d")), (74, Some("e")), (79, None)]);
+        assert_eq!(stretch_at(&s, Duration::from_secs(10)), Some(0), "the intro is under way");
     }
 
     #[test]
