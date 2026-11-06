@@ -124,8 +124,8 @@ src/
     ├── details.rs     the details of what's selected (cover, songs, card state, commands), beside the library or as a sheet
     ├── drag.rs        dragging songs and albums onto playlists, and a playlist's songs into order
     ├── genres.rs      the genres view: every genre, each leading to its artists and albums
-    ├── theme.rs       palette, fonts, frames; style.spacing on the grid
-    ├── layout.rs      the 8-point grid (S1–S6, row and control heights) and `row`: left-to-right rows, centred
+    ├── theme.rs       palette, fonts (assets/fonts, with system fallbacks), frames; style.spacing on the grid
+    ├── layout.rs      the 8-point grid (S1–S6, row and control heights), the type scale (`font`) and `row`: left-to-right rows, centred
     ├── icons.rs       drawn line icons (tabs and commands), no font needed
     ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
     ├── text.rs        durations, sizes, plurals, shortening, format notes and badges
@@ -202,7 +202,7 @@ letters, label, filesystem and free space through `windows-sys` on Windows; moun
 `card/label.rs` (the label's hidden attribute on Windows), `platform.rs` (data folder;
 `open`/`explorer`/`xdg-open`; no Trash on Windows removable drives; ffmpeg without a console
 window on Windows),
-`ui/theme.rs` (font paths), `audio/decode.rs` (ffmpeg locations, `ffmpeg.exe`),
+`ui/theme.rs` (fallback font paths), `audio/decode.rs` (ffmpeg locations, `ffmpeg.exe`),
 `ui/navigator.rs` (drive shortcuts). The gaps are listed in
 [TESTING §3](TESTING.md#3-known-gaps-found-by-reading-the-code-not-yet-seen-on-a-real-machine).
 

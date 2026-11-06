@@ -9,7 +9,7 @@ use super::text::plural;
 use super::theme::{self, ink};
 use super::widgets::{self, help};
 use crate::app::{App, Shared};
-use super::layout::{S1, S2, row, row_wrapped};
+use super::layout::{S1, S2, row, row_wrapped, font};
 
 const LABEL_W: f32 = 110.0;
 
@@ -51,7 +51,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Rename, ink.text);
-            ui.label(RichText::new("Edit tags").size(18.0).color(ink.text));
+            ui.label(RichText::new("Edit tags").size(font::TITLE).color(ink.text));
             ui.label(RichText::new(plural(edit.tracks.len(), "song")).color(ink.muted));
         });
         ui.add_space(S2);
@@ -83,7 +83,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         });
         ui.add_space(S2);
         if let Some(p) = edit.problem() {
-            ui.label(RichText::new(p).size(13.0).color(ink.warn));
+            ui.label(RichText::new(p).size(font::UI).color(ink.warn));
         }
         let cue = edit.tracks.iter().any(|&i| app.tracks[i].cue.is_some());
         help(

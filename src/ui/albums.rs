@@ -12,7 +12,7 @@ use super::theme::{self, ink};
 use super::widgets::{self, muted, truncated};
 use crate::app::{AlbumRow, App, SortBy};
 use crate::library::search::Query;
-use super::layout::{S1, S2, row, row_wrapped};
+use super::layout::{S1, S2, row, row_wrapped, font};
 
 /// Fixed columns: (heading, sort, width, right-aligned). Artist and album share what's left.
 const FIXED: [(&str, SortBy, f32, bool); 6] = [
@@ -41,7 +41,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         });
     }
     if !query.unknown.is_empty() {
-        ui.label(RichText::new(format!("not understood: {} (hover over the search box for what works)", query.unknown.join(" "))).size(13.0).color(ink.warn));
+        ui.label(RichText::new(format!("not understood: {} (hover over the search box for what works)", query.unknown.join(" "))).size(font::UI).color(ink.warn));
     }
     let width = ui.available_width() - 14.0;
     let fixed: f32 = FIXED.iter().map(|c| c.2).sum::<f32>() + MARK_W;
@@ -72,7 +72,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         };
         let color = if sorted || r.hovered() { ink.text } else { ink.muted };
         let (at, align) = if right { (cell.right_center(), Align2::RIGHT_CENTER) } else { (cell.left_center(), Align2::LEFT_CENTER) };
-        ui.painter().text(at, align, format!("{}{arrow}", name.to_uppercase()), FontId::proportional(11.5), color);
+        ui.painter().text(at, align, format!("{}{arrow}", name.to_uppercase()), FontId::proportional(font::CAPS), color);
         if r.clicked() {
             actions.push(Action::SortAlbums(by));
         }
@@ -108,8 +108,8 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             widgets::row_background(ui, &resp, rect, selected);
             let p = ui.painter_at(rect);
             let y = rect.center().y;
-            let font = FontId::proportional(14.5);
-            let small = FontId::proportional(12.5);
+            let font = FontId::proportional(font::UI);
+            let small = FontId::proportional(font::META);
             let cell = |k: usize| rect.left() + lefts[k];
             let a = &app.index.artists[row.artist];
             let al = &a.albums[row.album];
@@ -126,10 +126,11 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             text_at(1, row.artist_name.clone(), &font, if playing { ink.accent } else { ink.text });
             let title = if row.edited { format!("{} · edited", row.title) } else { row.title.clone() };
             text_at(2, title, &font, ink.text);
-            text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &font, ink.muted);
-            text_at(4, row.format.clone(), &small, if row.plays_on_device { ink.muted } else { ink.warn });
+            let data = widgets::data();
+            text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &data, ink.muted);
+            text_at(4, row.format.clone(), &data, if row.plays_on_device { ink.muted } else { ink.warn });
             let right = |k: usize, s: String| {
-                p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, small.clone(), ink.muted);
+                p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, data.clone(), ink.muted);
             };
             right(5, row.songs.to_string());
             right(6, text::bytes(row.bytes));

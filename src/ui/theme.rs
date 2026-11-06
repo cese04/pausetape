@@ -8,7 +8,7 @@ use std::sync::Arc;
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle, Theme, Ui, vec2};
 use serde::{Deserialize, Serialize};
 
-use super::layout::{ICON, ROW, S1, S2, S3, S5};
+use super::layout::{ICON, ROW, S1, S2, S3, S5, font};
 
 pub struct Ink {
     pub bg: Color32,
@@ -136,8 +136,27 @@ fn palette(dark: bool, accent: Accent) -> Ink {
     }
 }
 
-/// System serif faces close in spirit to ET Book, then CJK fallbacks (music libraries are rarely
-/// all-Latin). Missing files are skipped, so this degrades to egui's defaults anywhere.
+/// The faces the app brings, so it reads the same on every system (§4.3 of the design notes):
+/// ET Book (Tufte's, MIT) for the music, Courier Prime (OFL) typed for the facts, Kalam (OFL)
+/// handwritten for the names of cards and playlists, as on a tape's label.
+const ET_BOOK: &[u8] = include_bytes!("../../assets/fonts/et-book-roman-line-figures.ttf");
+const ET_BOOK_ITALIC: &[u8] = include_bytes!("../../assets/fonts/et-book-display-italic-old-style-figures.ttf");
+const COURIER_PRIME: &[u8] = include_bytes!("../../assets/fonts/CourierPrime-Regular.ttf");
+const KALAM: &[u8] = include_bytes!("../../assets/fonts/Kalam-Regular.ttf");
+
+/// Album titles: ET Book's own italic (egui's `italics()` only slants the roman).
+pub fn italic() -> FontFamily {
+    FontFamily::Name("italic".into())
+}
+
+/// The names of cards and playlists, written by hand.
+pub fn hand() -> FontFamily {
+    FontFamily::Name("hand".into())
+}
+
+/// After ET Book, for what it lacks (ł, ş, ž…): a system serif close in spirit, then CJK faces
+/// (music libraries are rarely all-Latin). Missing files are skipped, so this degrades to egui's
+/// defaults anywhere.
 const SERIF: &[(&str, u32)] = &[
     ("/System/Library/Fonts/Palatino.ttc", 0),
     ("/System/Library/Fonts/Supplemental/Georgia.ttf", 0),
@@ -190,22 +209,29 @@ pub fn install(ctx: &egui::Context) {
     };
     let serif = load(SERIF, true);
     let fallback = load(FALLBACK, false);
-    let prop = fonts.families.entry(FontFamily::Proportional).or_default();
-    for (i, name) in serif.into_iter().enumerate() {
-        prop.insert(i, name);
+    for (name, bytes) in [("ET Book", ET_BOOK), ("ET Book Italic", ET_BOOK_ITALIC), ("Courier Prime", COURIER_PRIME), ("Kalam", KALAM)] {
+        fonts.font_data.insert(name.into(), Arc::new(FontData::from_static(bytes)));
     }
-    prop.extend(fallback.iter().cloned());
-    fonts.families.entry(FontFamily::Monospace).or_default().extend(fallback);
+    // Each family: its face, then the serif's fallbacks, then egui's own (symbols, emoji).
+    let defaults = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    let then: Vec<String> = serif.into_iter().chain(fallback.iter().cloned()).chain(defaults).collect();
+    let family = |first: &str| std::iter::once(first.to_string()).chain(then.iter().cloned()).collect::<Vec<_>>();
+    fonts.families.insert(FontFamily::Proportional, family("ET Book"));
+    fonts.families.insert(italic(), family("ET Book Italic"));
+    fonts.families.insert(hand(), family("Kalam"));
+    let mono = fonts.families.entry(FontFamily::Monospace).or_default();
+    mono.insert(0, "Courier Prime".into());
+    mono.extend(fallback);
     ctx.set_fonts(fonts);
 
     for theme in [Theme::Light, Theme::Dark] {
         ctx.style_mut_of(theme, |style| {
             style.text_styles = [
-                (TextStyle::Heading, FontId::proportional(26.0)),
-                (TextStyle::Body, FontId::proportional(15.5)),
-                (TextStyle::Button, FontId::proportional(15.0)),
-                (TextStyle::Small, FontId::proportional(12.0)),
-                (TextStyle::Monospace, FontId::monospace(13.0)),
+                (TextStyle::Heading, FontId::proportional(font::DISPLAY)),
+                (TextStyle::Body, FontId::proportional(font::BODY)),
+                (TextStyle::Button, FontId::proportional(font::UI)),
+                (TextStyle::Small, FontId::proportional(font::META)),
+                (TextStyle::Monospace, FontId::monospace(font::META)),
             ]
             .into();
             // The 8-point grid (`layout`): gaps of 8, controls a row of 24 tall, insets of 16.

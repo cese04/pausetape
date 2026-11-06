@@ -4,7 +4,7 @@
 
 use egui::{Align2, FontId, RichText, ScrollArea, Sense, Ui, vec2};
 
-use super::layout::{ROW, S1, S2, row};
+use super::layout::{ROW, S1, S2, row, font};
 use super::text::plural;
 use super::theme::ink;
 use super::widgets;
@@ -46,7 +46,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
     let count = rows.len();
     row(ui, |ui| {
-        ui.label(RichText::new("Genres").size(20.0).color(ink.text));
+        ui.label(RichText::new("Genres").size(font::HEADING).color(ink.text));
         widgets::muted(ui, plural(count, "genre"));
         ui.add_space(S2);
         if widgets::tab(ui, "By name", !by_size).clicked() {
@@ -90,9 +90,9 @@ fn line(ui: &mut Ui, name: &str, facts: &str, quiet: bool) -> egui::Response {
     widgets::row_background(ui, &resp, rect, false);
     let y = rect.center().y;
     let p = ui.painter();
-    let name_g = widgets::truncated(ui, name.to_string(), FontId::proportional(16.0), if quiet { ink.muted } else { ink.text }, rect.width() * 0.5);
+    let name_g = widgets::truncated(ui, name.to_string(), FontId::proportional(font::BODY), if quiet { ink.muted } else { ink.text }, rect.width() * 0.5);
     let name_w = name_g.size().x;
     p.galley(egui::pos2(rect.left() + S1, y - name_g.size().y / 2.0), name_g, ink.text);
-    p.text(egui::pos2(rect.left() + S1 + name_w + S2, y), Align2::LEFT_CENTER, facts, FontId::proportional(13.0), ink.muted);
+    p.text(egui::pos2(rect.left() + S1 + name_w + S2, y), Align2::LEFT_CENTER, facts, FontId::proportional(font::UI), ink.muted);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }

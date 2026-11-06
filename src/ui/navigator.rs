@@ -10,7 +10,7 @@ use egui::{RichText, ScrollArea, Ui};
 use super::text;
 use super::theme::ink;
 use super::widgets::{self, caps, link, muted};
-use super::layout::{S1, row_wrapped};
+use super::layout::{S1, row_wrapped, font};
 
 const AUDIO: &[&str] = &["flac", "mp3", "wav", "m4a", "aac", "ogg", "opus", "ape", "wv", "aiff", "aif", "wma"];
 /// Past this many subfolders, skip counting their audio files to keep browsing instant.
@@ -232,7 +232,7 @@ impl Navigator {
         };
         muted(ui, here);
         if let Some(e) = &l.error {
-            ui.label(RichText::new(e).color(ink.warn).size(12.5));
+            ui.label(RichText::new(e).color(ink.warn).size(font::META));
         }
         ui.add_space(S1);
         let row_h = 26.0;
@@ -249,11 +249,11 @@ impl Navigator {
                 if folder {
                     super::icons::paint(ui.painter(), icon, super::icons::Icon::Folder, ink.muted);
                 } else {
-                    ui.painter().text(icon.center(), egui::Align2::CENTER_CENTER, "↑", egui::FontId::proportional(15.0), ink.muted);
+                    ui.painter().text(icon.center(), egui::Align2::CENTER_CENTER, "↑", egui::FontId::proportional(font::BODY), ink.muted);
                 }
-                ui.painter().text(egui::pos2(rect.left() + 32.0, y), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(15.0), ink.text);
+                ui.painter().text(egui::pos2(rect.left() + 32.0, y), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(font::BODY), ink.text);
                 if let Some(text) = right {
-                    ui.painter().text(egui::pos2(rect.right() - 8.0, y), egui::Align2::RIGHT_CENTER, text, egui::FontId::proportional(12.5), ink.muted);
+                    ui.painter().text(egui::pos2(rect.right() - 8.0, y), egui::Align2::RIGHT_CENTER, text, egui::FontId::proportional(font::META), ink.muted);
                 }
                 resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
             };

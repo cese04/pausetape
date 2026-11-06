@@ -6,7 +6,7 @@ use super::icons::Icon;
 use super::theme::{Accent, ink};
 use super::widgets::{self, help, icon_link, setting};
 use crate::app::{App, ThemePref};
-use super::layout::{S1, S2, row};
+use super::layout::{S1, S2, row, font};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
@@ -56,7 +56,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 }
             }
             help(ui, "Rescans only open files that are new or changed since they were last read.");
-            ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(12.0).color(ink(ui).muted)).truncate());
+            ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(font::META).color(ink(ui).muted)).truncate());
             row(ui, |ui| {
                 if app.busy.is_none() && icon_link(ui, Icon::Rescan, "Read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
                     app.read_all_again();
@@ -136,7 +136,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 } else {
                     ui.label(
                         RichText::new("This ffmpeg can't make MP3s (no LAME encoder): lossless songs are still converted to FLAC for the card, but AAC, Dolby and other lossy ones are left out.")
-                            .size(13.0)
+                            .size(font::UI)
                             .color(ink(ui).warn),
                     );
                 }

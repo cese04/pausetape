@@ -38,7 +38,7 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 | **Player** | Cover art (embedded, else `cover.jpg`/`folder.jpg`…), a loudness waveform that doubles as the seek bar with a red playhead, round previous/play/next buttons, volume. Keys: space, ←/→ (±10 s), N/P. |
 | **Mac app** | `scripts/package-macos.sh` makes a universal `.app` (47 MB) and `.dmg` (24 MB) for Apple Silicon + Intel, macOS 12+, with a minimal LGPL ffmpeg (8.3 MB) inside, icon, licences, and an ad-hoc signature (no Apple Developer Program yet). `--version` reports which ffmpeg is in use. See [DISTRIBUTION](DISTRIBUTION.md). |
 | **Automated builds** | GitHub Actions: `ci.yml` builds and tests on macOS, Windows and Linux on every push; `macos.yml` packages the DMG and attaches it to releases for `v*` tags. Written, not yet run (no GitHub repository yet). |
-| **Look** | Tufte-inspired: one serif face (Palatino), warm paper or ink theme, no boxes except where a task needs grouping, colour only for warnings (always brick red) and an accent of the user's choosing (seven presets) for what's open, playing or under way. Long names shorten with "…" to fit; the layout holds from 720 px to wide screens. |
+| **Look** | Tufte-inspired: ET Book for the music (album titles in its italic), Courier Prime for figures standing alone, Kalam for the names of cards and playlists, all brought with the app; warm paper or ink theme, no boxes except where a task needs grouping, colour only for warnings (always brick red) and an accent of the user's choosing (seven presets) for what's open, playing or under way. Long names shorten with "…" to fit; the layout holds from 720 px to wide screens. |
 
 ### How it was checked
 

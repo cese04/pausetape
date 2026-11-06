@@ -36,7 +36,7 @@ use text::plural;
 use theme::ink;
 use icons::Icon;
 use widgets::hairline_progress;
-use layout::{CONTROL, ICON, S1, S2, S4, S5, margin, row};
+use layout::{CONTROL, ICON, S1, S2, S4, S5, font, margin, row};
 
 const MAX_W: f32 = 820.0;
 
@@ -108,8 +108,8 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
         p.rect_filled(area, 8.0, ink.accent.gamma_multiply(0.10));
         p.rect_stroke(area, 8.0, Stroke::new(1.5, ink.accent), egui::StrokeKind::Inside);
         let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first, then drop music to add" };
-        p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(20.0), ink.text);
-        p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(14.0), ink.muted);
+        p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(font::HEADING), ink.text);
+        p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(font::UI), ink.muted);
     }
     let Some(first) = dropped.first() else { return };
     if app.dialog_open() {
@@ -140,7 +140,7 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
 /// another (the library by artist shows each under its album; the details panel too).
 fn suggestions(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    ui.label(RichText::new("Suggested tags, from MusicBrainz").size(20.0).color(ink.text));
+    ui.label(RichText::new("Suggested tags, from MusicBrainz").size(font::HEADING).color(ink.text));
     ui.add_space(S1);
     let mut ids: Vec<(String, String, String)> = app
         .lookups
@@ -160,7 +160,7 @@ fn suggestions(app: &mut App, ui: &mut Ui) {
         for (artist, album, id) in ids {
             ui.add_space(S2);
             row(ui, |ui| {
-                ui.label(RichText::new(album).italics().size(17.0).color(ink.text));
+                ui.label(RichText::new(album).family(theme::italic()).size(font::TITLE).color(ink.text));
                 widgets::muted(ui, artist);
             });
             if let Some(l) = app.lookups.get_mut(&id) {
@@ -177,7 +177,7 @@ fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     row(ui, |ui| {
         cassette::mark(ui, 18.0);
-        ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
+        ui.label(RichText::new(crate::APP_NAME).size(font::HEADING).color(ink.text));
         ui.add_space(S4);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
         icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
@@ -217,7 +217,7 @@ fn status_bar(app: &mut App, ui: &mut Ui) {
         } else if !app.selected_albums.is_empty() {
             facts.push_str(&format!(" · {} selected", plural(app.selected_albums.len(), "album")));
         }
-        ui.label(RichText::new(facts).size(13.0).color(ink.muted));
+        ui.label(RichText::new(facts).size(font::UI).color(ink.muted));
         // Work under way at the right end; the latest notice in what's left beside it, so a
         // notice made while work runs is still seen.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -258,8 +258,8 @@ fn job(app: &mut App, ui: &mut Ui) {
     } else if let Some(left) = b.time_left() {
         facts.push_str(&format!(" · {} left", text::time_left(left)));
     }
-    ui.label(RichText::new(facts).size(13.0).color(ink.muted));
-    ui.label(RichText::new(&b.label).size(13.5).color(ink.text));
+    ui.label(RichText::new(facts).size(font::UI).color(ink.muted));
+    ui.label(RichText::new(&b.label).size(font::UI).color(ink.text));
     cassette::spinner(ui, ICON);
 }
 
@@ -274,7 +274,7 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     if app.notice_offers_undo() && widgets::icon_link(ui, Icon::Back, format!("Undo ({})", ui.ctx().format_shortcut(&keys::UNDO))).clicked() {
         app.undo_last();
     }
-    widgets::fitted(ui, RichText::new(text).size(13.0).color(ink.text), ui.available_width() - ICON - S2, egui::Sense::hover()).on_hover_text(text);
+    widgets::fitted(ui, RichText::new(text).size(font::UI).color(ink.text), ui.available_width() - ICON - S2, egui::Sense::hover()).on_hover_text(text);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
     icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
 }

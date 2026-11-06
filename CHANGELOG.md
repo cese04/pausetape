@@ -1098,3 +1098,19 @@ Calibre's device view, for music: the library is where you choose what goes on t
   the files showed in the player but not in the details panel, which kept the cover it had
   first loaded for the album. Both are now looked up again whenever their songs' cover changes,
   the one shown kept until the new one is ready.
+
+### 93. The app brings its fonts, on one type scale (2026-11-06)
+UI/UX phase 4, first part (§4.3 of the design notes).
+- **ET Book** (Tufte's, MIT) for the music, the same on every system; album titles in **its own
+  italic**, not the roman slanted. What it lacks (ł, ş, ž…) comes from the system's serif, then
+  its CJK faces, as before. Windows no longer depends on Palatino Linotype.
+- **Courier Prime** (OFL), typed, for figures standing alone: songs' durations, the player's
+  time, the album table's year, format, songs and size, the year beside an album. They line up
+  in columns now (`4:32` over `3:06`). Figures within a sentence stay in the serif.
+- **Kalam** (OFL), handwritten, for the names of cards and playlists: in the sidebar, the card
+  bar, and where they're renamed, as on a tape's label.
+- **One type scale** (`layout::font`): 12 for section labels in capitals, 13 for lesser facts,
+  14 for the interface, 16 for rows and reading, 20 for titles, 24 for a page's, 28 for the
+  album in the details panel. The 18 sizes used before map onto it.
+- The fonts and their licences are in `assets/fonts`; the macOS app carries the licences in
+  `Contents/Resources/Licenses/Fonts`. The binary grows by about 700 KB.

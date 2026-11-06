@@ -10,16 +10,16 @@ use egui::{Align, FontId, Layout, RichText, ScrollArea, Ui};
 use super::text;
 use super::theme::ink;
 use super::icons::Icon;
-use super::widgets::{self, icon_button, icon_link, muted};
+use super::widgets::{icon_button, icon_link, muted};
 use crate::app::App;
 use crate::library::Track;
-use super::layout::{S1, S2, row};
+use super::layout::{S1, S2, row, font};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
     if device.browses_by_tags() {
-        ui.label(RichText::new(playlist_copies_warning(device)).size(13.0).color(ink.warn));
+        ui.label(RichText::new(playlist_copies_warning(device)).size(font::UI).color(ink.warn));
     }
     ui.add_space(S1);
     // Playlists hold track ids: a song inside an album file has its own ("…/Album.flac#03").
@@ -42,8 +42,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 // click elsewhere): card setups refer to playlists by name, so it's checked then.
                 let draft_id = egui::Id::unique(("playlist name", pi));
                 let mut draft = ui.data_mut(|d| d.get_temp::<String>(draft_id)).unwrap_or_else(|| app.saved.playlists[pi].name.clone());
-                let name_w = (widgets::text_width(ui, &draft, 20.0) + S2).clamp(80.0, 320.0);
-                let r = ui.add(egui::TextEdit::singleline(&mut draft).align(egui::Align2::LEFT_CENTER).font(FontId::proportional(20.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(name_w)).on_hover_text("click to rename");
+                let hand = FontId::new(font::HEADING, super::theme::hand());
+                let name_w = (ui.painter().layout_no_wrap(draft.clone(), hand.clone(), ink.text).size().x + S2).clamp(80.0, 320.0);
+                let r = ui.add(egui::TextEdit::singleline(&mut draft).align(egui::Align2::LEFT_CENTER).font(hand).text_color(ink.text).frame(egui::Frame::NONE).desired_width(name_w)).on_hover_text("click to rename");
                 if r.has_focus() {
                     ui.data_mut(|d| d.insert_temp(draft_id, draft));
                 } else {
@@ -97,7 +98,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 }
                                 muted(ui, t.artist.as_deref().unwrap_or(""));
                                 if let Some(note) = text::format_note(t, device) {
-                                    ui.label(RichText::new(text::format_badge(t, device)).size(12.0).color(ink.warn)).on_hover_text(note);
+                                    ui.label(RichText::new(text::format_badge(t, device)).size(font::META).color(ink.warn)).on_hover_text(note);
                                 }
                             }
                             None => {

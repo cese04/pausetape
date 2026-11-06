@@ -25,6 +25,25 @@ pub const CONTROL: f32 = 32.0;
 /// Icons drawn beside words.
 pub const ICON: f32 = 16.0;
 
+/// The type scale, each a fifth or so above the last, in points. ET Book has a small eye for its
+/// size, so nothing read is under 13.
+pub mod font {
+    /// Section labels, in capitals.
+    pub const CAPS: f32 = 12.0;
+    /// Lesser facts: paths, notes, badges.
+    pub const META: f32 = 13.0;
+    /// The interface: links, help, compact rows.
+    pub const UI: f32 = 14.0;
+    /// Rows and reading: songs, albums, lyrics.
+    pub const BODY: f32 = 16.0;
+    /// A row's or a dialog's title, the song playing.
+    pub const TITLE: f32 = 20.0;
+    /// A page's title.
+    pub const HEADING: f32 = 24.0;
+    /// The album in the details panel.
+    pub const DISPLAY: f32 = 28.0;
+}
+
 /// A frame's margins: `x` left and right, `y` top and bottom (both on the grid).
 pub fn margin(x: f32, y: f32) -> Margin {
     Margin::symmetric(x as i8, y as i8)

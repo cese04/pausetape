@@ -13,7 +13,7 @@ use super::widgets::{StrikeIf, button, button_with, caps, icon_link, link, muted
 use super::ROW_H;
 use crate::app::{App, Tab};
 use crate::card::{AlbumOrder, SpaceInfo, Volume};
-use super::layout::{S1, S2, S3, row};
+use super::layout::{S1, S2, S3, row, font};
 
 /// The open folder dialog, if any.
 pub enum Picker {
@@ -33,7 +33,7 @@ pub fn welcome(app: &mut App, ui: &mut Ui) {
     let frame = super::theme::dialog_frame(ui);
     egui::Modal::new(egui::Id::unique("welcome")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.label(RichText::new(format!("Welcome to {}", crate::APP_NAME)).size(22.0).color(ink.text));
+        ui.label(RichText::new(format!("Welcome to {}", crate::APP_NAME)).size(font::HEADING).color(ink.text));
         ui.add_space(S1);
         muted(ui, "Two things to set up once: where your music is, and which SD card it goes to. Nothing in your music folder changes unless you ask.");
         ui.add_space(S2);
@@ -70,8 +70,8 @@ pub fn settings_section(app: &mut App, ui: &mut Ui) {
 fn step_title(ui: &mut Ui, n: &str, title: &str) {
     let ink = ink(ui);
     row(ui, |ui| {
-        ui.label(RichText::new(n).size(22.0).color(ink.muted));
-        ui.label(RichText::new(title).size(19.0).color(ink.text));
+        ui.label(RichText::new(n).size(font::HEADING).color(ink.muted));
+        ui.label(RichText::new(title).size(font::TITLE).color(ink.text));
     });
 }
 
@@ -93,8 +93,8 @@ fn source_step(app: &mut App, ui: &mut Ui, step: Option<&str>) {
                 muted(ui, "The folder on this computer that holds your music. It can be messy; Pausetape only reads it.");
             }
             Some(src) => {
-                ui.label(RichText::new(folder_name(&src)).size(20.0).strong());
-                ui.add(egui::Label::new(RichText::new(src.display().to_string()).size(12.0).color(ink.muted)).truncate());
+                ui.label(RichText::new(folder_name(&src)).size(font::HEADING).strong());
+                ui.add(egui::Label::new(RichText::new(src.display().to_string()).size(font::META).color(ink.muted)).truncate());
                 ui.add_space(S1);
                 if app.busy.as_ref().is_some_and(|b| b.label == "reading tags") {
                     muted(ui, "reading your music…");
@@ -158,7 +158,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                     Some(v) => format!("{} › {}", v.name, d.strip_prefix(&v.path).map(|r| r.display().to_string()).unwrap_or_default()),
                     None => folder_name(d),
                 };
-                ui.label(RichText::new(title).size(20.0).strong());
+                ui.label(RichText::new(title).size(font::HEADING).strong());
                 match crate::card::space(d) {
                     _ if !d.exists() => {
                         ui.label(RichText::new("Not connected right now. Insert the card to write to it.").color(ink.warn));
@@ -201,7 +201,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
         match &mut picker {
             Picker::Source(nav) => {
-                ui.label(RichText::new("Choose your music folder").size(20.0));
+                ui.label(RichText::new("Choose your music folder").size(font::HEADING));
                 muted(ui, "Open folders until you're in the one that holds all your music, then use it.");
                 ui.add_space(S2);
                 nav.show(ui);
@@ -216,7 +216,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 });
             }
             Picker::AddFrom(nav) => {
-                ui.label(RichText::new("Add music from a folder").size(20.0));
+                ui.label(RichText::new("Add music from a folder").size(font::HEADING));
                 muted(ui, "Open the folder with the new music (Downloads, a friend's drive…). It's checked against your library first; nothing is copied until you say so, and the folder isn't changed.");
                 ui.add_space(S2);
                 nav.show(ui);
@@ -231,7 +231,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 });
             }
             Picker::Card { browse: Some(nav), .. } => {
-                ui.label(RichText::new("Choose a folder on the card").size(20.0));
+                ui.label(RichText::new("Choose a folder on the card").size(font::HEADING));
                 muted(ui, "Music will go inside this folder instead of at the top of the card.");
                 ui.add_space(S2);
                 nav.show(ui);
@@ -246,7 +246,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 });
             }
             Picker::Card { browse, show_all } => {
-                ui.label(RichText::new("Choose the SD card").size(20.0));
+                ui.label(RichText::new("Choose the SD card").size(font::HEADING));
                 ui.add_space(S2);
                 let (cards, others): (Vec<&Volume>, Vec<&Volume>) =
                     app.volumes.iter().partition(|v| v.info.and_then(|i| i.is_fat()).unwrap_or(true));
@@ -259,7 +259,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                         ui.set_width(ui.available_width());
                         row(ui, |ui| {
                             ui.vertical(|ui| {
-                                ui.label(RichText::new(&v.name).size(17.0).strong());
+                                ui.label(RichText::new(&v.name).size(font::TITLE).strong());
                                 if let Some(info) = &v.info {
                                     space_bar(ui, info, 220.0);
                                     let fs = info.fs_name().map(|f| format!(" · {f}")).unwrap_or_default();
@@ -363,7 +363,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
     let Some(plan) = &app.tidy_plan else { return };
     let src = app.saved.source.clone().unwrap_or_default();
     let moving = plan.iter().filter(|p| src.join(&p.rel) != app.tracks[p.track].path).count();
-    ui.label(RichText::new(format!("{moving} of {} files would move. RECHO's resume position may point at a moved file afterwards.", plan.len())).color(ink.warn).size(13.0));
+    ui.label(RichText::new(format!("{moving} of {} files would move. RECHO's resume position may point at a moved file afterwards.", plan.len())).color(ink.warn).size(font::UI));
     plan_list(ui, plan, 320.0);
 }
 
@@ -376,10 +376,10 @@ pub fn plan_list(ui: &mut Ui, plan: &[crate::card::PlanItem], max_height: f32) {
             let (dir, file) = rel.rsplit_once(std::path::MAIN_SEPARATOR).unwrap_or(("", &rel));
             row(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                ui.label(RichText::new(format!("{dir}/")).color(ink.muted).size(13.0));
-                ui.label(RichText::new(file).size(13.0).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
+                ui.label(RichText::new(format!("{dir}/")).color(ink.muted).size(font::UI));
+                ui.label(RichText::new(file).size(font::UI).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
                 if let Some(why) = p.skip {
-                    ui.label(RichText::new(format!("   {why}")).size(12.0).color(ink.warn));
+                    ui.label(RichText::new(format!("   {why}")).size(font::META).color(ink.warn));
                 }
             });
         }
@@ -410,7 +410,7 @@ pub fn add_dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
             crate::ui::icons::paint(ui.painter(), rect, Icon::Add, ink.text);
-            ui.label(RichText::new(format!("Add music from “{name}”")).size(18.0).color(ink.text));
+            ui.label(RichText::new(format!("Add music from “{name}”")).size(font::TITLE).color(ink.text));
         });
         ui.add_space(S2);
         if new + versions == 0 {

@@ -124,4 +124,6 @@ ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt 
 ## License
 
 [MIT](LICENSE). The macOS app bundles a minimal build of [FFmpeg](https://ffmpeg.org) (LGPL v2.1),
-whose licence and build details are inside the app under `Contents/Resources/Licenses`.
+whose licence and build details are inside the app under `Contents/Resources/Licenses`. The app
+brings its fonts, in [assets/fonts](assets/fonts) with their licences: ET Book (MIT), Courier
+Prime and Kalam (SIL Open Font Licence).

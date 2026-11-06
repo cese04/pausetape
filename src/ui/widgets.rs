@@ -5,7 +5,7 @@
 use egui::{Color32, FontId, Rect, Response, RichText, Sense, Stroke, Ui, Role, WidgetInfo, pos2, vec2};
 
 use super::icons::{self, Icon};
-use super::layout::{CONTROL, ICON, ROW, S1, S2, S3, row};
+use super::layout::{CONTROL, ICON, ROW, S1, S2, S3, row, font};
 use super::theme::{Ink, ink};
 
 /// What a control drawn here is called, for screen readers.
@@ -43,7 +43,7 @@ fn hot(resp: &Response) -> bool {
 pub fn link(ui: &mut Ui, text: impl Into<String>) -> Response {
     let ink = ink(ui);
     let text = text.into();
-    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(13.5), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x, ROW), Sense::click());
     name(ui, &resp, Role::Link, &text);
     focus_ring(ui, &resp, rect, 2.0);
@@ -73,7 +73,7 @@ fn words_at(ui: &Ui, x: f32, y: f32, galley: std::sync::Arc<egui::Galley>, color
 pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
     let ink = ink(ui);
     let text = text.into();
-    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(13.5), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1, ROW), Sense::click());
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, 4.0);
@@ -111,7 +111,7 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
 pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) -> Response {
     let ink = ink(ui);
     let text = text.into();
-    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(13.0), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1 + S1, ROW), Sense::click());
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, rect.height() / 2.0);
@@ -156,7 +156,7 @@ pub fn search_field(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> R
 /// A word that describes, not a control: a genre, in a small filled pill.
 pub fn tag(ui: &mut Ui, text: impl Into<String>) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(12.5), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.into(), FontId::proportional(font::META), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(S1 + galley.size().x + S1, ROW), Sense::hover());
     ui.painter().rect_filled(rect, rect.height() / 2.0, ink.chip);
     words_at(ui, rect.left() + S1, rect.center().y, galley, ink.text);
@@ -169,7 +169,7 @@ pub fn section(ui: &mut Ui, icon: Icon, title: &str) {
     row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), Sense::hover());
         icons::paint(ui.painter(), rect.shrink(1.0), icon, ink.muted);
-        let r = ui.label(RichText::new(title.to_uppercase()).size(12.0).extra_letter_spacing(1.3).color(ink.text));
+        let r = ui.label(RichText::new(title.to_uppercase()).size(font::META).extra_letter_spacing(1.3).color(ink.text));
         ui.painter().hline(r.rect.right() + S1..=ui.max_rect().right(), r.rect.center().y, Stroke::new(0.5, ink.faint));
     });
 }
@@ -194,13 +194,13 @@ pub fn setting(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
 /// Explanatory text under a setting: smaller than what it explains, so the setting reads first.
 pub fn help(ui: &mut Ui, text: impl Into<String>) -> Response {
     let ink = ink(ui);
-    ui.add(egui::Label::new(RichText::new(text.into()).size(13.0).color(ink.muted)).wrap())
+    ui.add(egui::Label::new(RichText::new(text.into()).size(font::UI).color(ink.muted)).wrap())
 }
 
 /// Navigation tab: the active one is set in full ink, others muted.
 pub fn tab(ui: &mut Ui, text: &str, active: bool) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(15.5), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(font::BODY), Color32::PLACEHOLDER);
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x, ROW), Sense::click());
     resp.widget_info(|| WidgetInfo::selected(Role::Tab, ui.is_enabled(), active, text));
     focus_ring(ui, &resp, rect, 2.0);
@@ -215,7 +215,7 @@ pub fn tab(ui: &mut Ui, text: &str, active: bool) -> Response {
 /// Small-caps style section label.
 pub fn caps(ui: &mut Ui, text: &str) {
     let ink = ink(ui);
-    ui.label(egui::RichText::new(text.to_uppercase()).size(11.0).extra_letter_spacing(1.2).color(ink.muted));
+    ui.label(egui::RichText::new(text.to_uppercase()).size(font::CAPS).extra_letter_spacing(1.2).color(ink.muted));
 }
 
 pub fn muted(ui: &mut Ui, text: impl Into<String>) -> Response {
@@ -245,7 +245,7 @@ pub fn primary_with(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Respons
 
 fn framed(ui: &mut Ui, icon: Option<Icon>, text: String, primary: bool) -> Response {
     let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(14.5), Color32::PLACEHOLDER);
+    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER);
     let lead = if icon.is_some() { ICON + S1 } else { 0.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(S2 + lead + galley.size().x + S2, CONTROL), Sense::click());
     name(ui, &resp, Role::Button, &text);
@@ -323,6 +323,16 @@ pub fn media_button(ui: &mut Ui, icon: Media, size: f32, slot: f32, primary: boo
 }
 
 /// Width `text` would take in the proportional font at `size`.
+/// The width of figures set in the typed face (`data`).
+pub fn data_width(ui: &Ui, text: &str) -> f32 {
+    ui.painter().layout_no_wrap(text.to_string(), data(), Color32::PLACEHOLDER).size().x
+}
+
+/// Figures standing alone (durations, years, sizes, formats): typed, so they line up in columns.
+pub fn data() -> FontId {
+    FontId::monospace(super::layout::font::META)
+}
+
 pub fn text_width(ui: &Ui, text: &str, size: f32) -> f32 {
     ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(size), Color32::PLACEHOLDER).size().x
 }
