@@ -120,20 +120,41 @@ fn cover_art(app: &mut App, ui: &mut Ui, ti: usize, side: f32) {
     }
 }
 
+/// Title, then artist · album · year, then a note on the format; the time at the right end.
+/// The time keeps its place: a long title, then the rest, shorten with "…" (whole on hover), so
+/// nothing is pushed past the window's edge.
 fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     let ink = ink(ui);
     let t = &app.tracks[ti];
+    let fit = super::widgets::fitted;
     row(ui, |ui| {
-        ui.label(RichText::new(t.display_title()).size(19.0).color(ink.text));
+        let time = format!("{} / {}", text::duration(st.pos), text::duration(len));
+        let note = if st.converting {
+            Some((RichText::new("converting with ffmpeg…").size(12.5).color(ink.muted), None))
+        } else {
+            text::format_note(t, app.player()).map(|n| (RichText::new(text::format_badge(t, app.player())).size(12.5).color(ink.warn), Some(n)))
+        };
+        let note_w = note.as_ref().map(|(r, _)| super::widgets::text_width(ui, r.text(), 12.5) + S2).unwrap_or(0.0);
+        let room = ui.available_width() - super::widgets::text_width(ui, &time, 16.0) - S3 - note_w;
+        let title = t.display_title();
         let meta: Vec<String> = [t.artist.clone(), t.album.clone(), t.year.map(|y| y.to_string())].into_iter().flatten().collect();
-        muted(ui, meta.join(" · "));
-        if st.converting {
-            ui.label(RichText::new("converting with ffmpeg…").size(12.5).color(ink.muted));
-        } else if let Some(note) = text::format_note(t, app.player()) {
-            ui.label(RichText::new(text::format_badge(t, app.player())).size(12.5).color(ink.warn)).on_hover_text(note);
+        let meta = meta.join(" · ");
+        // The title first, but leaving the rest a little room when there's some to leave.
+        let meta_w = super::widgets::text_width(ui, &meta, 16.0);
+        let title_w = (room - meta_w.min(room * 0.35)).max(room * 0.5);
+        let shown = fit(ui, RichText::new(&title).size(19.0).color(ink.text), title_w, Sense::hover()).on_hover_text(&title);
+        let rest = room - shown.rect.width() - ui.spacing().item_spacing.x;
+        if rest > 40.0 {
+            fit(ui, RichText::new(&meta).color(ink.muted), rest, Sense::hover()).on_hover_text(&meta);
+        }
+        if let Some((r, hint)) = note {
+            let r = ui.label(r);
+            if let Some(h) = hint {
+                r.on_hover_text(h);
+            }
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            muted(ui, format!("{} / {}", text::duration(st.pos), text::duration(len)));
+            muted(ui, time);
         });
     });
 }

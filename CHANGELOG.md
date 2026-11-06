@@ -949,3 +949,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - When the player has no cover to show, it says so and offers **Find cover** beside the queue,
   where the missing cover is noticed: it looks in the album's folder, then on the Cover Art
   Archive, as *Find cover* in the library does.
+
+### 81. A long title no longer pushes the player past the window (2026-11-05)
+- A song with a very long title (or artist and album) widened the player beyond the window: the
+  time, the volume and the end of the cover note were pushed off its right edge. The time now
+  keeps its place, and the title, then artist · album · year, shorten with "…" to the room
+  there is (whole on hover).
