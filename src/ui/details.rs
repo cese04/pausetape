@@ -7,12 +7,12 @@ use egui::{Align2, FontId, RichText, ScrollArea, Sense, Ui, vec2};
 
 use super::actions::Action;
 use super::icons::Icon;
-use super::layout::{ROW, S1, S2, S3};
+use super::layout::{ROW, S1, S2, S3, row};
 use super::library::{Mark, album_status};
 use super::text::{self, plural};
 use super::theme::ink;
 use super::widgets;
-use crate::app::App;
+use crate::app::{App, LyricsState};
 
 /// The panel's width, and the least the library keeps beside it.
 pub const WIDTH: f32 = 300.0;
@@ -48,22 +48,79 @@ fn about(app: &App) -> About {
     }
 }
 
+/// What an album's panel showed, for what's pinned over it.
+struct Shown {
+    title: String,
+    /// Where *Songs | Lyrics* are, on the screen.
+    tabs: egui::Rect,
+    /// Lyrics in time with the song playing.
+    in_time: bool,
+}
+
 /// The panel's contents, in a column `WIDTH` wide.
 pub fn show(app: &mut App, ui: &mut Ui, actions: &mut Vec<Action>) {
     let ink = ink(ui);
     let width = ui.available_width();
-    ScrollArea::vertical().id_salt("details").auto_shrink([false, false]).show(ui, |ui| {
+    let top_id = egui::Id::unique("details back to the top");
+    let mut area = ScrollArea::vertical().id_salt("details").auto_shrink([false, false]);
+    if ui.data_mut(|d| d.remove_temp::<bool>(top_id)).is_some() {
+        area = area.vertical_scroll_offset(0.0);
+    }
+    let out = area.show(ui, |ui| {
         ui.set_width(width);
         ui.set_max_width(width);
         match about(app) {
-            About::Album(a, b, playing) => album(app, ui, a, b, playing, actions),
-            About::Several(albums) => several(app, ui, &albums, actions),
+            About::Album(a, b, playing) => Some(album(app, ui, a, b, playing, actions)),
+            About::Several(albums) => {
+                several(app, ui, &albums, actions);
+                None
+            }
             About::Nothing => {
                 ui.add_space(S3);
                 ui.label(RichText::new("Select an album to see it here: its cover, its songs, and where it stands with the card.").color(ink.muted));
+                None
             }
         }
     });
+    let Some(shown) = out.inner else { return };
+    let area = out.inner_rect;
+    // Scrolled by hand (the wheel, or the scroll bar held): the lyrics stop pulling it back.
+    let wheel = ui.rect_contains_pointer(area) && ui.input(|i| i.smooth_scroll_delta.y != 0.0);
+    let bar = ui.input(|i| i.pointer.primary_down() && i.pointer.press_origin().is_some_and(|p| area.contains(p) && p.x > area.right() - S2));
+    if app.details_lyrics && (wheel || bar) {
+        app.lyrics_follow = false;
+    }
+    // Once *Songs | Lyrics* is scrolled away, the album and they stay at the top: a way back up
+    // that the lyrics, following the song down, don't fight.
+    if shown.tabs.top() < area.top() {
+        let strip = egui::Rect::from_min_size(area.min, vec2(area.width(), ROW + S1));
+        ui.painter().rect_filled(strip, 0.0, ink.bg);
+        ui.painter().hline(strip.x_range(), strip.bottom(), egui::Stroke::new(1.0, ink.faint));
+        let mut pinned = ui.new_child(egui::UiBuilder::new().max_rect(strip).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let tabs_w = widgets::text_width(&pinned, "Songs", 15.5) + S2 + widgets::text_width(&pinned, "Lyrics", 15.5) + S1;
+        let up = widgets::icon_button(&mut pinned, Icon::Up, "Back to the top of the album").clicked();
+        let w = pinned.available_width() - tabs_w - S2;
+        let title = widgets::fitted(&mut pinned, RichText::new(&shown.title).italics().size(15.0).color(ink.text), w, Sense::click()).on_hover_text("back to the top of the album").on_hover_cursor(egui::CursorIcon::PointingHand);
+        if up || title.clicked() {
+            ui.data_mut(|d| d.insert_temp(top_id, true));
+            app.lyrics_follow = false;
+        }
+        pinned.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(S1);
+            tabs(app, ui, true);
+        });
+    }
+    // Not following: a way back to the line being sung, at the foot of the panel.
+    if app.details_lyrics && shown.in_time && !app.lyrics_follow {
+        let words = "Follow the song";
+        let w = S2 + super::layout::ICON + S1 + widgets::text_width(ui, words, 14.5) + S2;
+        let at = egui::Rect::from_center_size(egui::pos2(area.center().x, area.bottom() - S2 - super::layout::CONTROL / 2.0), vec2(w, super::layout::CONTROL));
+        let mut foot = ui.new_child(egui::UiBuilder::new().max_rect(at));
+        if widgets::primary_with(&mut foot, Icon::Down, words).on_hover_text("back to the line being sung, and keep it in view").clicked() {
+            app.lyrics_follow = true;
+            ui.data_mut(|d| d.remove_temp::<Option<usize>>(egui::Id::unique("lyrics line followed")));
+        }
+    }
 }
 
 /// The same, as a sheet over the page.
@@ -87,7 +144,23 @@ pub fn sheet(app: &mut App, ui: &mut Ui) {
     super::actions::apply(app, actions);
 }
 
-fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, actions: &mut Vec<Action>) {
+/// *Songs | Lyrics*: `reversed` when laid out right to left.
+fn tabs(app: &mut App, ui: &mut Ui, reversed: bool) {
+    let order = if reversed { [true, false] } else { [false, true] };
+    for (n, lyrics) in order.into_iter().enumerate() {
+        if n > 0 {
+            ui.add_space(S2);
+        }
+        let r = widgets::tab(ui, if lyrics { "Lyrics" } else { "Songs" }, app.details_lyrics == lyrics);
+        let r = if lyrics { r.on_hover_text("the words of the song playing (in time), or of another of the album's") } else { r };
+        if r.clicked() {
+            app.details_lyrics = lyrics;
+            app.lyrics_follow = true;
+        }
+    }
+}
+
+fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, actions: &mut Vec<Action>) -> Shown {
     let ink = ink(ui);
     let artist = &app.index.artists[ai];
     let al = &artist.albums[bi];
@@ -184,8 +257,14 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         super::library::lookup_block(ui, &app.tracks, &id, l, actions);
     }
     ui.add_space(S2);
-    widgets::caps(ui, "songs");
-    ui.add_space(S1 / 2.0);
+    // Its songs, or one song's lyrics.
+    let tabs_at = row(ui, |ui| tabs(app, ui, false)).response.rect;
+    ui.add_space(S1);
+    let mut shown = Shown { title, tabs: tabs_at, in_time: false };
+    if app.details_lyrics {
+        shown.in_time = lyrics(app, ui, &tracks, actions);
+        return shown;
+    }
     let current = app.current();
     for (pos, &t) in tracks.iter().enumerate() {
         let track = &app.tracks[t];
@@ -208,6 +287,181 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         }
         resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
     }
+    shown
+}
+
+/// One of the album's songs' lyrics: the song playing (following the singing, a click on a
+/// line going there), else the one chosen with the arrows, the one selected, or the first.
+/// Whether they're in time with the song playing.
+fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action>) -> bool {
+    let ink = ink(ui);
+    let current = app.current().filter(|c| tracks.contains(c));
+    let selected = tracks.iter().copied().find(|t| app.selected.contains(t));
+    let t = app.lyrics_song.filter(|t| tracks.contains(t)).or(current).or(selected).unwrap_or(tracks[0]);
+    let pos = tracks.iter().position(|&x| x == t).unwrap_or(0);
+    // Which song: its title between arrows to the one before and after.
+    row(ui, |ui| {
+        ui.add_enabled_ui(pos > 0, |ui| {
+            if widgets::icon_button(ui, Icon::Back, "The song before").clicked() {
+                app.lyrics_song = Some(tracks[pos - 1]);
+            }
+        });
+        let title = app.tracks[t].display_title();
+        let w = ui.available_width() - ROW - S1;
+        widgets::fitted(ui, RichText::new(&title).size(15.0).color(if current == Some(t) { ink.accent } else { ink.text }), w, Sense::hover()).on_hover_text(&title);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_enabled_ui(pos + 1 < tracks.len(), |ui| {
+                if widgets::icon_button(ui, Icon::Forward, "The song after").clicked() {
+                    app.lyrics_song = Some(tracks[pos + 1]);
+                }
+            });
+        });
+    });
+    ui.add_space(S1);
+    let state = app.lyrics_of(t).clone();
+    let (mut again, mut in_time_now) = (false, false);
+    match state {
+        LyricsState::Looking => {
+            row(ui, |ui| {
+                super::cassette::spinner(ui, 12.0);
+                widgets::muted(ui, "looking for the lyrics…");
+            });
+        }
+        LyricsState::None => {
+            widgets::muted(ui, "No lyrics for this song, in it or on LRCLIB.");
+            again = widgets::link(ui, "Try again").on_hover_text("ask LRCLIB once more (lyrics are added there over time)").clicked();
+        }
+        LyricsState::Failed(e) => {
+            ui.add(egui::Label::new(RichText::new(format!("Couldn't look: {e}")).size(13.0).color(ink.muted)).wrap());
+            again = widgets::link(ui, "Try again").clicked();
+        }
+        LyricsState::Found(l) if l.instrumental && l.plain.is_empty() => {
+            widgets::muted(ui, "Instrumental: no words to show.");
+        }
+        LyricsState::Found(l) => {
+            let playing = current == Some(t);
+            // What kind they are, said first: in time or not looks the same until a line lights.
+            row(ui, |ui| {
+                if l.synced.is_empty() {
+                    widgets::help(ui, "Words only: these aren't in time with the song");
+                } else if playing {
+                    widgets::help(ui, "In time · click a line to go to it");
+                } else {
+                    widgets::help(ui, "In time while it plays ·");
+                    if widgets::link(ui, "Play it").clicked() {
+                        actions.push(Action::Play(tracks.to_vec(), pos));
+                    }
+                }
+            });
+            ui.add_space(S1);
+            if l.synced.is_empty() {
+                ui.add(egui::Label::new(RichText::new(&l.plain).size(14.5).color(ink.text)).wrap());
+            } else {
+                in_time(app, ui, &l, t, playing);
+                in_time_now = playing;
+            }
+            ui.add_space(S1);
+            let from = match l.source {
+                Some(crate::lyrics::Source::File) => "from the .lrc file beside the song",
+                Some(crate::lyrics::Source::Tags) => "from the song's tags",
+                _ => "from LRCLIB (lrclib.net)",
+            };
+            row(ui, |ui| {
+                widgets::help(ui, from);
+                if l.source == Some(crate::lyrics::Source::Lrclib) && widgets::link(ui, "Not right?").on_hover_text("look again on LRCLIB").clicked() {
+                    again = true;
+                }
+            });
+        }
+    }
+    if again {
+        app.lyrics_again(t);
+    }
+    ui.add_space(S1);
+    if app.busy.is_none() && widgets::icon_link(ui, Icon::Search, "Find lyrics for the whole album").on_hover_text("ahead of time, kept to read offline").clicked() {
+        actions.push(Action::FindLyrics(tracks.to_vec()));
+    }
+    if in_time_now {
+        // Room below, so *Follow the song* never sits over the last lines.
+        ui.add_space(super::layout::CONTROL + S3);
+    }
+    in_time_now
+}
+
+/// Synced lyrics, line by line, with the breaks where nothing is sung. Playing, the line being
+/// sung is in the accent, those sung in grey, and it stays in view; a break under way fills its
+/// three dots and counts down to the words.
+fn in_time(app: &mut App, ui: &mut Ui, l: &crate::lyrics::Lyrics, t: usize, playing: bool) {
+    let ink = ink(ui);
+    let st = app.audio.status();
+    let length = if playing { st.len.filter(|d| !d.is_zero()).unwrap_or(app.tracks[t].duration) } else { app.tracks[t].duration };
+    let parts = l.stretches(length);
+    let now = if playing { crate::lyrics::stretch_at(&parts, st.pos) } else { None };
+    let follow_id = egui::Id::unique("lyrics line followed");
+    let followed = ui.data(|d| d.get_temp::<Option<usize>>(follow_id)).flatten();
+    for (i, part) in parts.iter().enumerate() {
+        let end = parts.get(i + 1).map_or(length, |n| n.at);
+        let sung = now.is_some_and(|n| i < n);
+        let r = match &part.words {
+            Some(words) => {
+                let color = if now == Some(i) { ink.accent } else if sung { ink.muted } else { ink.text };
+                ui.add(egui::Label::new(RichText::new(words).size(15.0).color(color)).wrap().sense(if playing { Sense::click() } else { Sense::hover() }))
+            }
+            None => {
+                let done = (now == Some(i)).then(|| (st.pos.saturating_sub(part.at).as_secs_f32() / end.saturating_sub(part.at).as_secs_f32().max(0.1)).min(1.0));
+                let left = text::duration(end.saturating_sub(st.pos) + std::time::Duration::from_millis(999));
+                let long = text::duration(end.saturating_sub(part.at));
+                let words = match (done.is_some(), i == 0, i + 1 == parts.len()) {
+                    (true, true, _) => format!("the words start in {left}"),
+                    (true, _, true) => format!("no more words · {left} to the end"),
+                    (true, ..) => format!("the next line in {left}"),
+                    (false, true, _) => format!("{long} before the words"),
+                    (false, _, true) => format!("{long} to the end, without words"),
+                    (false, ..) => format!("{long} without words"),
+                };
+                // A short one is its dots (its length when pointed at); a long one says it.
+                let told = end.saturating_sub(part.at) >= crate::lyrics::LONG_BREAK;
+                let r = pause_row(ui, done, sung, told.then_some(words.as_str()), playing);
+                if told { r } else { r.on_hover_text(format!("{long} without words")) }
+            }
+        };
+        if playing {
+            let r = r.on_hover_cursor(egui::CursorIcon::PointingHand);
+            if r.clicked() {
+                app.audio.seek(part.at);
+                app.lyrics_follow = true;
+            }
+            if app.lyrics_follow && now == Some(i) && followed != Some(i) {
+                r.scroll_to_me(Some(egui::Align::Center));
+                ui.data_mut(|d| d.insert_temp(follow_id, Some(i)));
+            }
+        }
+    }
+}
+
+/// A break in the lyrics: three dots, filled in the accent as it goes by (`done`, while it's
+/// under way), and what it is in words beside them, if it's told.
+fn pause_row(ui: &mut Ui, done: Option<f32>, sung: bool, words: Option<&str>, playing: bool) -> egui::Response {
+    let ink = ink(ui);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), if playing { Sense::click() } else { Sense::hover() });
+    let p = ui.painter();
+    let y = rect.center().y;
+    for k in 0..3 {
+        let c = egui::pos2(rect.left() + 4.0 + 10.0 * k as f32, y);
+        let color = match done {
+            // Under way, all three in the accent from the start, faint until they fill.
+            Some(d) => ink.accent.gamma_multiply(0.35).lerp_to_gamma(ink.accent, (d * 3.0 - k as f32).clamp(0.0, 1.0)),
+            None if sung => ink.faint,
+            None => ink.muted,
+        };
+        p.circle_filled(c, 2.5, color);
+    }
+    if let Some(words) = words {
+        let color = if done.is_some() { ink.accent } else { ink.muted };
+        let g = p.layout_no_wrap(words.to_string(), FontId::proportional(12.5), color);
+        p.galley(egui::pos2(rect.left() + 34.0, y - g.size().y / 2.0), g, color);
+    }
+    resp
 }
 
 fn several(app: &App, ui: &mut Ui, albums: &[(usize, usize)], actions: &mut Vec<Action>) {

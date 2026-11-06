@@ -267,10 +267,9 @@ impl App {
                         t.embedded_cover |= t.cover.is_some();
                         (t.dirty, t.size, t.mtime, t.cover) = (false, size, mtime, None);
                     }
-                    // A cover now embedded in the playing track: look it up again.
-                    if let Some(c) = self.current().filter(|c| ok.iter().any(|&(i, _, _)| i == *c)) {
-                        self.load_cover(self.tracks[c].path.clone());
-                    }
+                    // A cover now embedded in them: look it up again.
+                    let written: Vec<usize> = ok.iter().map(|&(i, _, _)| i).collect();
+                    self.covers_changed(&written);
                     // The corrections live in the files now; the next scan re-reads them.
                     if let Some(db) = &mut self.db {
                         let ids: Vec<PathBuf> = ok.iter().map(|&(i, _, _)| self.tracks[i].id()).collect();
@@ -284,6 +283,18 @@ impl App {
                         let tex = img.map(|img| self.ctx.load_texture("cover", img, egui::TextureOptions::LINEAR));
                         self.cover = Some((path, tex, file));
                     }
+                }
+                Msg::Lyrics(id, found) => self.lyrics_found(id, found),
+                Msg::LyricsDone(found, none, failed) => {
+                    self.busy = None;
+                    let mut s = format!("lyrics found for {found} songs");
+                    if none > 0 {
+                        s.push_str(&format!(" · {none} without on LRCLIB"));
+                    }
+                    if failed > 0 {
+                        s.push_str(&format!(" · {failed} not looked for (no connection, or stopped)"));
+                    }
+                    self.notice(s);
                 }
                 Msg::DetailCover(path, img) => {
                     if self.detail_cover.as_ref().is_some_and(|(p, _)| *p == path) {

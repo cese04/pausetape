@@ -429,6 +429,7 @@ impl App {
             self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
         }
         self.write_preview = None;
+        self.covers_changed(&songs);
         let name = image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         // Songs inside an album file (CUE) can't be retagged in place; their card copies can.
         let where_ = if songs.iter().all(|&i| self.tracks[i].cue.is_some()) {

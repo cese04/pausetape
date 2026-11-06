@@ -1063,3 +1063,38 @@ Calibre's device view, for music: the library is where you choose what goes on t
   was before anything was laid out, what's too wide is cut there rather than drawn over the
   details, and the problems list fits the page.
 - The screenshot demo gets `PAUSETAPE_SHOT_PROBLEMS=1`, a list of problems with long paths.
+
+### 91. Lyrics, in time with the song (2026-11-06)
+- **The details panel shows lyrics**: *Songs* | *Lyrics* above the album's songs. For the song
+  playing, lyrics with times follow it: the line being sung in the accent, those sung in grey,
+  kept in view; a click on a line goes to that moment. The arrows show the album's other songs'
+  lyrics (*Play it* to have them in time).
+- **In time or not, said first**: above the words, *In time · click a line to go to it*, *In
+  time while it plays*, or *Words only: these aren't in time with the song*.
+- **Where nothing is sung** (the intro, a solo, the end) a break shows as three dots; under way,
+  they're in the accent and fill as it goes. A break of a minute or more also says how long it
+  lasts, and under way counts down: *the words start in 5:12*, *the next line in 2:41*. A
+  shorter one is only its dots (its length when pointed at), so songs with many short breaks
+  stay quiet. A break is where an empty LRC line marks one, or 8 seconds into a line when the
+  next is more than 15 away (a slow verse isn't one); under 4 seconds, none is shown.
+- **The panel doesn't fight back**: once *Songs | Lyrics* is scrolled away, the album's title
+  and the two tabs stay pinned at the top (the title, or ↑, goes back up). Scrolling the panel
+  by hand stops it following the singing; *Follow the song*, at its foot, takes it back to the
+  line being sung (as does a click on a line, or the next song).
+- **Where they come from:** the song's own first (a `.lrc` file with its name beside it, or the
+  lyrics in its tags), else **LRCLIB** (lrclib.net, an open lyrics database matched by artist,
+  title, album and length within 2 seconds, then by artist and title within 3). The panel says
+  which; *Not right?* asks LRCLIB again. The song's own are read each time, so a `.lrc` added
+  later wins over what was kept.
+- **When:** a song's are looked for when they're shown, one request; **Find lyrics** (in the
+  panel, for the album, and in every right-click menu, for a selection) fetches them ahead,
+  counted in the status bar, and can be stopped. Requests go one at a time, apart, and say who's
+  asking, as LRCLIB asks.
+- **Kept**: in the library database, found or not found, so they show offline after and nothing
+  is asked twice. The music folder isn't touched, and nothing goes on the card for now.
+
+### 92. The details panel's cover follows a found one (2026-11-06)
+- A cover found (*Find cover*), added from the playing song's folder, dropped, or written into
+  the files showed in the player but not in the details panel, which kept the cover it had
+  first loaded for the album. Both are now looked up again whenever their songs' cover changes,
+  the one shown kept until the new one is ready.

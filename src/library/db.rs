@@ -83,6 +83,11 @@ impl Db {
                  info    TEXT NOT NULL,    -- ArtistInfo as JSON: the MusicBrainz entry, links
                  fetched INTEGER NOT NULL  -- seconds since 1970
              );
+             CREATE TABLE IF NOT EXISTS lyrics (
+                 id      TEXT PRIMARY KEY, -- the song (Track::id)
+                 data    TEXT,             -- Lyrics as JSON; NULL: looked for, none found
+                 fetched INTEGER NOT NULL  -- seconds since 1970
+             );
              CREATE TABLE IF NOT EXISTS sheets (
                  path TEXT PRIMARY KEY,
                  data BLOB                -- the sheet's bytes; empty in rows from before they were kept
@@ -211,6 +216,22 @@ impl Db {
         let mut q = self.conn.prepare("SELECT key, info, fetched FROM artists")?;
         let rows = q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?;
         Ok(rows.flatten().filter_map(|(k, info, at)| serde_json::from_str(&info).ok().map(|i| (k, i, at as u64))).collect())
+    }
+
+    /// A song's lyrics as kept: `Some(None)` when they were looked for and none found.
+    pub fn lyrics(&self, id: &Path) -> Result<Option<Option<crate::lyrics::Lyrics>>> {
+        let row = self.conn.query_row("SELECT data FROM lyrics WHERE id = ?1", params![id.to_string_lossy()], |r| r.get::<_, Option<String>>(0));
+        match row {
+            Ok(data) => Ok(Some(data.and_then(|d| serde_json::from_str(&d).ok()))),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn save_lyrics(&mut self, id: &Path, lyrics: Option<&crate::lyrics::Lyrics>, at: u64) -> Result<()> {
+        let data = lyrics.map(serde_json::to_string).transpose()?;
+        self.conn.execute("INSERT OR REPLACE INTO lyrics (id, data, fetched) VALUES (?1, ?2, ?3)", params![id.to_string_lossy(), data, at as i64])?;
+        Ok(())
     }
 
     pub fn save_artist_info(&mut self, key: &str, info: &ArtistInfo, at: u64) -> Result<()> {

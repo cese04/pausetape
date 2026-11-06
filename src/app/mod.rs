@@ -12,6 +12,7 @@ mod covers;
 mod edit;
 mod events;
 mod genres;
+mod lyrics;
 mod music;
 mod playback;
 mod testcard;
@@ -33,6 +34,7 @@ pub use browse::{AlbumRow, SortBy};
 pub use covers::FoundCover;
 pub use edit::{Shared, TagEdit};
 pub use genres::GenreIndex;
+pub use lyrics::LyricsState;
 pub use undo::Undo;
 
 use crate::audio::{self, Audio};
@@ -154,6 +156,10 @@ enum Msg {
     Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
     /// Cover of the album the details panel shows, by its first song's path.
     DetailCover(PathBuf, Option<egui::ColorImage>),
+    /// A song's lyrics (by track id), none found, or why they couldn't be looked for.
+    Lyrics(PathBuf, Result<Option<crate::lyrics::Lyrics>, String>),
+    /// An album's or selection's lyrics looked for: found, none, failed.
+    LyricsDone(usize, usize, usize),
     /// Covers found for albums without one, and whether the search was stopped.
     CoversFound(Vec<FoundCover>, bool),
     /// The test card's samples written to the card: what each became.
@@ -390,6 +396,15 @@ pub struct App {
     pub details_beside: bool,
     /// The first-run welcome (music folder, card) is open.
     pub welcome_open: bool,
+    /// Songs' lyrics, by track id, as far as they're known (`lyrics_of`).
+    pub lyrics: HashMap<PathBuf, LyricsState>,
+    lyrics_tx: Option<Sender<lyrics::LyricsJob>>,
+    /// The details panel shows lyrics rather than the songs, and of which song.
+    pub details_lyrics: bool,
+    pub lyrics_song: Option<usize>,
+    /// The panel keeps the line being sung in view: until the panel is scrolled by hand, and
+    /// again on *Follow the song*, a click on a line, or the next song.
+    pub lyrics_follow: bool,
     pub renaming: Option<(usize, String)>,
     /// UI-thread connection to the library database (scans open their own).
     pub db: Option<Db>,
@@ -426,6 +441,11 @@ impl App {
             index: Index::default(),
             tab: Tab::Library,
             welcome_open: first_run,
+            lyrics: HashMap::new(),
+            lyrics_tx: None,
+            details_lyrics: false,
+            lyrics_song: None,
+            lyrics_follow: true,
             filter: String::new(),
             duplicates_only: false,
             look_alikes_only: false,

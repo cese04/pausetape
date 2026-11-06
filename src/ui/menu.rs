@@ -100,6 +100,10 @@ pub(super) fn music(app: &App, ui: &mut Ui, of: Of, actions: &mut Vec<Action>, e
     if let [(a, b)] = albums[..] {
         item(ui, actions, Icon::Search, "Look up on MusicBrainz".into(), Action::LookupAlbum(a, b));
     }
+    if app.busy.is_none() && widgets::icon_link(ui, Icon::Search, format!("Find lyrics{}", if them.is_empty() { String::new() } else { format!(" for{them}") })).on_hover_text("from the songs' own, else LRCLIB; kept to read offline").clicked() {
+        actions.push(Action::FindLyrics(songs.clone()));
+        ui.close();
+    }
     if let [(a, b)] = albums[..]
         && !matches!(of, Of::Artist(_))
         && widgets::icon_link(ui, Icon::Info, "Details").clicked()
