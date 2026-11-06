@@ -271,7 +271,7 @@ pub fn problems(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let mut dismiss = false;
     theme::panel_frame(ui).show(ui, |ui| {
-        ui.set_max_width(760.0);
+        ui.set_max_width(ui.available_width().min(760.0));
         let n = p.list.len();
         ui.label(RichText::new(format!("{}: {}", p.what, plural(n, "problem"))).color(ink.warn));
         const SHOWN: usize = 8;

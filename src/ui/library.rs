@@ -159,6 +159,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 fn page(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
+    // The page's own right edge, before anything is laid out: something too wide for the page
+    // widens what egui gives out after it, which must never carry the A–Z rail (or the list)
+    // over the details beside the page. What's too wide is cut at the edge rather than drawn
+    // over them.
+    let right_edge = ui.max_rect().right();
+    ui.shrink_clip_rect(ui.max_rect());
     // What's shown, in words, and what can be done with all of it. (The folder, the views and
     // what's worth a look are in the sidebar; the search box is in the top bar.)
     row_wrapped(ui, |ui| {
@@ -322,14 +328,15 @@ fn page(app: &mut App, ui: &mut Ui) {
     // Songs in the order they're shown, for the arrow keys; the one they last moved to.
     let mut shown: Vec<usize> = Vec::new();
     let scroll_to = app.scroll_to_song.take();
-    // The A–Z rail is a panel of its own at the right edge; the list fills the rest.
-    let mut rail_click = None;
-    let rail = egui::Frame::new().inner_margin(egui::Margin { left: S1 as i8, ..Default::default() });
-    egui::Panel::right("az rail").exact_size(RAIL_W).resizable(false).show_separator_line(false).frame(rail).show(ui, |ui| {
-        let height = ui.available_height();
-        rail_click = az_rail(ui, &present, height);
-    });
-    egui::CentralPanel::default().frame(egui::Frame::new()).show(ui, |ui| {
+    // The A–Z rail at the page's right edge (as it was before anything was laid out); the list
+    // fills the rest.
+    let (top, bottom, left) = (ui.cursor().top(), ui.max_rect().bottom(), ui.max_rect().left());
+    let rail_rect = egui::Rect::from_min_max(egui::pos2(right_edge - RAIL_W + S1, top), egui::pos2(right_edge, bottom));
+    let list_rect = egui::Rect::from_min_max(egui::pos2(left, top), egui::pos2(right_edge - RAIL_W, bottom));
+    let mut rail_ui = ui.new_child(egui::UiBuilder::new().max_rect(rail_rect));
+    let rail_click = az_rail(&mut rail_ui, &present, rail_rect.height());
+    ui.scope_builder(egui::UiBuilder::new().max_rect(list_rect), |ui| {
+        ui.shrink_clip_rect(list_rect);
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             let mut last_initial = None;
             for (ai, artist) in app.index.artists.iter().enumerate() {

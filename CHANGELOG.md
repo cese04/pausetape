@@ -1054,3 +1054,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
   of the library (and the card's view), with *Open the full list* (a text file in the data
   folder); before, only how many failed was said. A cover that couldn't be made names the
   song as well as the image.
+
+### 90. The A–Z rail stays beside the list (2026-11-06)
+- In the library by artist, with the details panel showing, the A–Z rail could end up over the
+  details. Something wider than the page above the list (the list of songs whose tags couldn't
+  be written was up to 760 points wide) widened the page in egui's layout, and the rail, placed
+  at the page's right edge, followed. The rail and the list now keep to the page's edge as it
+  was before anything was laid out, what's too wide is cut there rather than drawn over the
+  details, and the problems list fits the page.
+- The screenshot demo gets `PAUSETAPE_SHOT_PROBLEMS=1`, a list of problems with long paths.
