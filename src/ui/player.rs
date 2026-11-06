@@ -184,7 +184,9 @@ fn transport(app: &mut App, ui: &mut Ui, st: &Status, len: Duration) {
         buttons(app, ui, st, S4, S5);
         ui.add_space(S2);
         queue_button(app, ui, st, len, false);
-        cover_suggestion(app, ui);
+        // The volume keeps its place at the right end; the note about the cover gets what's left.
+        let volume_w = 12.0 * S1 + super::widgets::text_width(ui, "volume", 14.5) + 2.0 * S2;
+        ui.allocate_ui_with_layout(vec2((ui.available_width() - volume_w).max(0.0), SLOT), Layout::left_to_right(Align::Center), |ui| cover_suggestion(app, ui));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| volume_control(app, ui, true));
     });
 }
@@ -322,25 +324,38 @@ fn up_next(app: &mut App, ui: &mut Ui) {
 
 /// When the cover shown comes from an image file rather than the songs' tags, offer to add it:
 /// players (the Echo Mini's stock firmware among them) show embedded covers, not image files in the folder.
+/// The words shorten with "…" to the room they're given (whole on hover); the link always shows.
 fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     let Some(ti) = app.current() else { return };
     let t = &app.tracks[ti];
     let Some(file) = app.cover.as_ref().filter(|(p, tex, _)| *p == t.path && tex.is_some()).and_then(|(_, _, f)| f.clone()) else { return };
     let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     ui.add_space(S2);
+    // The words, shortened to the room there is, then the link; with too little room for words,
+    // a link that says it all; with too little for that, nothing.
+    let say = |ui: &mut Ui, words: String, link: &str, alone: &str, hint: &str| -> bool {
+        let link_w = super::widgets::text_width(ui, link, 13.5) + S2;
+        if ui.available_width() >= link_w + 120.0 {
+            let room = ui.available_width() - link_w;
+            super::widgets::fitted(ui, RichText::new(&words).color(ink(ui).muted), room, Sense::hover()).on_hover_text(&words);
+            super::widgets::link(ui, link).on_hover_text(hint).clicked()
+        } else if ui.available_width() >= super::widgets::text_width(ui, alone, 13.5) {
+            super::widgets::link(ui, alone).on_hover_text(format!("{words}\n{hint}")).clicked()
+        } else {
+            false
+        }
+    };
     if t.cover.is_some() {
         let when = if t.cue.is_some() { "in card copies when you next write" } else { "in card copies when you next write, and in the music files with \"write corrected tags\"" };
-        muted(ui, "cover will be added to the songs' tags ·").on_hover_text(format!("{name}: {when}"));
-        if super::widgets::link(ui, "Don't").on_hover_text("keep the songs as they are").clicked() {
+        if say(ui, format!("cover from {name} will be added to the songs' tags ({when}) ·"), "Don't", "Don't add", "keep the songs as they are") {
             let album = app.index.artists.iter().flat_map(|a| &a.albums).find(|al| al.tracks.contains(&ti));
             let songs = album.map(|al| al.tracks.clone()).unwrap_or_else(|| vec![ti]);
             app.drop_cover(&songs);
         }
         return;
     }
-    muted(ui, format!("cover from {}, not in the songs' tags ·", text::shorten(&name, 28)));
     let hint = "Embed this image as the cover of the album's songs (resized to 600 px JPEG). Most players, the Echo Mini's stock firmware among them, show embedded covers, not image files in the folder.";
-    if super::widgets::link(ui, "Add it").on_hover_text(hint).clicked() {
+    if say(ui, format!("cover from {name}, not in the songs' tags ·"), "Add it", "Add cover", hint) {
         app.add_cover(ti, file);
     }
 }

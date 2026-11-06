@@ -929,3 +929,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
   background and an outline, at 8-point corners. Following the flat design, each is now set
   apart by its background alone, the tint of the tab bar, at 4-point corners. Warnings keep
   their outline, which is what marks them.
+
+### 79. Nothing runs into the player's volume or an album's commands (2026-11-05)
+- In the player, the note about a cover found as an image file ("cover from …, not in the
+  songs' tags · Add it") ran on into the volume control in narrower windows. The volume now
+  keeps its place, the note shortens with "…" to the room left (whole on hover), and where
+  there's no room for words, a lone **Add cover** (or **Don't add**) link says it all.
+- In the library by artist, an album's commands (*Play*, *Find cover*, *Look up*, *Edit tags*,
+  *Send to the card*…) were drawn over its title and state in a narrow window. Where they
+  don't fit beside them, they go on a line of their own under the title, in the same order.
