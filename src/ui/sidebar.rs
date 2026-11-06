@@ -32,21 +32,17 @@ enum Go {
     NewPlaylist,
     Card(usize),
     Settings,
-    Folders,
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let narrow = narrow(ui.ctx());
     let mut go = None;
     let mut forget = None;
-    // Settings (and, until the first run is done another way, the folders) stay at the foot.
+    // Settings stay at the foot.
     ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
         ui.add_space(S1);
         if item(ui, Icon::Settings, "Settings", None, app.tab == Tab::Settings, narrow).clicked() {
             go = Some(Go::Settings);
-        }
-        if item(ui, Icon::Folder, "Music folder and card", None, app.tab == Tab::Folders, narrow).clicked() {
-            go = Some(Go::Folders);
         }
         ui.with_layout(Layout::top_down(Align::Min), |ui| {
             ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -102,7 +98,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         }
         Go::Settings => app.tab = Tab::Settings,
-        Go::Folders => app.tab = Tab::Folders,
     }
 }
 

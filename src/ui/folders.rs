@@ -1,5 +1,5 @@
-//! Folders tab: two steps, each with one clear choice. Choosing happens in a dialog so the tab
-//! itself only ever shows what is set and how to change it.
+//! The music folder and the card: a welcome the first time (two steps, each with one clear
+//! choice), the music folder's section in Settings after that, and the dialogs for choosing.
 
 use std::path::{Path, PathBuf};
 
@@ -23,28 +23,48 @@ pub enum Picker {
     Card { browse: Option<Navigator>, show_all: bool },
 }
 
-pub fn show(app: &mut App, ui: &mut Ui) {
-    ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-        ui.set_max_width(ui.available_width().min(680.0));
-        muted(ui, "Two things to set up once: where your music is, and which SD card it goes to.");
+/// The first time (no music folder yet): what the app needs, in two steps, over the page.
+/// The card can wait; the music folder can't.
+pub fn welcome(app: &mut App, ui: &mut Ui) {
+    if !app.welcome_open {
+        return;
+    }
+    let ink = ink(ui);
+    let frame = super::theme::dialog_frame(ui);
+    egui::Modal::new(egui::Id::unique("welcome")).frame(frame).show(ui.ctx(), |ui| {
+        ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
+        ui.label(RichText::new(format!("Welcome to {}", crate::APP_NAME)).size(22.0).color(ink.text));
+        ui.add_space(S1);
+        muted(ui, "Two things to set up once: where your music is, and which SD card it goes to. Nothing in your music folder changes unless you ask.");
         ui.add_space(S2);
-        source_step(app, ui);
+        source_step(app, ui, Some("1"));
         ui.add_space(S2);
         card_step(app, ui);
         ui.add_space(S3);
-        if app.saved.source.is_some() && app.write().dest.is_some() {
-            row(ui, |ui| {
-                muted(ui, "All set. Next, choose what goes on the card.");
-                if primary_with(ui, Icon::Card, "Go to the card").clicked() {
-                    app.tab = Tab::Card;
+        row(ui, |ui| {
+            let ready = app.saved.source.is_some();
+            let label = if app.write().dest.is_some() { "Start" } else { "Start, and choose the card later" };
+            ui.add_enabled_ui(ready, |ui| {
+                if primary_with(ui, Icon::Check, label).on_disabled_hover_text("choose your music folder first").clicked() {
+                    app.welcome_open = false;
+                    app.tab = Tab::Library;
+                    // Compared again now: music already on the card is explained after this.
+                    if app.write().dest.is_some() {
+                        app.preview_write();
+                    }
                 }
             });
-            ui.add_space(S3);
-        }
-        egui::CollapsingHeader::new(RichText::new("Advanced: reorganise the music folder itself").color(ink(ui).muted))
-            .default_open(app.tidy_plan.is_some())
-            .show(ui, |ui| tidy(app, ui));
+        });
     });
+}
+
+/// Settings › Music folder: the folder, its commands, and reorganising it (advanced).
+pub fn settings_section(app: &mut App, ui: &mut Ui) {
+    source_step(app, ui, None);
+    ui.add_space(S1);
+    egui::CollapsingHeader::new(RichText::new("Advanced: reorganise the music folder itself").color(ink(ui).muted))
+        .default_open(app.tidy_plan.is_some())
+        .show(ui, |ui| tidy(app, ui));
 }
 
 fn step_title(ui: &mut Ui, n: &str, title: &str) {
@@ -59,12 +79,15 @@ fn folder_name(p: &Path) -> String {
     p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string())
 }
 
-fn source_step(app: &mut App, ui: &mut Ui) {
+/// The music folder: what it holds, and its commands. `step`: its number in the welcome.
+fn source_step(app: &mut App, ui: &mut Ui, step: Option<&str>) {
     let ink = ink(ui);
     panel_frame(ui).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        step_title(ui, "1", "Your music");
-        ui.add_space(S1);
+        if let Some(n) = step {
+            step_title(ui, n, "Your music folder");
+            ui.add_space(S1);
+        }
         match app.saved.source.clone() {
             None => {
                 muted(ui, "The folder on this computer that holds your music. It can be messy; Pausetape only reads it.");

@@ -12,9 +12,9 @@ use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
 const TABS: [(Tab, &str); 15] = [
-    (Tab::Folders, "folders"),
-    (Tab::Folders, "picker"),
-    (Tab::Folders, "cardpicker"),
+    (Tab::Library, "folders"),
+    (Tab::Library, "picker"),
+    (Tab::Library, "cardpicker"),
     (Tab::Library, "library"),
     (Tab::Library, "tageditor"),
     (Tab::Library, "job"),
@@ -211,6 +211,8 @@ impl Shooter {
                     app.set_tested(s, Some(a));
                 }
             }
+            // The first-run welcome, and the folder dialogs over it.
+            app.welcome_open = matches!(TABS[n].1, "folders" | "picker" | "cardpicker");
             app.sync_confirm = (TABS[n].1 == "syncconfirm").then(|| (app.write().id.clone(), 4100, 4412));
             if TABS[n].1 == "cardowner" {
                 // Another setup's card where this one writes: the note, and no Sync.

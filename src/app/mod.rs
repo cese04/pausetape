@@ -96,7 +96,6 @@ impl Default for Saved {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
-    Folders,
     Library,
     Card,
     Playlists,
@@ -375,6 +374,8 @@ pub struct App {
     pub details_sheet: bool,
     /// The details panel had room beside the library on the last frame.
     pub details_beside: bool,
+    /// The first-run welcome (music folder, card) is open.
+    pub welcome_open: bool,
     pub renaming: Option<(usize, String)>,
     /// UI-thread connection to the library database (scans open their own).
     pub db: Option<Db>,
@@ -409,7 +410,8 @@ impl App {
             saved,
             tracks: Vec::new(),
             index: Index::default(),
-            tab: if first_run { Tab::Folders } else { Tab::Library },
+            tab: Tab::Library,
+            welcome_open: first_run,
             filter: String::new(),
             duplicates_only: false,
             look_alikes_only: false,

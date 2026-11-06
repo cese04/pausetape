@@ -208,10 +208,10 @@ impl App {
                     }
                     if self.write().id == id {
                         // A card with music the app didn't put there, before any write: explain
-                        // the take-over once, on its own.
+                        // the take-over once, on its own (after the first-run welcome, not over it).
                         let w = &mut self.saved.writes[self.saved.active_write];
                         let owned = self.dest_label.as_ref().is_some_and(|l| l.id != w.id);
-                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered && !owned {
+                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered && !owned && !self.welcome_open {
                             w.take_over_offered = true;
                             self.take_over_open = true;
                         }

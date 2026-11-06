@@ -71,13 +71,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.set_max_width(ui.available_width().min(MAX_W));
         }
         match app.tab {
-            Tab::Folders => folders::show(app, ui),
             Tab::Library => library::show(app, ui),
             Tab::Card => card::show(app, ui),
             Tab::Playlists => playlists::show(app, ui),
             Tab::Settings => settings::show(app, ui),
         }
     });
+    folders::welcome(app, ui);
     folders::pickers(app, ui);
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
@@ -102,7 +102,7 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
         p.rect_filled(area, 8.0, ink.bg.gamma_multiply(0.92));
         p.rect_filled(area, 8.0, ink.accent.gamma_multiply(0.10));
         p.rect_stroke(area, 8.0, Stroke::new(1.5, ink.accent), egui::StrokeKind::Inside);
-        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first (folders tab), then drop music to add" };
+        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first, then drop music to add" };
         p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(20.0), ink.text);
         p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(14.0), ink.muted);
     }

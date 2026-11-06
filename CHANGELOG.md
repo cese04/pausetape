@@ -996,3 +996,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
   beside the name makes a second, new or a copy. From two, the list is back, and each setup
   is an entry under *Card* in the sidebar.
 - The search box takes `card:all`: albums on the card, going on or off.
+
+### 85. A welcome the first time, in place of the folders tab (2026-11-05)
+- The folders tab, which was first among the tabs for good after being needed once, is gone.
+  The first time (no music folder yet), a **Welcome** over the page asks for the two things:
+  your music folder, then the SD card, which can wait (**Start, and choose the card later**).
+- After that, the music folder (with *Change folder…*, *Rescan*, *Add music…*) and reorganising
+  it (*Advanced*) are in **Settings › Music folder**, and the folder's menu is at the top of the
+  sidebar; the card is chosen in the card's *Setup*.
+- Music already on a card is explained after the welcome, not over it.

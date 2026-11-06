@@ -26,7 +26,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         writes_bar(app, ui);
         ui.add_space(S2);
         let why = if app.saved.source.is_none() {
-            "Choose your music folder in the folders tab first."
+            "Choose your music folder first: Settings › Music folder."
         } else if app.source_missing {
             "Can't reach the music folder: is its drive connected? The card waits until it's back."
         } else if app.busy.is_some() {

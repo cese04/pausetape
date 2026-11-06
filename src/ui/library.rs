@@ -196,7 +196,7 @@ fn page(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
         // An unreachable folder is said in red above.
         if !app.source_missing {
-            muted(ui, "Choose the folder that holds your music in the folders tab. It can be as messy as it likes; nothing in it changes unless you ask.");
+            muted(ui, "Choose the folder that holds your music: the menu at the top of the sidebar, or Settings › Music folder. It can be as messy as it likes; nothing in it changes unless you ask.");
         }
         return;
     }
