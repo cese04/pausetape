@@ -162,6 +162,12 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
             crate::platform::reveal(dir);
         }
     });
+    // Its MusicBrainz suggestions, when it's been looked up.
+    let id = app.index.artists[ai].albums[bi].id(&ck);
+    if let Some(l) = app.lookups.get_mut(&id) {
+        ui.add_space(S1);
+        super::library::lookup_block(ui, &app.tracks, &id, l, actions);
+    }
     ui.add_space(S2);
     widgets::caps(ui, "songs");
     ui.add_space(S1 / 2.0);

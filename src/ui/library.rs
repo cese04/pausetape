@@ -718,7 +718,7 @@ fn album_folders(ui: &mut Ui, tracks: &[Track], idxs: &[usize], root: &Path) {
 }
 
 /// MusicBrainz suggestions under an album. Identical changes across tracks collapse into one line.
-fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions: &mut Vec<Action>) {
+pub(super) fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions: &mut Vec<Action>) {
     let ink = ink(ui);
     ui.indent(id, |ui| {
         match l {
@@ -777,7 +777,7 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
                         }
                     }
                     ui.add_space(S1);
-                    row(ui, |ui| {
+                    row_wrapped(ui, |ui| {
                         ui.add_enabled_ui(n > 0, |ui| {
                             let text = if n == 0 { "Apply".to_string() } else { format!("Apply {}", plural(n, "change")) };
                             if widgets::primary_with(ui, Icon::Check, text).on_hover_text("Corrects these tags in the library; the files change when you write the corrected tags.").clicked() {
@@ -827,9 +827,11 @@ fn suggestion_row(ui: &mut Ui, c: &crate::musicbrainz::FieldChange, scope: &str,
     let small = FontId::proportional(12.5);
     let font = FontId::proportional(14.5);
     let mut x = rect.left() + S1 + ICON + S2;
-    let what = truncated(ui, format!("{} · {scope}", c.field.label()), small.clone(), ink.muted, 160.0);
+    // What changes takes up to a third of the row; the values, the rest.
+    let label_w = (width * 0.3).clamp(72.0, 160.0);
+    let what = truncated(ui, format!("{} · {scope}", c.field.label()), small.clone(), ink.muted, label_w);
     p.galley(egui::pos2(x, y - what.size().y / 2.0), what, ink.muted);
-    x += 160.0 + S2;
+    x += label_w + S2;
     let room = (rect.right() - x - S1).max(0.0);
     let struck = |text: &str, color, max_w| {
         let mut job = egui::text::LayoutJob::default();

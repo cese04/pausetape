@@ -1005,3 +1005,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
   it (*Advanced*) are in **Settings › Music folder**, and the folder's menu is at the top of the
   sidebar; the card is chosen in the card's *Setup*.
 - Music already on a card is explained after the welcome, not over it.
+
+### 86. Suggested tags where you'll see them (2026-11-05)
+- MusicBrainz suggestions showed only under their album in the library by artist, so with the
+  album table (now the first view) a *Look up* seemed to do nothing. They now show in three
+  places: under the album in the library by artist, as before; in the album's details; and in
+  **Review › Suggested tags**, which lists every album looked up, one after another, to apply
+  or dismiss. A *Look up* from the table says where its suggestions will be.
+- In a narrow space (the details panel) a suggestion's field takes less room, leaving it to the
+  old and new values; its buttons wrap.

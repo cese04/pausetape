@@ -28,6 +28,7 @@ enum Go {
     Search(String),
     Duplicates,
     LookAlikes,
+    Suggestions,
     Playlist(usize),
     NewPlaylist,
     Card(usize),
@@ -98,6 +99,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         }
         Go::Settings => app.tab = Tab::Settings,
+        Go::Suggestions => app.tab = Tab::Suggestions,
     }
 }
 
@@ -202,6 +204,7 @@ fn review(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
     rows.push((Icon::Remove, "Damaged files".into(), damaged, Go::Search("damaged:yes".into()), searching("damaged:yes")));
     let edited = app.dirty_count();
     rows.push((Icon::Rename, "Corrected, not in the files".into(), edited, Go::Search("edited:yes".into()), searching("edited:yes")));
+    rows.push((Icon::Search, "Suggested tags".into(), app.lookups.len(), Go::Suggestions, app.tab == Tab::Suggestions));
     let rows: Vec<_> = rows.into_iter().filter(|r| r.2 > 0).collect();
     if rows.is_empty() {
         return;

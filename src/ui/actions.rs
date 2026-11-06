@@ -80,7 +80,14 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                     }
                 }
             }
-            Action::LookupAlbum(a, b) => app.lookup_album(a, b),
+            Action::LookupAlbum(a, b) => {
+                app.lookup_album(a, b);
+                // In the album table, suggestions aren't under the album: say where they are.
+                if app.saved.album_table || app.tab != crate::app::Tab::Library {
+                    let title = app.index.artists[a].albums[b].title.clone().unwrap_or_else(|| "these songs".into());
+                    app.notice(format!("asking MusicBrainz about “{title}”: its suggestions show in its details and in Review › Suggested tags"));
+                }
+            }
             Action::ApplyLookup(id) => app.apply_lookup(&id),
             Action::Dismiss(id) => {
                 app.lookups.remove(&id);

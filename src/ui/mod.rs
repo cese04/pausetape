@@ -72,6 +72,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }
         match app.tab {
             Tab::Library => library::show(app, ui),
+            Tab::Suggestions => suggestions(app, ui),
             Tab::Card => card::show(app, ui),
             Tab::Playlists => playlists::show(app, ui),
             Tab::Settings => settings::show(app, ui),
@@ -120,6 +121,41 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
         app.tab = Tab::Library;
         app.check_folder(first.clone());
     }
+}
+
+/// Every album looked up on MusicBrainz, with its suggestions to apply or dismiss, one after
+/// another (the library by artist shows each under its album; the details panel too).
+fn suggestions(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    ui.label(RichText::new("Suggested tags, from MusicBrainz").size(20.0).color(ink.text));
+    ui.add_space(S1);
+    let mut ids: Vec<(String, String, String)> = app
+        .lookups
+        .keys()
+        .map(|id| match app.album_by_id(id) {
+            Some((a, b)) => (app.index.artists[a].name.clone(), app.index.artists[a].albums[b].title.clone().unwrap_or_else(|| "Loose tracks".into()), id.clone()),
+            None => (String::new(), id.clone(), id.clone()),
+        })
+        .collect();
+    ids.sort();
+    if ids.is_empty() {
+        widgets::muted(ui, "Nothing to go through. Right-click an album › Look up on MusicBrainz, and its suggestions come here.");
+        return;
+    }
+    let mut actions = Vec::new();
+    egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+        for (artist, album, id) in ids {
+            ui.add_space(S2);
+            row(ui, |ui| {
+                ui.label(RichText::new(album).italics().size(17.0).color(ink.text));
+                widgets::muted(ui, artist);
+            });
+            if let Some(l) = app.lookups.get_mut(&id) {
+                library::lookup_block(ui, &app.tracks, &id, l, &mut actions);
+            }
+        }
+    });
+    actions::apply(app, actions);
 }
 
 /// The top bar: the app's name, and the search box, which looks through the library from

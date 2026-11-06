@@ -97,6 +97,8 @@ impl Default for Saved {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Library,
+    /// MusicBrainz suggestions for every album looked up, to go through.
+    Suggestions,
     Card,
     Playlists,
     Settings,
