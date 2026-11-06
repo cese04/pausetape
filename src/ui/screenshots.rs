@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 15] = [
+const TABS: [(Tab, &str); 16] = [
     (Tab::Library, "folders"),
     (Tab::Library, "picker"),
     (Tab::Library, "cardpicker"),
@@ -26,6 +26,7 @@ const TABS: [(Tab, &str); 15] = [
     (Tab::Card, "takeover"),
     (Tab::Card, "playertest"),
     (Tab::Playlists, "playlists"),
+    (Tab::Genres, "genres"),
     (Tab::Settings, "settings"),
 ];
 

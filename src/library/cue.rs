@@ -47,6 +47,8 @@ pub struct Sheet {
     pub title: Option<String>,
     pub year: Option<u16>,
     pub disc: Option<u32>,
+    /// `REM GENRE`, several where the sheet separates them.
+    pub genres: Vec<String>,
     pub files: Vec<SheetFile>,
 }
 
@@ -125,6 +127,7 @@ pub fn parse(text: &str) -> Sheet {
                 match key.to_ascii_uppercase().as_str() {
                     "DATE" => sheet.year = v.get(..4).and_then(|y| y.parse().ok()).filter(|y| (1900..=2099).contains(y)),
                     "DISCNUMBER" => sheet.disc = v.split('/').next().and_then(|d| d.trim().parse().ok()),
+                    "GENRE" => sheet.genres = super::genres::split([v.as_str()]),
                     _ => {}
                 }
             }
@@ -262,6 +265,8 @@ fn split(image: &Track, sheet: &Sheet, file: &SheetFile, sheet_path: &Path) -> V
                 track: Some(st.number),
                 disc: sheet.disc.or(image.disc),
                 year: sheet.year.or(image.year),
+                // The sheet's genre, else the album file's own tags'.
+                genres: if sheet.genres.is_empty() { image.genres.clone() } else { Some(sheet.genres.clone()) },
                 compilation: image.compilation,
                 duration: frames_to_time(frames),
                 kbps: image.kbps,
@@ -293,6 +298,7 @@ mod tests {
     fn one_file_album() {
         let s = parse(IMAGE);
         assert_eq!((s.performer.as_deref(), s.title.as_deref(), s.year), (Some("JOY DIVISION"), Some("Unknown Pleasures"), Some(1979)));
+        assert_eq!(s.genres, ["Post-Punk"]);
         assert_eq!(s.files.len(), 1);
         let t = &s.files[0].tracks;
         assert_eq!(t.len(), 3);

@@ -128,6 +128,21 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         None => vec![plural(al.tracks.len(), "song")],
     };
     ui.label(RichText::new(facts.join(" · ")).size(13.5).color(ink.muted));
+    // Its genres, each leading to the genre's artists and albums.
+    let genres = app.album_genres(ai, bi);
+    if !genres.names.is_empty() {
+        ui.add_space(S1 / 2.0);
+        ui.horizontal_wrapped(|ui| {
+            for g in &genres.names {
+                if widgets::chip(ui, Icon::Discover, g, ink.text).on_hover_text("this genre's artists and albums").clicked() {
+                    actions.push(Action::ShowGenre(g.clone()));
+                }
+            }
+        });
+        if genres.from_artist {
+            widgets::help(ui, "the artist's genres, from MusicBrainz: no song of this album names one");
+        }
+    }
     let (mark, status) = album_status(app, &ck, &app.index.artists[ai], al);
     if let Some(m) = mark {
         ui.horizontal(|ui| {

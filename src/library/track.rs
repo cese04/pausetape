@@ -35,6 +35,9 @@ pub struct Track {
     pub track: Option<u32>,
     pub disc: Option<u32>,
     pub year: Option<u16>,
+    /// The genres in the file's tags, several where it holds several (`genres::split`).
+    /// `None`: not known (a correction kept from before genres were read), so never written.
+    pub genres: Option<Vec<String>>,
     pub compilation: bool,
     pub duration: Duration,
     /// Audio bitrate in kbps, sample rate in Hz, bits per sample (lossless formats), as the

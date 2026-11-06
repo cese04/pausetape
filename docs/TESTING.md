@@ -314,6 +314,13 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     outlined while held over it, and the songs are added (Undo in the status bar). Onto *New
     playlist*: a new one with them. In a playlist, drag a song by its handle: a line shows
     where it goes.
+21o. Songs whose tags have genres (several in one, "Electronic; Trip Hop", count as two):
+    sidebar › **Genres** lists them with how many albums and artists; a click shows that
+    genre's artists and albums (library by artist), with *All genres* to go back. An album with
+    no genre of its own, whose artist was looked up, is under the artist's genres, marked "by
+    the artist's genre". The details panel shows an album's genres; a click opens one. *Look
+    up* on an album suggests MusicBrainz's genres with the other tags; applied, they're written
+    with *Write corrected tags*. The search box takes `genre:trip-hop` and `genre:none`.
 21n. A fresh start (empty data folder): a welcome asks for the music folder, then the card
     (which can wait); *Start* closes it. Music already on the card is explained after it.
 

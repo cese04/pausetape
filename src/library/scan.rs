@@ -181,7 +181,8 @@ fn finish(root: &Path, raw: Vec<Track>, sheets: &[(PathBuf, Vec<u8>)], edits: &H
                 Some(e) if e.size == t.size && e.mtime == t.mtime => {
                     stats.edits += 1;
                     // What the file holds now, under the corrections.
-                    Track { dirty: true, embedded_cover: t.embedded_cover, ..e.track.clone() }
+                    // A correction from before genres were read leaves the file's genres alone.
+                    Track { dirty: true, embedded_cover: t.embedded_cover, genres: e.track.genres.clone().or(t.genres.clone()), ..e.track.clone() }
                 }
                 Some(_) => {
                     // The file changed since the correction was made; trust the file.
@@ -253,6 +254,7 @@ fn read_tags(t: &mut Track, file: &lofty::file::TaggedFile) {
         t.disc = tag.disk();
         t.year = tag.date().map(|d| d.year).filter(|&y| y > 0);
         t.compilation = matches!(tag.get_string(ItemKey::FlagCompilation), Some("1" | "true"));
+        t.genres = Some(super::genres::split(tag.get_strings(ItemKey::Genre)));
     }
     t.embedded_cover = file.tags().iter().any(|tag| tag.picture_count() > 0);
 }

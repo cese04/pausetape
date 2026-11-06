@@ -10,6 +10,7 @@ mod confirm;
 mod details;
 mod drag;
 pub mod folders;
+mod genres;
 mod keys;
 mod menu;
 pub mod icons;
@@ -74,6 +75,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         match app.tab {
             Tab::Library => library::show(app, ui),
             Tab::Suggestions => suggestions(app, ui),
+            Tab::Genres => genres::show(app, ui),
             Tab::Card => card::show(app, ui),
             Tab::Playlists => playlists::show(app, ui),
             Tab::Settings => settings::show(app, ui),
@@ -178,7 +180,7 @@ fn header(app: &mut App, ui: &mut Ui) {
             r.request_focus();
         }
         // The card's albums are searched where they are; anywhere else, typing opens the library.
-        if app.filter != before && app.tab != Tab::Library && !(app.tab == Tab::Card && !app.card_setup_open) {
+        if app.filter != before && !matches!(app.tab, Tab::Library) && !(app.tab == Tab::Card && !app.card_setup_open) {
             app.tab = Tab::Library;
             app.duplicates_only = false;
             app.look_alikes_only = false;

@@ -18,7 +18,8 @@ use crate::musicbrainz::ArtistInfo;
 
 /// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
 /// and bit depth; 4: embedded cover; 5: damaged files), so files get re-read.
-const SCHEMA_VERSION: i64 = 5;
+/// 6: tracks hold their genres (read again once).
+const SCHEMA_VERSION: i64 = 6;
 /// Corrections saved since this version stay valid: the fields they change haven't changed.
 const EDITS_SINCE: i64 = 3;
 
@@ -203,6 +204,13 @@ impl Db {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Every artist MusicBrainz was asked about, by key, with when (for the genres view).
+    pub fn all_artist_info(&self) -> Result<Vec<(String, ArtistInfo, u64)>> {
+        let mut q = self.conn.prepare("SELECT key, info, fetched FROM artists")?;
+        let rows = q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?;
+        Ok(rows.flatten().filter_map(|(k, info, at)| serde_json::from_str(&info).ok().map(|i| (k, i, at as u64))).collect())
     }
 
     pub fn save_artist_info(&mut self, key: &str, info: &ArtistInfo, at: u64) -> Result<()> {
