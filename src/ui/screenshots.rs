@@ -151,6 +151,11 @@ impl Shooter {
                 let next: Vec<usize> = other.tracks.iter().take(2).copied().collect();
                 app.play_next(&next);
             }
+            // PAUSETAPE_SHOT_PROBLEMS=1: a tag write's problems, with long paths, above the library.
+            if std::env::var_os("PAUSETAPE_SHOT_PROBLEMS").is_some() {
+                let long = "writing /Volumes/Elements/Music/Lamp - 東京ユートピア通信 (2011)/03 - Jesus bleibet meine Freude [Herz und Mund und Tat und Leben BWV 147].mp3: Permission denied (os error 13)";
+                app.problems = Some(crate::app::Problems { what: "writing tags".into(), list: vec![long.to_string(); 3], log: None });
+            }
             // PAUSETAPE_SHOT_CARD_SETUP=1: the card's view on its setup rather than its albums.
             app.card_setup_open = std::env::var_os("PAUSETAPE_SHOT_CARD_SETUP").is_some();
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
