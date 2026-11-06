@@ -16,7 +16,7 @@ use super::ROW_H;
 use crate::app::{App, Lookup};
 use crate::card::Player;
 use crate::library::Track;
-use super::layout::{ICON, S1, S2, S4, S6, row, row_wrapped, font};
+use super::layout::{ICON, S1, S2, S4, S6, row, row_wrapped, font, list_rows};
 
 /// Longest folder path shown before it's shortened with "…" in the middle.
 const FOLDER_CHARS: usize = 60;
@@ -522,48 +522,51 @@ fn page(app: &mut App, ui: &mut Ui) {
                         })
                         .collect();
                     let number_end = number_column(ui, &numbers);
-                    for (pos, &ti) in al.tracks.iter().enumerate() {
-                        let t = &app.tracks[ti];
-                        if !every_song && !query.song_matches(&artist.name, album_name, &t.display_title()) {
-                            continue;
-                        }
-                        let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
-                        let selected = app.selected.contains(&ti);
-                        let (r, add) = track_row(ui, t, device, (&numbers[pos], number_end), al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
-                        shown.push(ti);
-                        if scroll_to == Some(ti) {
-                            r.scroll_to_me(None);
-                        }
-                        // Dragged onto a playlist: the selection it's in, or the song.
-                        super::drag::songs_from(&r, || if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] });
-                        // As in the album table and any file list: a click selects, a double click
-                        // plays (from this song to the album's end).
-                        if r.double_clicked() {
-                            actions.push(Action::Play(al.tracks.clone(), pos));
-                        } else if r.clicked() && mods.command {
-                            actions.push(Action::Select(ti));
-                        } else if r.clicked() && mods.shift {
-                            // A run from the last song clicked, if it's in this album.
-                            let from = app.select_anchor.and_then(|a| al.tracks.iter().position(|&x| x == a)).unwrap_or(pos);
-                            actions.push(Action::SelectRun(al.tracks[from.min(pos)..=from.max(pos)].to_vec()));
-                        } else if r.clicked() {
-                            actions.push(Action::OnlySong(ti));
-                        }
-                        r.context_menu(|ui| {
-                            // On a song in the selection, the menu is for the whole selection.
-                            let songs = if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] };
-                            super::menu::music(app, ui, super::menu::Of::Songs(songs), &mut actions, |ui, actions| {
-                                ui.separator();
-                                if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "Take out of the selection (⌘-click)" } else { "Add to the selection (⌘-click)" }).clicked() {
-                                    actions.push(Action::Select(ti));
-                                    ui.close();
-                                }
+                    let compact = app.saved.compact;
+                    list_rows(ui, compact, |ui| {
+                        for (pos, &ti) in al.tracks.iter().enumerate() {
+                            let t = &app.tracks[ti];
+                            if !every_song && !query.song_matches(&artist.name, album_name, &t.display_title()) {
+                                continue;
+                            }
+                            let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
+                            let selected = app.selected.contains(&ti);
+                            let (r, add) = track_row(ui, t, device, (&numbers[pos], number_end), al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
+                            shown.push(ti);
+                            if scroll_to == Some(ti) {
+                                r.scroll_to_me(None);
+                            }
+                            // Dragged onto a playlist: the selection it's in, or the song.
+                            super::drag::songs_from(&r, || if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] });
+                            // As in the album table and any file list: a click selects, a double click
+                            // plays (from this song to the album's end).
+                            if r.double_clicked() {
+                                actions.push(Action::Play(al.tracks.clone(), pos));
+                            } else if r.clicked() && mods.command {
+                                actions.push(Action::Select(ti));
+                            } else if r.clicked() && mods.shift {
+                                // A run from the last song clicked, if it's in this album.
+                                let from = app.select_anchor.and_then(|a| al.tracks.iter().position(|&x| x == a)).unwrap_or(pos);
+                                actions.push(Action::SelectRun(al.tracks[from.min(pos)..=from.max(pos)].to_vec()));
+                            } else if r.clicked() {
+                                actions.push(Action::OnlySong(ti));
+                            }
+                            r.context_menu(|ui| {
+                                // On a song in the selection, the menu is for the whole selection.
+                                let songs = if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] };
+                                super::menu::music(app, ui, super::menu::Of::Songs(songs), &mut actions, |ui, actions| {
+                                    ui.separator();
+                                    if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "Take out of the selection (⌘-click)" } else { "Add to the selection (⌘-click)" }).clicked() {
+                                        actions.push(Action::Select(ti));
+                                        ui.close();
+                                    }
+                                });
                             });
-                        });
-                        if add {
-                            actions.push(Action::Add(ti));
+                            if add {
+                                actions.push(Action::Add(ti));
+                            }
                         }
-                    }
+                    });
                 }
             }
         });

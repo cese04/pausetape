@@ -132,7 +132,10 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 2. The app opens on the **folders** tab with two numbered steps; text is in ET Book, the same
    on every system: album titles in its italic, durations and sizes typed (Courier Prime),
    playlist and card names handwritten (Kalam). Polish or Turkish letters (ł, ş) still show.
-3. Settings › appearance: switching *paper* / *ink* works.
+3. Settings › appearance: switching *paper* / *ink* works. *Text size*: *Larger* and *Smaller*
+   step by a tenth (80–200%), ⌘+ / ⌘− / ⌘0 (Ctrl on Windows) too; the size is kept after a
+   restart. *Lists › compact* packs the album table, an album's songs, the details panel's songs,
+   a playlist and the queue 24 points apart.
 
 ### B. Music folder and library
 4. The first time, the welcome › **Choose folder…** opens the in-app browser (Home, Music, Downloads buttons;

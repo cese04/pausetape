@@ -11,7 +11,7 @@ use super::theme::ink;
 use super::widgets::{Media, media_button, muted};
 use crate::app::App;
 use crate::audio::Status;
-use super::layout::{ROW, S1, S2, S3, S4, S5, S6, row, font};
+use super::layout::{ROW, S1, S2, S3, S4, S5, S6, row, font, list_rows};
 
 /// Every transport button sits in a slot this tall, so different sizes share one centre line.
 const SLOT: f32 = S6;
@@ -296,44 +296,47 @@ fn up_next(app: &mut App, ui: &mut Ui) {
     let mut todo = None;
     let n = app.queue.len();
     egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
-        for (pos, &t) in app.queue.iter().enumerate() {
-            let track = &app.tracks[t];
-            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
-            super::widgets::row_background(ui, &resp, rect, false);
-            let (now, past) = (pos == app.qpos, pos < app.qpos);
-            let color = if now { ink.accent } else if past { ink.muted } else { ink.text };
-            let p = ui.painter_at(rect);
-            let y = rect.center().y;
-            p.text(pos2(rect.left() + S3, y), Align2::RIGHT_CENTER, if now { "▸".to_string() } else { (pos + 1).to_string() }, FontId::proportional(font::UI), if now { ink.accent } else { ink.muted });
-            let mut words = track.display_title();
-            if let Some(a) = &track.artist {
-                words = format!("{words}  ·  {a}");
-            }
-            let controls_w = if now { 0.0 } else { 3.0 * ROW };
-            let g = super::widgets::truncated(ui, words, FontId::proportional(font::UI), color, rect.width() - S4 - S5 - controls_w);
-            p.galley(pos2(rect.left() + S4, y - g.size().y / 2.0), g, color);
-            p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), super::widgets::data(), ink.muted);
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
-            if resp.double_clicked() {
-                todo = Some(Do::Jump(pos));
-            }
-            if !now {
-                // Three slots at the right end: up, down, take out (up and down only where they lead).
-                let mut small = |slot: f32, icon, label: &str| {
-                    let at = egui::Rect::from_min_size(pos2(rect.right() - (3.0 - slot) * ROW, rect.top()), vec2(ROW, ROW));
-                    ui.put(at, |ui: &mut Ui| super::widgets::icon_button(ui, icon, label)).clicked()
-                };
-                if pos > 0 && small(0.0, super::icons::Icon::Up, "Move up") {
-                    todo = Some(Do::Move(pos, pos - 1));
+        let compact = app.saved.compact;
+        list_rows(ui, compact, |ui| {
+            for (pos, &t) in app.queue.iter().enumerate() {
+                let track = &app.tracks[t];
+                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+                super::widgets::row_background(ui, &resp, rect, false);
+                let (now, past) = (pos == app.qpos, pos < app.qpos);
+                let color = if now { ink.accent } else if past { ink.muted } else { ink.text };
+                let p = ui.painter_at(rect);
+                let y = rect.center().y;
+                p.text(pos2(rect.left() + S3, y), Align2::RIGHT_CENTER, if now { "▸".to_string() } else { (pos + 1).to_string() }, FontId::proportional(font::UI), if now { ink.accent } else { ink.muted });
+                let mut words = track.display_title();
+                if let Some(a) = &track.artist {
+                    words = format!("{words}  ·  {a}");
                 }
-                if pos + 1 < n && small(1.0, super::icons::Icon::Down, "Move down") {
-                    todo = Some(Do::Move(pos, pos + 1));
+                let controls_w = if now { 0.0 } else { 3.0 * ROW };
+                let g = super::widgets::truncated(ui, words, FontId::proportional(font::UI), color, rect.width() - S4 - S5 - controls_w);
+                p.galley(pos2(rect.left() + S4, y - g.size().y / 2.0), g, color);
+                p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), super::widgets::data(), ink.muted);
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
+                if resp.double_clicked() {
+                    todo = Some(Do::Jump(pos));
                 }
-                if small(2.0, super::icons::Icon::Close, "Take out of the queue") {
-                    todo = Some(Do::Remove(pos));
+                if !now {
+                    // Three slots at the right end: up, down, take out (up and down only where they lead).
+                    let mut small = |slot: f32, icon, label: &str| {
+                        let at = egui::Rect::from_min_size(pos2(rect.right() - (3.0 - slot) * ROW, rect.top()), vec2(ROW, ROW));
+                        ui.put(at, |ui: &mut Ui| super::widgets::icon_button(ui, icon, label)).clicked()
+                    };
+                    if pos > 0 && small(0.0, super::icons::Icon::Up, "Move up") {
+                        todo = Some(Do::Move(pos, pos - 1));
+                    }
+                    if pos + 1 < n && small(1.0, super::icons::Icon::Down, "Move down") {
+                        todo = Some(Do::Move(pos, pos + 1));
+                    }
+                    if small(2.0, super::icons::Icon::Close, "Take out of the queue") {
+                        todo = Some(Do::Remove(pos));
+                    }
                 }
             }
-        }
+        });
     });
     match todo {
         Some(Do::Jump(pos)) => app.audio.jump(pos),

@@ -1114,3 +1114,14 @@ UI/UX phase 4, first part (§4.3 of the design notes).
   album in the details panel. The 18 sizes used before map onto it.
 - The fonts and their licences are in `assets/fonts`; the macOS app carries the licences in
   `Contents/Resources/Licenses/Fonts`. The binary grows by about 700 KB.
+
+### 94. Text size and compact lists (2026-11-06)
+UI/UX phase 4 (§4.3, §4.6 of the design notes).
+- **Text size**, in Settings › Appearance: *Smaller* and *Larger* step by a tenth, from 80% to
+  200%, with *As designed* to go back. Everything grows with the text (egui's zoom), so nothing
+  is cut off. ⌘+, ⌘− and ⌘0 (Ctrl on Windows) do the same anywhere, and are listed under
+  Keyboard. The size is kept for the next start.
+- **Compact lists**, in Settings › Appearance › Lists: songs and albums packed 24 points apart,
+  as in Calibre, rather than 32. It applies to the album table, an album's songs, the songs in
+  the details panel, a playlist and the queue (`layout::list_rows`).
+- The screenshot demo gets `PAUSETAPE_SHOT_COMPACT=1` and `PAUSETAPE_SHOT_TEXT=<size>`.

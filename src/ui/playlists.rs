@@ -13,7 +13,7 @@ use super::icons::Icon;
 use super::widgets::{icon_button, icon_link, muted};
 use crate::app::App;
 use crate::library::Track;
-use super::layout::{S1, S2, row, font};
+use super::layout::{S1, S2, row, font, list_rows};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
@@ -71,69 +71,72 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             muted(ui, format!("{} tracks · {} · on the card, a folder of copies ({})", pl.tracks.len(), text::duration(dur), text::bytes(pl.bytes(&by_path)))).on_hover_text(how);
             ui.add_space(S1);
             ScrollArea::vertical().auto_shrink(false).max_height(ui.available_height() - 40.0).show(ui, |ui| {
-                for (n, path) in pl.tracks.iter().enumerate() {
-                    let title = by_path.get(path.as_path()).map(|t| t.display_title()).unwrap_or_else(|| "a missing song".into());
-                    let line = row(ui, |ui| {
-                        // A handle to drag the song to another place in the list.
-                        let (handle, h) = ui.allocate_exact_size(egui::vec2(S2, 18.0), egui::Sense::drag());
-                        let dot = if h.hovered() || h.dragged() { ink.text } else { ink.faint };
-                        for (dx, dy) in [(0.0, -4.0), (0.0, 0.0), (0.0, 4.0), (5.0, -4.0), (5.0, 0.0), (5.0, 4.0)] {
-                            ui.painter().circle_filled(handle.center() + egui::vec2(dx - 2.5, dy), 1.2, dot);
-                        }
-                        h.on_hover_text("drag to move").dnd_set_drag_payload(super::drag::PlaylistSong(pi, n));
-                        ui.add_sized([28.0, 18.0], egui::Label::new(RichText::new(format!("{}", n + 1)).color(ink.muted)));
-                        match by_path.get(path.as_path()) {
-                            Some(t) => {
-                                let r = ui.add(egui::Label::new(t.display_title()).sense(egui::Sense::click()));
-                                if let Some(&ti) = by_index.get(path.as_path()) {
-                                    r.context_menu(|ui| {
-                                        super::menu::music(app, ui, super::menu::Of::Songs(vec![ti]), &mut actions, |ui, _| {
-                                            ui.separator();
-                                            if icon_link(ui, Icon::Close, "Remove from the playlist").clicked() {
-                                                todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
-                                                ui.close();
-                                            }
+                let compact = app.saved.compact;
+                list_rows(ui, compact, |ui| {
+                    for (n, path) in pl.tracks.iter().enumerate() {
+                        let title = by_path.get(path.as_path()).map(|t| t.display_title()).unwrap_or_else(|| "a missing song".into());
+                        let line = row(ui, |ui| {
+                            // A handle to drag the song to another place in the list.
+                            let (handle, h) = ui.allocate_exact_size(egui::vec2(S2, 18.0), egui::Sense::drag());
+                            let dot = if h.hovered() || h.dragged() { ink.text } else { ink.faint };
+                            for (dx, dy) in [(0.0, -4.0), (0.0, 0.0), (0.0, 4.0), (5.0, -4.0), (5.0, 0.0), (5.0, 4.0)] {
+                                ui.painter().circle_filled(handle.center() + egui::vec2(dx - 2.5, dy), 1.2, dot);
+                            }
+                            h.on_hover_text("drag to move").dnd_set_drag_payload(super::drag::PlaylistSong(pi, n));
+                            ui.add_sized([28.0, 18.0], egui::Label::new(RichText::new(format!("{}", n + 1)).color(ink.muted)));
+                            match by_path.get(path.as_path()) {
+                                Some(t) => {
+                                    let r = ui.add(egui::Label::new(t.display_title()).sense(egui::Sense::click()));
+                                    if let Some(&ti) = by_index.get(path.as_path()) {
+                                        r.context_menu(|ui| {
+                                            super::menu::music(app, ui, super::menu::Of::Songs(vec![ti]), &mut actions, |ui, _| {
+                                                ui.separator();
+                                                if icon_link(ui, Icon::Close, "Remove from the playlist").clicked() {
+                                                    todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
+                                                    ui.close();
+                                                }
+                                            });
                                         });
-                                    });
+                                    }
+                                    muted(ui, t.artist.as_deref().unwrap_or(""));
+                                    if let Some(note) = text::format_note(t, device) {
+                                        ui.label(RichText::new(text::format_badge(t, device)).size(font::META).color(ink.warn)).on_hover_text(note);
+                                    }
                                 }
-                                muted(ui, t.artist.as_deref().unwrap_or(""));
-                                if let Some(note) = text::format_note(t, device) {
-                                    ui.label(RichText::new(text::format_badge(t, device)).size(font::META).color(ink.warn)).on_hover_text(note);
+                                None => {
+                                    ui.label(RichText::new(path.display().to_string()).color(ink.warn)).on_hover_text("file not found in library");
                                 }
                             }
-                            None => {
-                                ui.label(RichText::new(path.display().to_string()).color(ink.warn)).on_hover_text("file not found in library");
-                            }
-                        }
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if icon_button(ui, Icon::Close, "Remove from the playlist").clicked() {
-                                todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
-                            }
-                            if n + 1 < pl.tracks.len() && icon_button(ui, Icon::Down, "Move down").clicked() {
-                                todo.push(Do::Swap(pi, n, n + 1, format!("moving “{title}” down")));
-                            }
-                            if n > 0 && icon_button(ui, Icon::Up, "Move up").clicked() {
-                                todo.push(Do::Swap(pi, n, n - 1, format!("moving “{title}” up")));
-                            }
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if icon_button(ui, Icon::Close, "Remove from the playlist").clicked() {
+                                    todo.push(Do::Remove(pi, n, format!("taking “{title}” out of “{}”", pl.name)));
+                                }
+                                if n + 1 < pl.tracks.len() && icon_button(ui, Icon::Down, "Move down").clicked() {
+                                    todo.push(Do::Swap(pi, n, n + 1, format!("moving “{title}” down")));
+                                }
+                                if n > 0 && icon_button(ui, Icon::Up, "Move up").clicked() {
+                                    todo.push(Do::Swap(pi, n, n - 1, format!("moving “{title}” up")));
+                                }
+                            });
                         });
-                    });
-                    // Another of this list's songs held over the row: a line where it would go
-                    // (above when it comes from below, and the other way); let go, it goes there.
-                    let r = line.response;
-                    if let Some(held) = r.dnd_hover_payload::<super::drag::PlaylistSong>()
-                        && held.0 == pi
-                        && held.1 != n
-                    {
-                        let y = if held.1 > n { r.rect.top() } else { r.rect.bottom() };
-                        ui.painter().hline(r.rect.x_range(), y, egui::Stroke::new(2.0, ink.accent));
+                        // Another of this list's songs held over the row: a line where it would go
+                        // (above when it comes from below, and the other way); let go, it goes there.
+                        let r = line.response;
+                        if let Some(held) = r.dnd_hover_payload::<super::drag::PlaylistSong>()
+                            && held.0 == pi
+                            && held.1 != n
+                        {
+                            let y = if held.1 > n { r.rect.top() } else { r.rect.bottom() };
+                            ui.painter().hline(r.rect.x_range(), y, egui::Stroke::new(2.0, ink.accent));
+                        }
+                        if let Some(held) = r.dnd_release_payload::<super::drag::PlaylistSong>()
+                            && held.0 == pi
+                            && held.1 != n
+                        {
+                            todo.push(Do::Move(pi, held.1, n, "moving a song".into()));
+                        }
                     }
-                    if let Some(held) = r.dnd_release_payload::<super::drag::PlaylistSong>()
-                        && held.0 == pi
-                        && held.1 != n
-                    {
-                        todo.push(Do::Move(pi, held.1, n, "moving a song".into()));
-                    }
-                }
+                });
             });
         });
     });

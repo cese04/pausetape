@@ -12,7 +12,7 @@ use super::theme::{self, ink};
 use super::widgets::{self, muted, truncated};
 use crate::app::{AlbumRow, App, SortBy};
 use crate::library::search::Query;
-use super::layout::{S1, S2, row, row_wrapped, font};
+use super::layout::{S1, S2, row, row_wrapped, font, list_rows};
 
 /// Fixed columns: (heading, sort, width, right-aligned). Artist and album share what's left.
 const FIXED: [(&str, SortBy, f32, bool); 6] = [
@@ -83,89 +83,93 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         muted(ui, "No albums match.");
         return;
     }
-    let mods = ui.input(|i| i.modifiers);
-    let current = app.current();
-    // Only the rows in view are drawn, so a row the arrow keys moved to out of view is scrolled
-    // to by its position: to the top edge going up, the bottom edge going down.
-    let mut area = ScrollArea::vertical().auto_shrink(false);
-    if let Some(n) = app.album_scroll_to.take() {
-        let (pitch, was) = (ROW_H + ui.spacing().item_spacing.y, app.album_rows_shown.clone());
-        if n <= was.start {
-            area = area.vertical_scroll_offset(n as f32 * pitch);
-        } else if n + 1 >= was.end {
-            area = area.vertical_scroll_offset((n + 2).saturating_sub(was.len()) as f32 * pitch);
+    let compact = app.saved.compact;
+    let drawn = list_rows(ui, compact, |ui| {
+        let mods = ui.input(|i| i.modifiers);
+        let current = app.current();
+        // Only the rows in view are drawn, so a row the arrow keys moved to out of view is scrolled
+        // to by its position: to the top edge going up, the bottom edge going down.
+        let mut area = ScrollArea::vertical().auto_shrink(false);
+        if let Some(n) = app.album_scroll_to.take() {
+            let (pitch, was) = (ROW_H + ui.spacing().item_spacing.y, app.album_rows_shown.clone());
+            if n <= was.start {
+                area = area.vertical_scroll_offset(n as f32 * pitch);
+            } else if n + 1 >= was.end {
+                area = area.vertical_scroll_offset((n + 2).saturating_sub(was.len()) as f32 * pitch);
+            }
         }
-    }
-    let mut drawn = 0..0;
-    area.show_rows(ui, ROW_H, rows.len(), |ui, range| {
-        drawn = range.clone();
-        for n in range {
-            let row = &rows[n];
-            let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click_and_drag());
-            let selected = app.selected_albums.contains(&row.id);
-            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Row, true, selected, format!("{}, {}", row.artist_name, row.title)));
-            widgets::focus_ring(ui, &resp, rect, 4.0);
-            widgets::row_background(ui, &resp, rect, selected);
-            let p = ui.painter_at(rect);
-            let y = rect.center().y;
-            let font = FontId::proportional(font::UI);
-            let small = FontId::proportional(font::META);
-            let cell = |k: usize| rect.left() + lefts[k];
-            let a = &app.index.artists[row.artist];
-            let al = &a.albums[row.album];
-            let ck = &app.index.clusters[a.cluster].key;
-            let (mark, status) = album_status(app, ck, a, al);
-            if let Some(m) = mark {
-                m.paint(&p, egui::pos2(cell(0) + 5.0, y), 2.6, &ink);
+        let mut drawn = 0..0;
+        area.show_rows(ui, ROW_H, rows.len(), |ui, range| {
+            drawn = range.clone();
+            for n in range {
+                let row = &rows[n];
+                let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click_and_drag());
+                let selected = app.selected_albums.contains(&row.id);
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Row, true, selected, format!("{}, {}", row.artist_name, row.title)));
+                widgets::focus_ring(ui, &resp, rect, 4.0);
+                widgets::row_background(ui, &resp, rect, selected);
+                let p = ui.painter_at(rect);
+                let y = rect.center().y;
+                let font = FontId::proportional(font::UI);
+                let small = FontId::proportional(font::META);
+                let cell = |k: usize| rect.left() + lefts[k];
+                let a = &app.index.artists[row.artist];
+                let al = &a.albums[row.album];
+                let ck = &app.index.clusters[a.cluster].key;
+                let (mark, status) = album_status(app, ck, a, al);
+                if let Some(m) = mark {
+                    m.paint(&p, egui::pos2(cell(0) + 5.0, y), 2.6, &ink);
+                }
+                let playing = current.is_some_and(|c| al.tracks.contains(&c));
+                let text_at = |k: usize, s: String, f: &FontId, color| {
+                    let g = truncated(ui, s, f.clone(), color, widths[k] - 10.0);
+                    p.galley(egui::pos2(cell(k), y - g.size().y / 2.0), g, color);
+                };
+                text_at(1, row.artist_name.clone(), &font, if playing { ink.accent } else { ink.text });
+                let title = if row.edited { format!("{} · edited", row.title) } else { row.title.clone() };
+                text_at(2, title, &font, ink.text);
+                let data = widgets::data();
+                text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &data, ink.muted);
+                text_at(4, row.format.clone(), &data, if row.plays_on_device { ink.muted } else { ink.warn });
+                let right = |k: usize, s: String| {
+                    p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, data.clone(), ink.muted);
+                };
+                right(5, row.songs.to_string());
+                right(6, text::bytes(row.bytes));
+                let card_word = match mark {
+                    None => String::new(),
+                    Some(Mark::On) => "on the card".into(),
+                    Some(Mark::Adding) => "added at Sync".into(),
+                    Some(Mark::ByHand) => "by hand".into(),
+                    Some(Mark::Removing) => "taken off at Sync".into(),
+                };
+                text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
+                if row.cover {
+                    icons::paint(&p, egui::Rect::from_center_size(egui::pos2(cell(8) + 8.0, y), vec2(14.0, 14.0)), Icon::Image, ink.muted);
+                } else {
+                    text_at(8, "none".into(), &small, ink.warn);
+                }
+                let resp = if status.is_empty() { resp } else { resp.on_hover_text(status) };
+                if resp.double_clicked() {
+                    actions.push(Action::Play(al.tracks.clone(), 0));
+                } else if resp.clicked() && mods.command {
+                    actions.push(Action::ToggleAlbum(row.id.clone()));
+                } else if resp.clicked() && mods.shift {
+                    let from = app.album_anchor.as_ref().and_then(|a| rows.iter().position(|r| &r.id == a)).unwrap_or(n);
+                    actions.push(Action::AddAlbums(rows[from.min(n)..=from.max(n)].iter().map(|r| r.id.clone()).collect()));
+                } else if resp.clicked() {
+                    actions.push(Action::OnlyAlbum(row.id.clone()));
+                }
+                // Dragged onto a playlist: the selection it's in, or the album.
+                super::drag::songs_from(&resp, || if selected && app.selected_albums.len() > 1 { app.selected_album_songs(&rows) } else { al.tracks.clone() });
+                // On an album in the selection, the menu is for the whole selection.
+                resp.context_menu(|ui| {
+                    let of = if selected && app.selected_albums.len() > 1 { super::menu::Of::Songs(app.selected_album_songs(&rows)) } else { super::menu::Of::Album(row.artist, row.album) };
+                    super::menu::music(app, ui, of, actions, |_, _| {});
+                });
             }
-            let playing = current.is_some_and(|c| al.tracks.contains(&c));
-            let text_at = |k: usize, s: String, f: &FontId, color| {
-                let g = truncated(ui, s, f.clone(), color, widths[k] - 10.0);
-                p.galley(egui::pos2(cell(k), y - g.size().y / 2.0), g, color);
-            };
-            text_at(1, row.artist_name.clone(), &font, if playing { ink.accent } else { ink.text });
-            let title = if row.edited { format!("{} · edited", row.title) } else { row.title.clone() };
-            text_at(2, title, &font, ink.text);
-            let data = widgets::data();
-            text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &data, ink.muted);
-            text_at(4, row.format.clone(), &data, if row.plays_on_device { ink.muted } else { ink.warn });
-            let right = |k: usize, s: String| {
-                p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, data.clone(), ink.muted);
-            };
-            right(5, row.songs.to_string());
-            right(6, text::bytes(row.bytes));
-            let card_word = match mark {
-                None => String::new(),
-                Some(Mark::On) => "on the card".into(),
-                Some(Mark::Adding) => "added at Sync".into(),
-                Some(Mark::ByHand) => "by hand".into(),
-                Some(Mark::Removing) => "taken off at Sync".into(),
-            };
-            text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
-            if row.cover {
-                icons::paint(&p, egui::Rect::from_center_size(egui::pos2(cell(8) + 8.0, y), vec2(14.0, 14.0)), Icon::Image, ink.muted);
-            } else {
-                text_at(8, "none".into(), &small, ink.warn);
-            }
-            let resp = if status.is_empty() { resp } else { resp.on_hover_text(status) };
-            if resp.double_clicked() {
-                actions.push(Action::Play(al.tracks.clone(), 0));
-            } else if resp.clicked() && mods.command {
-                actions.push(Action::ToggleAlbum(row.id.clone()));
-            } else if resp.clicked() && mods.shift {
-                let from = app.album_anchor.as_ref().and_then(|a| rows.iter().position(|r| &r.id == a)).unwrap_or(n);
-                actions.push(Action::AddAlbums(rows[from.min(n)..=from.max(n)].iter().map(|r| r.id.clone()).collect()));
-            } else if resp.clicked() {
-                actions.push(Action::OnlyAlbum(row.id.clone()));
-            }
-            // Dragged onto a playlist: the selection it's in, or the album.
-            super::drag::songs_from(&resp, || if selected && app.selected_albums.len() > 1 { app.selected_album_songs(&rows) } else { al.tracks.clone() });
-            // On an album in the selection, the menu is for the whole selection.
-            resp.context_menu(|ui| {
-                let of = if selected && app.selected_albums.len() > 1 { super::menu::Of::Songs(app.selected_album_songs(&rows)) } else { super::menu::Of::Album(row.artist, row.album) };
-                super::menu::music(app, ui, of, actions, |_, _| {});
-            });
-        }
+        });
+        drawn
     });
     app.album_rows_shown = drawn;
     album_keys(app, ui, &rows, actions);

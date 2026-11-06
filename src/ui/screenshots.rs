@@ -160,6 +160,12 @@ impl Shooter {
             // scrolled by hand, not following the song).
             app.details_lyrics = std::env::var_os("PAUSETAPE_SHOT_LYRICS").is_some();
             app.lyrics_follow = std::env::var("PAUSETAPE_SHOT_LYRICS").map_or(true, |v| v != "unfollowed");
+            // PAUSETAPE_SHOT_COMPACT=1: lists packed tight. PAUSETAPE_SHOT_TEXT=<size>: the text size
+            // (1.25: a quarter larger).
+            app.saved.compact = std::env::var_os("PAUSETAPE_SHOT_COMPACT").is_some();
+            if let Some(z) = std::env::var("PAUSETAPE_SHOT_TEXT").ok().and_then(|v| v.parse::<f32>().ok()) {
+                ctx.set_zoom_factor(z);
+            }
             // PAUSETAPE_SHOT_CARD_SETUP=1: the card's view on its setup rather than its albums.
             app.card_setup_open = std::env::var_os("PAUSETAPE_SHOT_CARD_SETUP").is_some();
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.

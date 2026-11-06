@@ -44,6 +44,16 @@ pub mod font {
     pub const DISPLAY: f32 = 28.0;
 }
 
+/// A list's rows (songs, albums): `compact`, packed with no gap between them, 24 apart as in
+/// Calibre; else a step apart, 32.
+pub fn list_rows<R>(ui: &mut Ui, compact: bool, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let gap = ui.spacing().item_spacing.y;
+    ui.spacing_mut().item_spacing.y = if compact { 0.0 } else { S1 };
+    let r = add(ui);
+    ui.spacing_mut().item_spacing.y = gap;
+    r
+}
+
 /// A frame's margins: `x` left and right, `y` top and bottom (both on the grid).
 pub fn margin(x: f32, y: f32) -> Margin {
     Margin::symmetric(x as i8, y as i8)

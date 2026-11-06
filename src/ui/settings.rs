@@ -41,6 +41,37 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
             help(ui, "Marks the open tab, the main button, progress and what's playing. Warnings stay red.");
         });
+        setting(ui, "Text size", |ui| {
+            let ctx = ui.ctx().clone();
+            let size = ctx.zoom_factor();
+            let (least, most) = crate::app::TEXT_SIZES;
+            row(ui, |ui| {
+                ui.add_enabled_ui(size > least + 0.01, |ui| {
+                    if widgets::button(ui, "Smaller").clicked() {
+                        ctx.set_zoom_factor(((size * 10.0).round() - 1.0) / 10.0);
+                    }
+                });
+                ui.label(RichText::new(format!("{:.0}%", size * 100.0)).font(widgets::data()).color(ink(ui).text));
+                ui.add_enabled_ui(size < most - 0.01, |ui| {
+                    if widgets::button(ui, "Larger").clicked() {
+                        ctx.set_zoom_factor(((size * 10.0).round() + 1.0) / 10.0);
+                    }
+                });
+                if (size - 1.0).abs() > 0.01 && widgets::link(ui, "As designed").clicked() {
+                    ctx.set_zoom_factor(1.0);
+                }
+            });
+            let k = |s| ctx.format_shortcut(s);
+            use egui::gui_zoom::kb_shortcuts::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
+            help(ui, format!("Everything grows or shrinks with the text. Also {} and {} anywhere, {} for as designed.", k(&ZOOM_IN), k(&ZOOM_OUT), k(&ZOOM_RESET)));
+        });
+        setting(ui, "Lists", |ui| {
+            row(ui, |ui| {
+                ui.radio_value(&mut app.saved.compact, false, "comfortable");
+                ui.radio_value(&mut app.saved.compact, true, "compact");
+            });
+            help(ui, "Compact packs songs and albums tight, as Calibre does: more of them in view.");
+        });
 
         ui.add_space(S2);
         widgets::section(ui, Icon::Library, "Library");

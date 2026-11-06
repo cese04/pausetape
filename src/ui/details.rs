@@ -7,7 +7,7 @@ use egui::{Align2, FontId, RichText, ScrollArea, Sense, Ui, vec2};
 
 use super::actions::Action;
 use super::icons::Icon;
-use super::layout::{ROW, S1, S2, S3, row, font};
+use super::layout::{ROW, S1, S2, S3, row, font, list_rows};
 use super::library::{Mark, album_status};
 use super::text::{self, plural};
 use super::theme::ink;
@@ -266,27 +266,30 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         return shown;
     }
     let current = app.current();
-    for (pos, &t) in tracks.iter().enumerate() {
-        let track = &app.tracks[t];
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
-        widgets::row_background(ui, &resp, rect, false);
-        let now = current == Some(t);
-        let color = if now { ink.accent } else { ink.text };
-        let y = rect.center().y;
-        let number = if now { "▸".to_string() } else { track.track.map(|n| n.to_string()).unwrap_or_default() };
-        ui.painter().text(egui::pos2(rect.left() + S2 + S1, y), Align2::RIGHT_CENTER, number, FontId::proportional(font::UI), if now { ink.accent } else { ink.muted });
-        let dur = text::duration(track.duration);
-        let dur_w = widgets::data_width(ui, &dur);
-        let g = widgets::truncated(ui, track.display_title(), FontId::proportional(font::UI), color, rect.width() - S3 - S1 - dur_w - S2);
-        ui.painter().galley(egui::pos2(rect.left() + S3 + S1, y - g.size().y / 2.0), g, color);
-        ui.painter().text(egui::pos2(rect.right() - S1, y), Align2::RIGHT_CENTER, dur, widgets::data(), ink.muted);
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
-        let resp = resp.on_hover_text("double-click to play from here");
-        if resp.double_clicked() {
-            actions.push(Action::Play(tracks.clone(), pos));
+    let compact = app.saved.compact;
+    list_rows(ui, compact, |ui| {
+        for (pos, &t) in tracks.iter().enumerate() {
+            let track = &app.tracks[t];
+            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+            widgets::row_background(ui, &resp, rect, false);
+            let now = current == Some(t);
+            let color = if now { ink.accent } else { ink.text };
+            let y = rect.center().y;
+            let number = if now { "▸".to_string() } else { track.track.map(|n| n.to_string()).unwrap_or_default() };
+            ui.painter().text(egui::pos2(rect.left() + S2 + S1, y), Align2::RIGHT_CENTER, number, FontId::proportional(font::UI), if now { ink.accent } else { ink.muted });
+            let dur = text::duration(track.duration);
+            let dur_w = widgets::data_width(ui, &dur);
+            let g = widgets::truncated(ui, track.display_title(), FontId::proportional(font::UI), color, rect.width() - S3 - S1 - dur_w - S2);
+            ui.painter().galley(egui::pos2(rect.left() + S3 + S1, y - g.size().y / 2.0), g, color);
+            ui.painter().text(egui::pos2(rect.right() - S1, y), Align2::RIGHT_CENTER, dur, widgets::data(), ink.muted);
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
+            let resp = resp.on_hover_text("double-click to play from here");
+            if resp.double_clicked() {
+                actions.push(Action::Play(tracks.clone(), pos));
+            }
+            resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
         }
-        resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
-    }
+    });
     shown
 }
 
