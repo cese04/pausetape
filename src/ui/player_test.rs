@@ -10,7 +10,7 @@ use super::widgets::{self, muted};
 use crate::app::App;
 use crate::card::Sample;
 use crate::card::testcard::{TEST_FOLDER, file_name};
-use super::layout::{S1, S2, row, row_wrapped};
+use super::layout::{S1, S2, row, row_wrapped, font};
 
 pub fn dialog(app: &mut App, ui: &mut Ui) {
     if !app.player_test_open {
@@ -24,7 +24,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-            ui.label(RichText::new(format!("Test the player: {}", player.name())).size(18.0).color(ink.text));
+            ui.label(RichText::new(format!("Test the player: {}", player.name())).size(font::TITLE).color(ink.text));
         });
         ui.add_space(S1);
         muted(
@@ -52,7 +52,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                 }
             });
             if crate::audio::ffmpeg().is_none() {
-                ui.label(RichText::new(format!("The samples are made with ffmpeg, which isn't installed ({}).", crate::platform::FFMPEG_INSTALL)).size(13.0).color(ink.warn));
+                ui.label(RichText::new(format!("The samples are made with ffmpeg, which isn't installed ({}).", crate::platform::FFMPEG_INSTALL)).size(font::UI).color(ink.warn));
             }
         }
         ui.add_space(S2);
@@ -81,7 +81,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                         }
                     });
                     match made.as_ref().and_then(|m| m.iter().find(|(x, _)| *x == s)).map(|(_, r)| r) {
-                        Some(Err(why)) => ui.label(RichText::new("not written").size(12.5).color(ink.warn)).on_hover_text(why),
+                        Some(Err(why)) => ui.label(RichText::new("not written").size(font::META).color(ink.warn)).on_hover_text(why),
                         _ => ui.label(""),
                     };
                     ui.end_row();

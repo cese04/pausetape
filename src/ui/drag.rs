@@ -3,7 +3,7 @@
 
 use egui::{FontId, Response, Stroke};
 
-use super::layout::S1;
+use super::layout::{S1, font};
 use super::text::plural;
 use super::theme::ink;
 
@@ -42,7 +42,7 @@ pub fn ghost(ui: &egui::Ui) {
     };
     let ink = ink(ui);
     let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("drag ghost")));
-    let g = p.layout_no_wrap(words, FontId::proportional(13.0), ink.bg);
+    let g = p.layout_no_wrap(words, FontId::proportional(font::UI), ink.bg);
     let rect = egui::Rect::from_min_size(pos + egui::vec2(14.0, 10.0), g.size() + egui::vec2(2.0 * S1, S1));
     p.rect_filled(rect, 4.0, ink.text);
     p.galley(rect.min + egui::vec2(S1, S1 / 2.0), g, ink.bg);

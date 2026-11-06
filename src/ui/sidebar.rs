@@ -5,7 +5,7 @@
 use egui::{Align, Layout, Rect, RichText, ScrollArea, Sense, Ui, vec2};
 
 use super::icons::{self, Icon};
-use super::layout::{ICON, ROW, S1, S2, S3};
+use super::layout::{ICON, ROW, S1, S2, S3, font};
 use super::text;
 use super::theme::ink;
 use super::widgets;
@@ -133,6 +133,15 @@ fn heading(ui: &mut Ui, title: &str, narrow: bool) {
 /// One entry: icon, name, and a count at the right end; filled in when it's what's shown.
 /// Narrow, the icon alone, its name on hover.
 fn item(ui: &mut Ui, icon: Icon, name: &str, count: Option<String>, active: bool, narrow: bool) -> egui::Response {
+    item_in(ui, icon, name, count, active, narrow, egui::FontFamily::Proportional)
+}
+
+/// An item named by the user (a playlist, a card): its name written by hand, as on a tape's label.
+fn named(ui: &mut Ui, icon: Icon, name: &str, count: Option<String>, active: bool, narrow: bool) -> egui::Response {
+    item_in(ui, icon, name, count, active, narrow, super::theme::hand())
+}
+
+fn item_in(ui: &mut Ui, icon: Icon, name: &str, count: Option<String>, active: bool, narrow: bool, family: egui::FontFamily) -> egui::Response {
     let ink = ink(ui);
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW + S1 / 2.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, active, name));
@@ -151,13 +160,14 @@ fn item(ui: &mut Ui, icon: Icon, name: &str, count: Option<String>, active: bool
         };
         return resp.on_hover_text(tip);
     }
-    let count_w = count.as_ref().map(|c| widgets::text_width(ui, c, 12.5) + S2).unwrap_or(0.0);
+    let count_w = count.as_ref().map(|c| widgets::text_width(ui, c, font::META) + S2).unwrap_or(0.0);
     let words_x = rect.left() + S2 + ICON + S1;
-    let g = widgets::truncated(ui, name.to_string(), egui::FontId::proportional(14.5), color, rect.right() - words_x - count_w - S1);
-    let shortened = g.size().x + 1.0 < widgets::text_width(ui, name, 14.5);
+    let font = egui::FontId::new(font::UI, family);
+    let g = widgets::truncated(ui, name.to_string(), font.clone(), color, rect.right() - words_x - count_w - S1);
+    let shortened = g.size().x + 1.0 < ui.painter().layout_no_wrap(name.to_string(), font, color).size().x;
     ui.painter().galley(egui::pos2(words_x, y - g.size().y / 2.0), g, color);
     if let Some(c) = count {
-        ui.painter().text(egui::pos2(rect.right() - S1, y), egui::Align2::RIGHT_CENTER, c, egui::FontId::proportional(12.5), ink.muted);
+        ui.painter().text(egui::pos2(rect.right() - S1, y), egui::Align2::RIGHT_CENTER, c, egui::FontId::proportional(font::META), ink.muted);
     }
     if shortened { resp.on_hover_text(name) } else { resp }
 }
@@ -171,7 +181,7 @@ fn library(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
         ui.add_space(if narrow { S1 } else { S2 });
         let label = if narrow { "▾".to_string() } else { format!("{} ▾", text::shorten(&name, 22)) };
         let where_ = app.saved.source.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
-        let button = ui.add(egui::Button::new(RichText::new(label).size(15.5).color(if app.source_missing { ink.warn } else { ink.text })).frame(false));
+        let button = ui.add(egui::Button::new(RichText::new(label).size(font::BODY).color(if app.source_missing { ink.warn } else { ink.text })).frame(false));
         egui::Popup::menu(&button).show(|ui| {
             if widgets::icon_link(ui, Icon::Folder, "Change folder…").clicked() {
                 app.picker = Some(super::folders::Picker::Source(super::navigator::Navigator::new(app.saved.source.as_deref())));
@@ -260,7 +270,7 @@ fn playlists(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
     heading(ui, "playlists", narrow);
     for (i, p) in app.saved.playlists.iter().enumerate() {
         let active = app.tab == Tab::Playlists && app.active_playlist == Some(i);
-        let r = item(ui, Icon::Playlists, &p.name, Some(text::count(p.tracks.len())), active, narrow);
+        let r = named(ui, Icon::Playlists, &p.name, Some(text::count(p.tracks.len())), active, narrow);
         if let Some(songs) = super::drag::songs_to(ui, &r, r.rect) {
             *go = Some(Go::AddTo(i, songs));
         } else if r.clicked() {
@@ -282,7 +292,7 @@ fn card(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
     for (i, w) in app.saved.writes.iter().enumerate() {
         let active = app.tab == Tab::Card && app.saved.active_write == i;
         let count = (i == app.saved.active_write && pending > 0).then(|| format!("{} to sync", text::count(pending)));
-        let r = item(ui, Icon::Card, &w.name, count, active, narrow);
+        let r = named(ui, Icon::Card, &w.name, count, active, narrow);
         let connected = w.dest.as_deref().is_some_and(|d| d.exists());
         let r = r.on_hover_text(if connected { "connected" } else { "not connected" });
         if r.clicked() {

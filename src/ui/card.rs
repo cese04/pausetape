@@ -19,7 +19,7 @@ use crate::card::pattern::{Field, Pattern, default_for};
 use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
 use crate::library::search::fold;
-use super::layout::{ICON, ROW, S1, S2, S3, row, row_wrapped};
+use super::layout::{ICON, ROW, S1, S2, S3, row, row_wrapped, font};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
@@ -147,7 +147,14 @@ fn space_bar(app: &App, ui: &mut Ui, need: u64, room: u64, width: f32) {
     let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW), Sense::hover());
     let bar = egui::Rect::from_center_size(rect.center(), vec2(width, 6.0));
     let scale = width / room.max(need).max(1) as f32;
-    let x = |bytes: u64| bar.left() + bytes as f32 * scale;
+    // Each edge goes to where it now is (after a Sync, what was added becomes what's there),
+    // rather than jumping.
+    let at = |bytes: u64| bar.left() + bytes as f32 * scale;
+    let time = super::motion::time(ui.ctx(), super::motion::SETTLE);
+    let (staying_at, need_at) = (staying.min(room), need.min(room));
+    let staying_x = ui.ctx().animate_value_with_time(resp.id.with("staying"), at(staying_at), time);
+    let need_x = ui.ctx().animate_value_with_time(resp.id.with("chosen"), at(need_at), time);
+    let x = |bytes: u64| if bytes == staying_at { staying_x } else if bytes == need_at { need_x } else { at(bytes) };
     let p = ui.painter();
     let span = |from: u64, to: u64| egui::Rect::from_x_y_ranges(x(from)..=x(to), bar.y_range());
     p.rect_filled(span(0, room), 3.0, ink.faint);
@@ -233,7 +240,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
                     row_wrapped(ui, |ui| {
                         let (rect, _) = ui.allocate_exact_size(vec2(15.0, 15.0), Sense::hover());
                         super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-                        ui.label(RichText::new(&name).color(ink.text));
+                        ui.label(RichText::new(&name).family(super::theme::hand()).color(ink.text));
                         match room(app) {
                             Some((_, room)) => {
                                 space_bar(app, ui, need, room, 160.0);
@@ -276,12 +283,12 @@ pub fn problems(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new(format!("{}: {}", p.what, plural(n, "problem"))).color(ink.warn));
         const SHOWN: usize = 8;
         for e in p.list.iter().take(SHOWN) {
-            ui.add(egui::Label::new(RichText::new(e).size(12.5).color(ink.muted)).truncate());
+            ui.add(egui::Label::new(RichText::new(e).size(font::META).color(ink.muted)).truncate());
         }
         if n > SHOWN {
-            ui.collapsing(RichText::new(format!("{} more", n - SHOWN)).size(12.5).color(ink.muted), |ui| {
+            ui.collapsing(RichText::new(format!("{} more", n - SHOWN)).size(font::META).color(ink.muted), |ui| {
                 for e in p.list.iter().skip(SHOWN).take(500) {
-                    ui.add(egui::Label::new(RichText::new(e).size(12.5).color(ink.muted)).truncate());
+                    ui.add(egui::Label::new(RichText::new(e).size(font::META).color(ink.muted)).truncate());
                 }
             });
         }
@@ -332,7 +339,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     row(ui, |ui| {
         let w = &mut app.saved.writes[app.saved.active_write];
         let old = w.name.clone();
-        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::proportional(22.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0)).on_hover_text("click to rename this card");
+        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::new(font::HEADING, super::theme::hand())).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0)).on_hover_text("click to rename this card");
         // Names identify writes for background replies; keep them unique and non-empty.
         if r.lost_focus() && (w.name.trim().is_empty() || app.saved.writes.iter().filter(|x| x.name == app.saved.writes[app.saved.active_write].name).count() > 1) {
             app.saved.writes[app.saved.active_write].name = old;
@@ -363,7 +370,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     row(ui, |ui| {
         caps(ui, "destination");
         // The path gives way to the button, shortened with "…"; all of it shows on hover.
-        let button_w = widgets::text_width(ui, "Change card…", 14.5) + ICON + S1 + 2.0 * S2 + S1;
+        let button_w = widgets::text_width(ui, "Change card…", font::UI) + ICON + S1 + 2.0 * S2 + S1;
         widgets::fitted(ui, RichText::new(&shown), ui.available_width() - button_w, Sense::hover()).on_hover_text(&shown);
         if widgets::button_with(ui, Icon::Card, if has_dest { "Change card…" } else { "Choose card…" }).clicked() {
             app.volumes = crate::card::volumes();
@@ -405,7 +412,7 @@ pub fn sync_confirm_dialog(app: &mut App, ui: &mut Ui) {
     let mut answer = None;
     let r = egui::Modal::new(egui::Id::unique("sync confirm")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(520.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.label(RichText::new(format!("Take {removing} of {songs} songs off the card?")).size(18.0).color(ink.text));
+        ui.label(RichText::new(format!("Take {removing} of {songs} songs off the card?")).size(font::TITLE).color(ink.text));
         ui.add_space(S1);
         widgets::help(
             ui,
@@ -567,7 +574,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     row_wrapped(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-        ui.label(RichText::new(&w.name).size(17.0).color(ink.text));
+        ui.label(RichText::new(&w.name).size(font::TITLE).family(super::theme::hand()).color(ink.text));
         let mut s = format!("{} chosen", text::bytes(need));
         if sizes.playlists > 0 {
             s.push_str(&format!(" (playlist copies {})", text::bytes(sizes.playlists)));
@@ -582,7 +589,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         && sizes.songs > max
     {
         let copies = if sizes.playlists > 0 { ", playlist copies included" } else { "" };
-        ui.label(RichText::new(format!("{} chosen{copies}, but {} lists at most {}: the rest won't show up on the player.", plural(sizes.songs, "song"), device.name(), text::count(max))).color(ink.warn).size(13.0));
+        ui.label(RichText::new(format!("{} chosen{copies}, but {} lists at most {}: the rest won't show up on the player.", plural(sizes.songs, "song"), device.name(), text::count(max))).color(ink.warn).size(font::UI));
     }
     let Some((_, room)) = space else { return };
     let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.id).map(|(_, s)| s.used_bytes()).unwrap_or(0);
@@ -599,7 +606,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
 /// choose again), then the artists taking most room.
 fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
     let ink = ink(ui);
-    ui.label(RichText::new(format!("doesn't fit: {} over. Some ways to make it fit:", text::bytes(over))).color(ink.warn).size(13.0));
+    ui.label(RichText::new(format!("doesn't fit: {} over. Some ways to make it fit:", text::bytes(over))).color(ink.warn).size(font::UI));
     let enough = |saving: u64| if saving >= over { ", enough to fit" } else { "" };
     let mut set = None;
     if sizes.cd_saving > 0 {
@@ -681,9 +688,9 @@ fn comparison(app: &mut App, ui: &mut Ui) {
         take_over(app, ui);
         let Some((_, p)) = &app.write_preview else { return };
         if !p.to_remove.is_empty() {
-            ui.collapsing(RichText::new("files that will be removed").color(ink.muted).size(13.0), |ui| {
+            ui.collapsing(RichText::new("files that will be removed").color(ink.muted).size(font::UI), |ui| {
                 for r in p.to_remove.iter().take(200) {
-                    ui.label(RichText::new(r.display().to_string()).size(12.5).color(ink.muted));
+                    ui.label(RichText::new(r.display().to_string()).size(font::META).color(ink.muted));
                 }
             });
         }
@@ -729,7 +736,7 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-            ui.label(RichText::new("Music already on the card").size(18.0).color(ink.text));
+            ui.label(RichText::new("Music already on the card").size(font::TITLE).color(ink.text));
         });
         ui.add_space(S2);
         if let Some(b) = &app.busy {
@@ -844,7 +851,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                             app.import_from_card();
                         }
                     } else if !fits {
-                        ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(12.5).color(ink.warn));
+                        ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(font::META).color(ink.warn));
                     }
                 });
             }
@@ -916,7 +923,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         }
         match &parsed {
             Err(why) => {
-                ui.label(RichText::new(format!("{why}; the names stay as they were")).size(13.0).color(ink.warn));
+                ui.label(RichText::new(format!("{why}; the names stay as they were")).size(font::UI).color(ink.warn));
             }
             Ok(p) => {
                 if let Some(e) = pattern_example(&app.index, &app.tracks, w, p) {
@@ -927,7 +934,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         row_wrapped(ui, |ui| {
             muted(ui, "fields:");
             for f in Field::ALL {
-                ui.label(RichText::new(format!("{{{}}}", f.name())).monospace().size(12.5).color(ink.text)).on_hover_text(f.about());
+                ui.label(RichText::new(format!("{{{}}}", f.name())).monospace().size(font::META).color(ink.text)).on_hover_text(f.about());
             }
         });
         widgets::help(ui, "/ makes a folder. A [part] is left out when a field in it is empty. Songs already on the card are renamed there at the next Sync, not copied again.");
@@ -993,7 +1000,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                             widgets::help(ui, m);
                         }
                         for (why, n) in left {
-                            ui.label(RichText::new(format!("{} left out: {why}.", plural(n, "song"))).color(ink.warn).size(13.0));
+                            ui.label(RichText::new(format!("{} left out: {why}.", plural(n, "song"))).color(ink.warn).size(font::UI));
                         }
                     });
                 });
@@ -1153,7 +1160,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             if ui.add(egui::Checkbox::without_text(&mut on).indeterminate(any && !all)).on_hover_text(hint).changed() {
                 edits.push(Edit::Artist(ai, on));
             }
-            let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(16.0).color(if any { ink.text } else { ink.muted });
+            let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(font::BODY).color(if any { ink.text } else { ink.muted });
             // Leave room for the size and the "rename" link on the right.
             let r = widgets::fitted(ui, name, ui.available_width() - 200.0, Sense::click()).on_hover_text(&artist.name);
             widgets::focus_ring(ui, &r, r.rect, 2.0);
@@ -1204,7 +1211,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     edits.push(Edit::Album(ai, bi, on));
                 }
                 let shown = al.title.as_deref().unwrap_or("Loose tracks");
-                let mut title_text = RichText::new(shown).italics().color(if on_card { ink.text } else { ink.muted });
+                let mut title_text = RichText::new(shown).family(super::theme::italic()).color(if on_card { ink.text } else { ink.muted });
                 if *mark == Some(Mark::Removing) {
                     title_text = title_text.strikethrough();
                 }
@@ -1218,7 +1225,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     if let Some(s) = &e.superseded {
                         hover.push_str(&format!("\nEdition {} has all these songs in {} quality.", s.rank + 1, if s.higher { "higher" } else { "the same" }));
                     }
-                    ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(12.5).color(ink.muted)).on_hover_text(hover);
+                    ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(font::META).color(ink.muted)).on_hover_text(hover);
                 }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
                 // Songs the player can't read as they are: converted, copied anyway, or left out.
@@ -1231,10 +1238,10 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     muted(ui, format!("{converted} converted")).on_hover_text(format!("{} These are converted on the way (lossless to FLAC, the rest to MP3 320).", device.plays_text()));
                 }
                 if copied > 0 {
-                    ui.label(RichText::new(format!("{copied} won't play")).size(12.5).color(ink.warn)).on_hover_text(format!("copied as they are, though they won't play on {}; change this under options below", device.short()));
+                    ui.label(RichText::new(format!("{copied} won't play")).size(font::META).color(ink.warn)).on_hover_text(format!("copied as they are, though they won't play on {}; change this under options below", device.short()));
                 }
                 if let Some(why) = left.first() {
-                    ui.label(RichText::new(format!("{} left out", left.len())).size(12.5).color(ink.warn)).on_hover_text(*why);
+                    ui.label(RichText::new(format!("{} left out", left.len())).size(font::META).color(ink.warn)).on_hover_text(*why);
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.add_space(S2);
@@ -1251,7 +1258,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     }
                     let path = folder.clone().unwrap_or_default();
                     // Whatever space is left between the album and the links, and no more.
-                    ui.add(egui::Label::new(RichText::new(text::shorten(&path, 50)).size(12.5).color(ink.muted)).truncate()).on_hover_text(path);
+                    ui.add(egui::Label::new(RichText::new(text::shorten(&path, 50)).size(font::META).color(ink.muted)).truncate()).on_hover_text(path);
                 });
             });
         }
@@ -1334,7 +1341,7 @@ fn mark_words(ui: &mut Ui, m: Mark, words: &str) {
         Mark::Adding | Mark::ByHand => ink.text,
         Mark::Removing => ink.warn,
     };
-    ui.label(RichText::new(words).size(13.0).color(color));
+    ui.label(RichText::new(words).size(font::UI).color(color));
 }
 
 /// "rename" link, or the inline editor when this row is being renamed.

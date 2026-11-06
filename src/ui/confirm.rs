@@ -3,7 +3,7 @@
 use egui::{RichText, Ui};
 
 use super::icons::Icon;
-use super::layout::{S1, S2, row};
+use super::layout::{S1, S2, row, font};
 use super::text::plural;
 use super::theme::ink;
 use super::widgets;
@@ -42,7 +42,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
     let mut answer = None;
     let r = egui::Modal::new(egui::Id::unique("confirm")).frame(super::theme::dialog_frame(ui)).show(ui.ctx(), |ui| {
         ui.set_width(520.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.label(RichText::new(title).size(18.0).color(ink.text));
+        ui.label(RichText::new(title).size(font::TITLE).color(ink.text));
         ui.add_space(S1);
         widgets::help(ui, body);
         ui.add_space(S2);

@@ -7,7 +7,7 @@ use egui::{Align2, FontId, RichText, ScrollArea, Sense, Ui, vec2};
 
 use super::actions::Action;
 use super::icons::Icon;
-use super::layout::{ROW, S1, S2, S3, row};
+use super::layout::{ROW, S1, S2, S3, row, font, list_rows};
 use super::library::{Mark, album_status};
 use super::text::{self, plural};
 use super::theme::ink;
@@ -97,10 +97,10 @@ pub fn show(app: &mut App, ui: &mut Ui, actions: &mut Vec<Action>) {
         ui.painter().rect_filled(strip, 0.0, ink.bg);
         ui.painter().hline(strip.x_range(), strip.bottom(), egui::Stroke::new(1.0, ink.faint));
         let mut pinned = ui.new_child(egui::UiBuilder::new().max_rect(strip).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        let tabs_w = widgets::text_width(&pinned, "Songs", 15.5) + S2 + widgets::text_width(&pinned, "Lyrics", 15.5) + S1;
+        let tabs_w = widgets::text_width(&pinned, "Songs", font::BODY) + S2 + widgets::text_width(&pinned, "Lyrics", font::BODY) + S1;
         let up = widgets::icon_button(&mut pinned, Icon::Up, "Back to the top of the album").clicked();
         let w = pinned.available_width() - tabs_w - S2;
-        let title = widgets::fitted(&mut pinned, RichText::new(&shown.title).italics().size(15.0).color(ink.text), w, Sense::click()).on_hover_text("back to the top of the album").on_hover_cursor(egui::CursorIcon::PointingHand);
+        let title = widgets::fitted(&mut pinned, RichText::new(&shown.title).family(super::theme::italic()).size(font::BODY).color(ink.text), w, Sense::click()).on_hover_text("back to the top of the album").on_hover_cursor(egui::CursorIcon::PointingHand);
         if up || title.clicked() {
             ui.data_mut(|d| d.insert_temp(top_id, true));
             app.lyrics_follow = false;
@@ -113,7 +113,7 @@ pub fn show(app: &mut App, ui: &mut Ui, actions: &mut Vec<Action>) {
     // Not following: a way back to the line being sung, at the foot of the panel.
     if app.details_lyrics && shown.in_time && !app.lyrics_follow {
         let words = "Follow the song";
-        let w = S2 + super::layout::ICON + S1 + widgets::text_width(ui, words, 14.5) + S2;
+        let w = S2 + super::layout::ICON + S1 + widgets::text_width(ui, words, font::UI) + S2;
         let at = egui::Rect::from_center_size(egui::pos2(area.center().x, area.bottom() - S2 - super::layout::CONTROL / 2.0), vec2(w, super::layout::CONTROL));
         let mut foot = ui.new_child(egui::UiBuilder::new().max_rect(at));
         if widgets::primary_with(&mut foot, Icon::Down, words).on_hover_text("back to the line being sung, and keep it in view").clicked() {
@@ -190,7 +190,7 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         }
     }
     ui.add_space(S2);
-    ui.add(egui::Label::new(RichText::new(&title).italics().size(20.0).color(ink.text)).wrap());
+    ui.add(egui::Label::new(RichText::new(&title).family(super::theme::italic()).size(font::DISPLAY).color(ink.text)).wrap());
     if widgets::link(ui, &artist_name).on_hover_text("this artist's albums, and more about them").clicked() {
         actions.push(Action::ShowArtist(ai));
     }
@@ -200,7 +200,7 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         Some(r) => [r.year.map(|y| y.to_string()), Some(r.format.clone()), Some(plural(r.songs, "song")), Some(text::bytes(r.bytes))].into_iter().flatten().collect(),
         None => vec![plural(al.tracks.len(), "song")],
     };
-    ui.label(RichText::new(facts.join(" · ")).size(13.5).color(ink.muted));
+    ui.label(RichText::new(facts.join(" · ")).size(font::UI).color(ink.muted));
     // Its genres, each leading to the genre's artists and albums.
     let genres = app.album_genres(ai, bi);
     if !genres.names.is_empty() {
@@ -221,7 +221,7 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         ui.horizontal(|ui| {
             let (r, _) = ui.allocate_exact_size(vec2(10.0, ROW), Sense::hover());
             m.paint(ui.painter(), r.center(), 3.5, &ink);
-            ui.label(RichText::new(&status).size(13.5).color(if m == Mark::Removing { ink.warn } else { ink.muted }));
+            ui.label(RichText::new(&status).size(font::UI).color(if m == Mark::Removing { ink.warn } else { ink.muted }));
         });
     }
     ui.add_space(S1);
@@ -266,27 +266,30 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         return shown;
     }
     let current = app.current();
-    for (pos, &t) in tracks.iter().enumerate() {
-        let track = &app.tracks[t];
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
-        widgets::row_background(ui, &resp, rect, false);
-        let now = current == Some(t);
-        let color = if now { ink.accent } else { ink.text };
-        let y = rect.center().y;
-        let number = if now { "▸".to_string() } else { track.track.map(|n| n.to_string()).unwrap_or_default() };
-        ui.painter().text(egui::pos2(rect.left() + S2 + S1, y), Align2::RIGHT_CENTER, number, FontId::proportional(13.0), if now { ink.accent } else { ink.muted });
-        let dur = text::duration(track.duration);
-        let dur_w = widgets::text_width(ui, &dur, 13.0);
-        let g = widgets::truncated(ui, track.display_title(), FontId::proportional(14.0), color, rect.width() - S3 - S1 - dur_w - S2);
-        ui.painter().galley(egui::pos2(rect.left() + S3 + S1, y - g.size().y / 2.0), g, color);
-        ui.painter().text(egui::pos2(rect.right() - S1, y), Align2::RIGHT_CENTER, dur, FontId::proportional(13.0), ink.muted);
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
-        let resp = resp.on_hover_text("double-click to play from here");
-        if resp.double_clicked() {
-            actions.push(Action::Play(tracks.clone(), pos));
+    let compact = app.saved.compact;
+    list_rows(ui, compact, |ui| {
+        for (pos, &t) in tracks.iter().enumerate() {
+            let track = &app.tracks[t];
+            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+            widgets::row_background(ui, &resp, rect, false);
+            let now = current == Some(t);
+            let color = if now { ink.accent } else { ink.text };
+            let y = rect.center().y;
+            let number = if now { "▸".to_string() } else { track.track.map(|n| n.to_string()).unwrap_or_default() };
+            ui.painter().text(egui::pos2(rect.left() + S2 + S1, y), Align2::RIGHT_CENTER, number, FontId::proportional(font::UI), if now { ink.accent } else { ink.muted });
+            let dur = text::duration(track.duration);
+            let dur_w = widgets::data_width(ui, &dur);
+            let g = widgets::truncated(ui, track.display_title(), FontId::proportional(font::UI), color, rect.width() - S3 - S1 - dur_w - S2);
+            ui.painter().galley(egui::pos2(rect.left() + S3 + S1, y - g.size().y / 2.0), g, color);
+            ui.painter().text(egui::pos2(rect.right() - S1, y), Align2::RIGHT_CENTER, dur, widgets::data(), ink.muted);
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
+            let resp = resp.on_hover_text("double-click to play from here");
+            if resp.double_clicked() {
+                actions.push(Action::Play(tracks.clone(), pos));
+            }
+            resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
         }
-        resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
-    }
+    });
     shown
 }
 
@@ -308,7 +311,7 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
         });
         let title = app.tracks[t].display_title();
         let w = ui.available_width() - ROW - S1;
-        widgets::fitted(ui, RichText::new(&title).size(15.0).color(if current == Some(t) { ink.accent } else { ink.text }), w, Sense::hover()).on_hover_text(&title);
+        widgets::fitted(ui, RichText::new(&title).size(font::BODY).color(if current == Some(t) { ink.accent } else { ink.text }), w, Sense::hover()).on_hover_text(&title);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_enabled_ui(pos + 1 < tracks.len(), |ui| {
                 if widgets::icon_button(ui, Icon::Forward, "The song after").clicked() {
@@ -332,7 +335,7 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
             again = widgets::link(ui, "Try again").on_hover_text("ask LRCLIB once more (lyrics are added there over time)").clicked();
         }
         LyricsState::Failed(e) => {
-            ui.add(egui::Label::new(RichText::new(format!("Couldn't look: {e}")).size(13.0).color(ink.muted)).wrap());
+            ui.add(egui::Label::new(RichText::new(format!("Couldn't look: {e}")).size(font::UI).color(ink.muted)).wrap());
             again = widgets::link(ui, "Try again").clicked();
         }
         LyricsState::Found(l) if l.instrumental && l.plain.is_empty() => {
@@ -355,7 +358,7 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
             });
             ui.add_space(S1);
             if l.synced.is_empty() {
-                ui.add(egui::Label::new(RichText::new(&l.plain).size(14.5).color(ink.text)).wrap());
+                ui.add(egui::Label::new(RichText::new(&l.plain).size(font::UI).color(ink.text)).wrap());
             } else {
                 in_time(app, ui, &l, t, playing);
                 in_time_now = playing;
@@ -405,7 +408,7 @@ fn in_time(app: &mut App, ui: &mut Ui, l: &crate::lyrics::Lyrics, t: usize, play
         let r = match &part.words {
             Some(words) => {
                 let color = if now == Some(i) { ink.accent } else if sung { ink.muted } else { ink.text };
-                ui.add(egui::Label::new(RichText::new(words).size(15.0).color(color)).wrap().sense(if playing { Sense::click() } else { Sense::hover() }))
+                ui.add(egui::Label::new(RichText::new(words).size(font::BODY).color(color)).wrap().sense(if playing { Sense::click() } else { Sense::hover() }))
             }
             None => {
                 let done = (now == Some(i)).then(|| (st.pos.saturating_sub(part.at).as_secs_f32() / end.saturating_sub(part.at).as_secs_f32().max(0.1)).min(1.0));
@@ -458,7 +461,7 @@ fn pause_row(ui: &mut Ui, done: Option<f32>, sung: bool, words: Option<&str>, pl
     }
     if let Some(words) = words {
         let color = if done.is_some() { ink.accent } else { ink.muted };
-        let g = p.layout_no_wrap(words.to_string(), FontId::proportional(12.5), color);
+        let g = p.layout_no_wrap(words.to_string(), FontId::proportional(font::META), color);
         p.galley(egui::pos2(rect.left() + 34.0, y - g.size().y / 2.0), g, color);
     }
     resp
@@ -469,8 +472,8 @@ fn several(app: &App, ui: &mut Ui, albums: &[(usize, usize)], actions: &mut Vec<
     let songs: Vec<usize> = albums.iter().flat_map(|&(a, b)| app.index.artists[a].albums[b].tracks.iter().copied()).collect();
     let bytes: u64 = songs.iter().map(|&t| app.tracks[t].size).sum();
     ui.add_space(S1);
-    ui.label(RichText::new(format!("{} selected", plural(albums.len(), "album"))).size(20.0).color(ink.text));
-    ui.label(RichText::new(format!("{} · {}", plural(songs.len(), "song"), text::bytes(bytes))).size(13.5).color(ink.muted));
+    ui.label(RichText::new(format!("{} selected", plural(albums.len(), "album"))).size(font::HEADING).color(ink.text));
+    ui.label(RichText::new(format!("{} · {}", plural(songs.len(), "song"), text::bytes(bytes))).size(font::UI).color(ink.muted));
     ui.add_space(S1);
     let on = app.all_on_card(albums);
     ui.horizontal_wrapped(|ui| {
@@ -490,8 +493,8 @@ fn several(app: &App, ui: &mut Ui, albums: &[(usize, usize)], actions: &mut Vec<
         let artist = &app.index.artists[a];
         let al = &artist.albums[b];
         let w = ui.available_width();
-        widgets::fitted(ui, RichText::new(al.title.as_deref().unwrap_or("Loose tracks")).italics().color(ink.text), w, Sense::hover());
-        widgets::fitted(ui, RichText::new(&artist.name).size(13.0).color(ink.muted), w, Sense::hover());
+        widgets::fitted(ui, RichText::new(al.title.as_deref().unwrap_or("Loose tracks")).family(super::theme::italic()).color(ink.text), w, Sense::hover());
+        widgets::fitted(ui, RichText::new(&artist.name).size(font::UI).color(ink.muted), w, Sense::hover());
         ui.add_space(S1 / 2.0);
     }
 }

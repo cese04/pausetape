@@ -2,6 +2,7 @@
 //! as each system writes them (⌘ on macOS, Ctrl elsewhere). The library's own keys (arrows,
 //! Enter, ⌘A, ⌘I, ⌘D) act on what its views show, so `library` and `albums` read them.
 
+use egui::gui_zoom::kb_shortcuts::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
 use egui::{Key, KeyboardShortcut, Modifiers, Ui};
 
 use crate::app::{App, Tab};
@@ -30,6 +31,7 @@ pub fn list(ctx: &egui::Context) -> Vec<(String, &'static str)> {
         ("← →".into(), "back or forward 10 seconds"),
         ("N  P".into(), "next or previous song"),
         ("Tab".into(), "move between controls; Space or Enter presses the one with the ring"),
+        (format!("{}  {}  {}", f(&ZOOM_IN), f(&ZOOM_OUT), f(&ZOOM_RESET)), "larger or smaller text, or as designed (also in Settings)"),
     ]
 }
 

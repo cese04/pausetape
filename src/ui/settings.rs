@@ -6,7 +6,7 @@ use super::icons::Icon;
 use super::theme::{Accent, ink};
 use super::widgets::{self, help, icon_link, setting};
 use crate::app::{App, ThemePref};
-use super::layout::{S1, S2, row};
+use super::layout::{S1, S2, row, font};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
@@ -41,6 +41,46 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
             help(ui, "Marks the open tab, the main button, progress and what's playing. Warnings stay red.");
         });
+        setting(ui, "Text size", |ui| {
+            let ctx = ui.ctx().clone();
+            let size = ctx.zoom_factor();
+            let (least, most) = crate::app::TEXT_SIZES;
+            row(ui, |ui| {
+                ui.add_enabled_ui(size > least + 0.01, |ui| {
+                    if widgets::button(ui, "Smaller").clicked() {
+                        ctx.set_zoom_factor(((size * 10.0).round() - 1.0) / 10.0);
+                    }
+                });
+                ui.label(RichText::new(format!("{:.0}%", size * 100.0)).font(widgets::data()).color(ink(ui).text));
+                ui.add_enabled_ui(size < most - 0.01, |ui| {
+                    if widgets::button(ui, "Larger").clicked() {
+                        ctx.set_zoom_factor(((size * 10.0).round() + 1.0) / 10.0);
+                    }
+                });
+                if (size - 1.0).abs() > 0.01 && widgets::link(ui, "As designed").clicked() {
+                    ctx.set_zoom_factor(1.0);
+                }
+            });
+            let k = |s| ctx.format_shortcut(s);
+            use egui::gui_zoom::kb_shortcuts::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
+            help(ui, format!("Everything grows or shrinks with the text. Also {} and {} anywhere, {} for as designed.", k(&ZOOM_IN), k(&ZOOM_OUT), k(&ZOOM_RESET)));
+        });
+        setting(ui, "Lists", |ui| {
+            row(ui, |ui| {
+                ui.radio_value(&mut app.saved.compact, false, "comfortable");
+                ui.radio_value(&mut app.saved.compact, true, "compact");
+            });
+            help(ui, "Compact packs songs and albums tight, as Calibre does: more of them in view.");
+        });
+        setting(ui, "Motion", |ui| {
+            if app.system_reduce_motion {
+                ui.add_enabled(false, egui::Checkbox::new(&mut true, "reduce motion"));
+                help(ui, "Your system asks for less motion, so there's none: changes happen at once and the cassette's reels stay still.");
+            } else {
+                ui.checkbox(&mut app.saved.reduce_motion, "reduce motion");
+                help(ui, "Changes happen at once, without fading or sliding, and the cassette's reels stay still. Followed on its own when the system asks for it.");
+            }
+        });
 
         ui.add_space(S2);
         widgets::section(ui, Icon::Library, "Library");
@@ -56,7 +96,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 }
             }
             help(ui, "Rescans only open files that are new or changed since they were last read.");
-            ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(12.0).color(ink(ui).muted)).truncate());
+            ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(font::META).color(ink(ui).muted)).truncate());
             row(ui, |ui| {
                 if app.busy.is_none() && icon_link(ui, Icon::Rescan, "Read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
                     app.read_all_again();
@@ -136,7 +176,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 } else {
                     ui.label(
                         RichText::new("This ffmpeg can't make MP3s (no LAME encoder): lossless songs are still converted to FLAC for the card, but AAC, Dolby and other lossy ones are left out.")
-                            .size(13.0)
+                            .size(font::UI)
                             .color(ink(ui).warn),
                     );
                 }

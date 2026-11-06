@@ -10,7 +10,7 @@ use super::theme::ink;
 use super::widgets::{chip, icon_link, muted, tag};
 use crate::app::{App, ArtistState};
 use crate::musicbrainz::{ArtistInfo, LinkUse};
-use super::layout::{S1, row, row_wrapped};
+use super::layout::{S1, row, row_wrapped, font};
 
 /// Artists whose names look like `cluster`'s, each with a decision to make. Shown whether the
 /// artist is open or not: this is where the question comes up.
@@ -60,7 +60,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                         }
                         if !facts.is_empty() {
                             ui.add_space(S1);
-                            ui.label(RichText::new(facts).size(13.5).color(ink.muted));
+                            ui.label(RichText::new(facts).size(font::UI).color(ink.muted));
                         }
                     });
                 }
@@ -118,7 +118,7 @@ pub(super) fn show(app: &App, ui: &mut Ui, cluster: usize, actions: &mut Vec<Act
                     ui.set_min_width(96.0);
                     let (rect, _) = ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
                     super::icons::paint(ui.painter(), rect, icon, ink.muted);
-                    ui.label(RichText::new(label.to_uppercase()).size(11.0).extra_letter_spacing(1.2).color(ink.muted));
+                    ui.label(RichText::new(label.to_uppercase()).size(font::CAPS).extra_letter_spacing(1.2).color(ink.muted));
                 });
                 for (site, url, search) in row {
                     // Buying is what the panel is for: those links carry the accent.

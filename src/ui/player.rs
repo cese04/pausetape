@@ -11,7 +11,7 @@ use super::theme::ink;
 use super::widgets::{Media, media_button, muted};
 use crate::app::App;
 use crate::audio::Status;
-use super::layout::{ROW, S1, S2, S3, S4, S5, S6, row};
+use super::layout::{ROW, S1, S2, S3, S4, S5, S6, row, font, list_rows};
 
 /// Every transport button sits in a slot this tall, so different sizes share one centre line.
 const SLOT: f32 = S6;
@@ -33,7 +33,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let st = app.audio.status();
     if let Some(e) = &st.error {
-        ui.label(RichText::new(e).color(ink.warn).size(12.0));
+        ui.label(RichText::new(e).color(ink.warn).size(font::META));
     }
     let Some(ti) = app.current() else {
         muted(ui, "Nothing playing. Double-click a song in the library.");
@@ -72,15 +72,15 @@ fn compact_row(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration
         ui.allocate_ui_with_layout(vec2(words_w, MINI), Layout::top_down(Align::Min), |ui| {
             ui.set_width(words_w);
             ui.spacing_mut().item_spacing.y = 0.0;
-            super::widgets::fitted(ui, RichText::new(t.display_title()).size(15.0).color(ink.text), words_w, Sense::hover());
+            super::widgets::fitted(ui, RichText::new(t.display_title()).size(font::BODY).color(ink.text), words_w, Sense::hover());
             let meta: Vec<String> = [t.artist.clone(), t.album.clone()].into_iter().flatten().collect();
-            super::widgets::fitted(ui, RichText::new(meta.join(" · ")).size(13.0).color(ink.muted), words_w, Sense::hover());
+            super::widgets::fitted(ui, RichText::new(meta.join(" · ")).size(font::UI).color(ink.muted), words_w, Sense::hover());
         });
         buttons(app, ui, st, S3, S4);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             volume_control(app, ui, false);
             queue_button(app, ui, st, len, true);
-            muted(ui, format!("{} / {}", text::duration(st.pos), text::duration(len)));
+            ui.label(RichText::new(format!("{} / {}", text::duration(st.pos), text::duration(len))).font(super::widgets::data()).color(ink.muted));
             scrubber(app, ui, ti, st, len);
         });
     });
@@ -130,19 +130,19 @@ fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     row(ui, |ui| {
         let time = format!("{} / {}", text::duration(st.pos), text::duration(len));
         let note = if st.converting {
-            Some((RichText::new("converting with ffmpeg…").size(12.5).color(ink.muted), None))
+            Some((RichText::new("converting with ffmpeg…").size(font::META).color(ink.muted), None))
         } else {
-            text::format_note(t, app.player()).map(|n| (RichText::new(text::format_badge(t, app.player())).size(12.5).color(ink.warn), Some(n)))
+            text::format_note(t, app.player()).map(|n| (RichText::new(text::format_badge(t, app.player())).size(font::META).color(ink.warn), Some(n)))
         };
-        let note_w = note.as_ref().map(|(r, _)| super::widgets::text_width(ui, r.text(), 12.5) + S2).unwrap_or(0.0);
-        let room = ui.available_width() - super::widgets::text_width(ui, &time, 16.0) - S3 - note_w;
+        let note_w = note.as_ref().map(|(r, _)| super::widgets::text_width(ui, r.text(), font::META) + S2).unwrap_or(0.0);
+        let room = ui.available_width() - super::widgets::data_width(ui, &time) - S3 - note_w;
         let title = t.display_title();
         let meta: Vec<String> = [t.artist.clone(), t.album.clone(), t.year.map(|y| y.to_string())].into_iter().flatten().collect();
         let meta = meta.join(" · ");
         // The title first, but leaving the rest a little room when there's some to leave.
-        let meta_w = super::widgets::text_width(ui, &meta, 16.0);
+        let meta_w = super::widgets::text_width(ui, &meta, font::BODY);
         let title_w = (room - meta_w.min(room * 0.35)).max(room * 0.5);
-        let shown = fit(ui, RichText::new(&title).size(19.0).color(ink.text), title_w, Sense::hover()).on_hover_text(&title);
+        let shown = fit(ui, RichText::new(&title).size(font::TITLE).color(ink.text), title_w, Sense::hover()).on_hover_text(&title);
         let rest = room - shown.rect.width() - ui.spacing().item_spacing.x;
         if rest > 40.0 {
             fit(ui, RichText::new(&meta).color(ink.muted), rest, Sense::hover()).on_hover_text(&meta);
@@ -154,7 +154,7 @@ fn title_row(app: &App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
             }
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            muted(ui, time);
+            ui.label(RichText::new(time).font(super::widgets::data()).color(ink.muted));
         });
     });
 }
@@ -206,7 +206,7 @@ fn transport(app: &mut App, ui: &mut Ui, st: &Status, len: Duration) {
         ui.add_space(S2);
         queue_button(app, ui, st, len, false);
         // The volume keeps its place at the right end; the note about the cover gets what's left.
-        let volume_w = 12.0 * S1 + super::widgets::text_width(ui, "volume", 14.5) + 2.0 * S2;
+        let volume_w = 12.0 * S1 + super::widgets::text_width(ui, "volume", font::UI) + 2.0 * S2;
         ui.allocate_ui_with_layout(vec2((ui.available_width() - volume_w).max(0.0), SLOT), Layout::left_to_right(Align::Center), |ui| cover_suggestion(app, ui));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| volume_control(app, ui, true));
     });
@@ -296,44 +296,47 @@ fn up_next(app: &mut App, ui: &mut Ui) {
     let mut todo = None;
     let n = app.queue.len();
     egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
-        for (pos, &t) in app.queue.iter().enumerate() {
-            let track = &app.tracks[t];
-            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
-            super::widgets::row_background(ui, &resp, rect, false);
-            let (now, past) = (pos == app.qpos, pos < app.qpos);
-            let color = if now { ink.accent } else if past { ink.muted } else { ink.text };
-            let p = ui.painter_at(rect);
-            let y = rect.center().y;
-            p.text(pos2(rect.left() + S3, y), Align2::RIGHT_CENTER, if now { "▸".to_string() } else { (pos + 1).to_string() }, FontId::proportional(13.0), if now { ink.accent } else { ink.muted });
-            let mut words = track.display_title();
-            if let Some(a) = &track.artist {
-                words = format!("{words}  ·  {a}");
-            }
-            let controls_w = if now { 0.0 } else { 3.0 * ROW };
-            let g = super::widgets::truncated(ui, words, FontId::proportional(14.0), color, rect.width() - S4 - S5 - controls_w);
-            p.galley(pos2(rect.left() + S4, y - g.size().y / 2.0), g, color);
-            p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), FontId::proportional(13.0), ink.muted);
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
-            if resp.double_clicked() {
-                todo = Some(Do::Jump(pos));
-            }
-            if !now {
-                // Three slots at the right end: up, down, take out (up and down only where they lead).
-                let mut small = |slot: f32, icon, label: &str| {
-                    let at = egui::Rect::from_min_size(pos2(rect.right() - (3.0 - slot) * ROW, rect.top()), vec2(ROW, ROW));
-                    ui.put(at, |ui: &mut Ui| super::widgets::icon_button(ui, icon, label)).clicked()
-                };
-                if pos > 0 && small(0.0, super::icons::Icon::Up, "Move up") {
-                    todo = Some(Do::Move(pos, pos - 1));
+        let compact = app.saved.compact;
+        list_rows(ui, compact, |ui| {
+            for (pos, &t) in app.queue.iter().enumerate() {
+                let track = &app.tracks[t];
+                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+                super::widgets::row_background(ui, &resp, rect, false);
+                let (now, past) = (pos == app.qpos, pos < app.qpos);
+                let color = if now { ink.accent } else if past { ink.muted } else { ink.text };
+                let p = ui.painter_at(rect);
+                let y = rect.center().y;
+                p.text(pos2(rect.left() + S3, y), Align2::RIGHT_CENTER, if now { "▸".to_string() } else { (pos + 1).to_string() }, FontId::proportional(font::UI), if now { ink.accent } else { ink.muted });
+                let mut words = track.display_title();
+                if let Some(a) = &track.artist {
+                    words = format!("{words}  ·  {a}");
                 }
-                if pos + 1 < n && small(1.0, super::icons::Icon::Down, "Move down") {
-                    todo = Some(Do::Move(pos, pos + 1));
+                let controls_w = if now { 0.0 } else { 3.0 * ROW };
+                let g = super::widgets::truncated(ui, words, FontId::proportional(font::UI), color, rect.width() - S4 - S5 - controls_w);
+                p.galley(pos2(rect.left() + S4, y - g.size().y / 2.0), g, color);
+                p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), super::widgets::data(), ink.muted);
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
+                if resp.double_clicked() {
+                    todo = Some(Do::Jump(pos));
                 }
-                if small(2.0, super::icons::Icon::Close, "Take out of the queue") {
-                    todo = Some(Do::Remove(pos));
+                if !now {
+                    // Three slots at the right end: up, down, take out (up and down only where they lead).
+                    let mut small = |slot: f32, icon, label: &str| {
+                        let at = egui::Rect::from_min_size(pos2(rect.right() - (3.0 - slot) * ROW, rect.top()), vec2(ROW, ROW));
+                        ui.put(at, |ui: &mut Ui| super::widgets::icon_button(ui, icon, label)).clicked()
+                    };
+                    if pos > 0 && small(0.0, super::icons::Icon::Up, "Move up") {
+                        todo = Some(Do::Move(pos, pos - 1));
+                    }
+                    if pos + 1 < n && small(1.0, super::icons::Icon::Down, "Move down") {
+                        todo = Some(Do::Move(pos, pos + 1));
+                    }
+                    if small(2.0, super::icons::Icon::Close, "Take out of the queue") {
+                        todo = Some(Do::Remove(pos));
+                    }
                 }
             }
-        }
+        });
     });
     match todo {
         Some(Do::Jump(pos)) => app.audio.jump(pos),
@@ -358,7 +361,7 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
         }
         let Some(&album) = app.albums_of(&[ti].into()).first() else { return };
         ui.add_space(S2);
-        let link_w = super::widgets::text_width(ui, "Find cover", 13.5) + S2;
+        let link_w = super::widgets::text_width(ui, "Find cover", font::UI) + S2;
         if ui.available_width() >= link_w + 120.0 {
             let words = "no cover to show ·";
             super::widgets::fitted(ui, RichText::new(words).color(ink(ui).muted), ui.available_width() - link_w, Sense::hover());
@@ -375,12 +378,12 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     // The words, shortened to the room there is, then the link; with too little room for words,
     // a link that says it all; with too little for that, nothing.
     let say = |ui: &mut Ui, words: String, link: &str, alone: &str, hint: &str| -> bool {
-        let link_w = super::widgets::text_width(ui, link, 13.5) + S2;
+        let link_w = super::widgets::text_width(ui, link, font::UI) + S2;
         if ui.available_width() >= link_w + 120.0 {
             let room = ui.available_width() - link_w;
             super::widgets::fitted(ui, RichText::new(&words).color(ink(ui).muted), room, Sense::hover()).on_hover_text(&words);
             super::widgets::link(ui, link).on_hover_text(hint).clicked()
-        } else if ui.available_width() >= super::widgets::text_width(ui, alone, 13.5) {
+        } else if ui.available_width() >= super::widgets::text_width(ui, alone, font::UI) {
             super::widgets::link(ui, alone).on_hover_text(format!("{words}\n{hint}")).clicked()
         } else {
             false

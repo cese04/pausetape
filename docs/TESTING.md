@@ -106,7 +106,7 @@ unchecked.
 | 5 | **Windows** | An artist, album or title named exactly `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9` or `LPT1`–`9`. *On Windows 11 the app writes and reads them* (`Aux\`, `CON.mp3`, `COM1` were tried); Windows 10 and Explorer may not open them. | Rename it for that write in the card's view. Rare. |
 | 6 | **Windows** | Card paths can exceed 260 characters with very long names. *On Windows 11 the app wrote and read a 374-character path;* Explorer may not open it. | Rename long albums for the card. |
 | 7 | **Linux** | **Every** mounted drive under `/media/$USER` or `/run/media/$USER` is listed as a possible card, and the "not FAT32/exFAT" warning never appears (filesystem type isn't read on Linux yet). | Pick the right one by name and size. |
-| 8 | **Linux** | Fonts: the serif look depends on DejaVu Serif at the Debian/Ubuntu path. On Fedora/Arch the app falls back to a sans font, and Chinese/Japanese/Korean names may show as boxes. | Cosmetic only. |
+| 8 | **Linux** | Fonts: the app brings its own, but Chinese/Japanese/Korean names rely on Noto CJK at the Debian/Ubuntu path; elsewhere they may show as boxes. | Cosmetic only. |
 | 9 | Both | ffmpeg isn't bundled (only the Mac app includes it). | Install it as in §1. |
 | 10 | All | *Fixed 2026-10-31:* starting with the music folder's drive unplugged used to empty the library database, and a Sync with an empty library removed the setup's songs from the card ([REVIEW](REVIEW.md) R1, R2). Now the library says it can't reach the folder and keeps everything. | To check it: start the app with the music drive unplugged, plug it in, and see it read again by itself. |
 | 11 | **Windows** | *Fixed 2026-10-31:* plugging in a labelled card brings up its setup, and converting songs no longer flashes console windows ([REVIEW](REVIEW.md) R12, R13). The card's `.pausetape` file is hidden (R23). *Seen on Windows 11:* `.pausetape` is hidden; 92 AAC songs were converted to MP3 on a FAT32 stick. Not yet seen in the app: the card bringing up its setup, and no console windows while it converts. | To check the rest: unplug and plug the card back in with another setup open; Sync a few songs that need converting and watch for console windows. |
@@ -129,9 +129,17 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 
 ### A. Start-up
 1. `--version` prints version and an ffmpeg path (or "not found").
-2. The app opens on the **folders** tab with two numbered steps; text uses a serif font
-   (Windows: Palatino Linotype; Ubuntu: DejaVu Serif).
-3. Settings › appearance: switching *paper* / *ink* works.
+2. The app opens on the **folders** tab with two numbered steps; text is in ET Book, the same
+   on every system: album titles in its italic, durations and sizes typed (Courier Prime),
+   playlist and card names handwritten (Kalam). Polish or Turkish letters (ł, ş) still show.
+3. Settings › appearance: switching *paper* / *ink* works. *Text size*: *Larger* and *Smaller*
+   step by a tenth (80–200%), ⌘+ / ⌘− / ⌘0 (Ctrl on Windows) too; the size is kept after a
+   restart. *Lists › compact* packs the album table, an album's songs, the details panel's songs,
+   a playlist and the queue 24 points apart. Rows, links and buttons fade in and out under the
+   pointer; the player folds and unfolds smoothly (a click on its cover); after a Sync the card's
+   bar slides from "added" to "on the card". *Motion › reduce motion* (or the system's own
+   setting, read at start: macOS Accessibility › Display › Reduce motion; Windows › Accessibility
+   › Visual effects › Animation effects) makes all of it instant, and the reels stand still.
 
 ### B. Music folder and library
 4. The first time, the welcome › **Choose folder…** opens the in-app browser (Home, Music, Downloads buttons;
