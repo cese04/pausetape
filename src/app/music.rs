@@ -405,6 +405,7 @@ impl App {
                     track: t.track,
                     disc: t.disc,
                     year: t.year,
+                    genres: t.genres.as_deref().unwrap_or_default().join("; "),
                     seconds: t.duration.as_secs_f64(),
                 }
             })
@@ -453,6 +454,7 @@ impl App {
                 Field::Track => t.track = v.parse().ok().or(t.track),
                 Field::Disc => t.disc = v.parse().ok().or(t.disc),
                 Field::Year => t.year = v.parse().ok().or(t.year),
+                Field::Genre => t.genres = Some(crate::library::genres::split([v.as_str()])),
             }
             t.dirty = true;
         }

@@ -73,6 +73,16 @@ fn set_fields(tag: &mut Tag, t: &Track) {
         }
         None => tag.remove_date(),
     }
+    // Genres only when known (`Track::genres`), several in one value as most players read them.
+    match t.genres.as_deref() {
+        Some([]) => {
+            tag.remove_key(ItemKey::Genre);
+        }
+        Some(g) => {
+            tag.insert_text(ItemKey::Genre, g.join("; "));
+        }
+        None => {}
+    }
     if t.compilation {
         tag.insert_text(ItemKey::FlagCompilation, "1".into());
     } else {
@@ -143,9 +153,15 @@ mod tests {
         assert_eq!(id3.date().map(|d| (d.year, d.month, d.day)), Some((1997, Some(5), Some(21))), "the full date kept");
         assert_eq!(id3.get_string(ItemKey::FlagCompilation), Some("1"));
         // Another year replaces the date.
-        write_tags(&Track { year: Some(1998), ..t }, &path).unwrap();
+        write_tags(&Track { year: Some(1998), ..t.clone() }, &path).unwrap();
         let file = lofty::read_from_path(&path).unwrap();
         assert_eq!(file.tag(TagType::Id3v2).unwrap().date().map(|d| (d.year, d.month)), Some((1998, None)));
+        // Genres written as one value, read back as several; unknown genres leave the tag alone.
+        write_tags(&Track { genres: Some(vec!["Electronic".into(), "Trip Hop".into()]), ..t.clone() }, &path).unwrap();
+        let read = crate::library::read_file(&path).unwrap();
+        assert_eq!(read.genres.as_deref(), Some(&["Electronic".to_string(), "Trip Hop".to_string()][..]));
+        write_tags(&Track { genres: None, ..t }, &path).unwrap();
+        assert_eq!(crate::library::read_file(&path).unwrap().genres.map(|g| g.len()), Some(2), "kept when not known");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

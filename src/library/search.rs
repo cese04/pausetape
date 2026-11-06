@@ -20,6 +20,8 @@ pub enum Filter {
     Edited(bool),
     /// Has damaged files (`Track::damaged`).
     Damaged(bool),
+    /// Has this genre (by `genres::key`); "" for albums with none.
+    Genre(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -73,6 +75,8 @@ pub struct AlbumFacts<'a> {
     pub tracks: Vec<&'a Track>,
     pub card: CardFacts,
     pub cover: bool,
+    /// Its genres, by `genres::key` (its artist's, when it has none of its own).
+    pub genres: Vec<String>,
 }
 
 pub const HELP: &str = "Words find artists, albums and song titles. Narrow by what albums are:\n\
@@ -81,7 +85,7 @@ pub const HELP: &str = "Words find artists, albums and song titles. Narrow by wh
     card:on   card:off   card:sync (changes at the next Sync)   card:all (on it, going on or off)   card:better (a better copy exists)\n\
     cover:no   cover:yes\n\
     year:1979   year:1979..1985   year:..1990\n\
-    edited:yes   damaged:yes\n\
+    edited:yes   damaged:yes   genre:trip-hop   genre:none\n\
     A \"-\" in front turns a term around: -format:mp3";
 
 impl Query {
@@ -121,6 +125,7 @@ impl Query {
                 "cover" => yes_no(&value).map(Filter::Cover),
                 "edited" => yes_no(&value).map(Filter::Edited),
                 "damaged" => yes_no(&value).map(Filter::Damaged),
+                "genre" | "g" if !value.is_empty() => Some(Filter::Genre(if value == "none" { String::new() } else { super::genres::key(&value) })),
                 "year" | "y" => year_range(&value).map(|(a, b)| Filter::Year(a, b)),
                 _ => None,
             };
@@ -179,6 +184,8 @@ impl Filter {
             Filter::Year(from, to) => a.year.is_some_and(|y| from.is_none_or(|f| y >= f) && to.is_none_or(|t| y <= t)),
             Filter::Edited(e) => a.tracks.iter().any(|t| t.dirty) == *e,
             Filter::Damaged(d) => a.tracks.iter().any(|t| t.damaged) == *d,
+            Filter::Genre(k) if k.is_empty() => a.genres.is_empty(),
+            Filter::Genre(k) => a.genres.contains(k),
         }
     }
 }
@@ -238,7 +245,7 @@ mod tests {
     fn matches_albums_by_what_they_are() {
         let song = |ext: &str, title: &str| Track { ext: ext.into(), title: Some(title.into()), ..Default::default() };
         let (a, b) = (song("flac", "Disorder"), song("m4a", "Candidate"));
-        let album = |tracks| AlbumFacts { artist: "Joy Division", album: "Unknown Pleasures", year: Some(1979), tracks, card: CardFacts::default(), cover: false };
+        let album = |tracks| AlbumFacts { artist: "Joy Division", album: "Unknown Pleasures", year: Some(1979), tracks, card: CardFacts::default(), cover: false, genres: vec!["postpunk".into()] };
         let mixed = album(vec![&a, &b]);
         let flac_only = album(vec![&a]);
         let m = |q: &str, al: &AlbumFacts| Query::parse(q).album_matches(al);
@@ -249,6 +256,8 @@ mod tests {
         assert!(m("cover:no card:off", &mixed) && !m("cover:yes", &mixed) && !m("card:on", &mixed));
         assert!(!m("card:all", &mixed), "neither on the card nor chosen");
         assert!(!m("edited:yes", &mixed));
+        assert!(m("genre:Post-Punk", &mixed) && m("genre:postpunk", &mixed), "any spelling of the genre");
+        assert!(!m("genre:none", &mixed) && !m("genre:rock", &mixed));
         let q = Query::parse("joy candidate");
         assert!(!q.names_match("Joy Division", "Unknown Pleasures") && q.song_matches("Joy Division", "Unknown Pleasures", "Candidate"));
     }

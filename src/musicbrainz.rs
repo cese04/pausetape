@@ -33,6 +33,8 @@ pub enum Field {
     Track,
     Disc,
     Year,
+    /// Several in one value, "; " between them.
+    Genre,
 }
 
 impl Field {
@@ -45,6 +47,7 @@ impl Field {
             Field::Track => "track",
             Field::Disc => "disc",
             Field::Year => "year",
+            Field::Genre => "genre",
         }
     }
 }
@@ -70,6 +73,8 @@ pub struct LocalTrack {
     pub track: Option<u32>,
     pub disc: Option<u32>,
     pub year: Option<u16>,
+    /// Its genres, "; " between them ("" for none).
+    pub genres: String,
     pub seconds: f64,
 }
 
@@ -308,6 +313,15 @@ impl Worker {
         }
     }
 
+    /// A release group's genres (see `top_genres`).
+    fn group_genres(&mut self, group_id: &str) -> Result<Vec<String>> {
+        if group_id.is_empty() {
+            return Ok(Vec::new());
+        }
+        let v = self.get(&format!("release-group/{group_id}"), &[("inc", "genres")])?;
+        Ok(top_genres(&v))
+    }
+
     fn get(&mut self, path: &str, params: &[(&str, &str)]) -> Result<Value> {
         for attempt in 0..3 {
             {
@@ -422,7 +436,14 @@ impl Worker {
                 let rel = self.get(&format!("release/{id}"), &[("inc", "recordings artist-credits release-groups labels")])?;
                 let release = Release::from_json(&rel);
                 match compare(&release, local) {
-                    Some((changes, matched)) => return Ok((release, matched, changes)),
+                    Some((mut changes, matched)) => {
+                        // The release group's genres, as MusicBrainz users voted them; a failure
+                        // here costs only the genre suggestion.
+                        if let Ok(genres) = self.group_genres(&release.group_id) {
+                            genre_changes(&mut changes, local, &genres);
+                        }
+                        return Ok((release, matched, changes));
+                    }
                     None => rejected.push(format!("“{}” by {}", release.title, release.artist)),
                 }
             }
@@ -677,6 +698,33 @@ struct RemoteTrack {
     seconds: Option<f64>,
 }
 
+/// The genres to suggest from MusicBrainz's (most votes first): up to three, in tag style.
+fn top_genres(v: &Value) -> Vec<String> {
+    let mut genres: Vec<(u64, String)> = v["genres"].as_array().into_iter().flatten().map(|g| (g["count"].as_u64().unwrap_or(0), str_of(&g["name"]))).filter(|(_, n)| !n.is_empty()).collect();
+    genres.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    genres.into_iter().take(3).map(|(_, g)| crate::library::genres::tag_style(&g)).collect()
+}
+
+/// Suggest `genres` for each song whose own differ (by `genres::key`, so "trip-hop" for "Trip
+/// Hop" isn't a change).
+fn genre_changes(changes: &mut Vec<FieldChange>, local: &[LocalTrack], genres: &[String]) {
+    use crate::library::genres::{key, split};
+    if genres.is_empty() {
+        return;
+    }
+    let keys = |g: &[String]| -> Vec<String> {
+        let mut k: Vec<String> = g.iter().map(|g| key(g)).collect();
+        k.sort();
+        k
+    };
+    let new = genres.join("; ");
+    for lt in local {
+        if keys(&split([lt.genres.as_str()])) != keys(genres) {
+            changes.push(FieldChange { track: lt.idx, field: Field::Genre, old: lt.genres.clone(), new: new.clone(), accept: true });
+        }
+    }
+}
+
 fn push_change(out: &mut Vec<FieldChange>, track: usize, field: Field, old: &str, new: &str) {
     if !new.is_empty() && old.trim() != new.trim() {
         out.push(FieldChange { track, field, old: old.to_string(), new: new.to_string(), accept: true });
@@ -765,7 +813,28 @@ mod tests {
     }
 
     fn lt(idx: usize, title: &str, track: Option<u32>) -> LocalTrack {
-        LocalTrack { idx, title: title.into(), artist: "radiohead".into(), album_artist: String::new(), album: "Ok Computer".into(), track, disc: None, year: None, seconds: 0.0 }
+        LocalTrack { idx, title: title.into(), artist: "radiohead".into(), album_artist: String::new(), album: "Ok Computer".into(), track, disc: None, year: None, genres: String::new(), seconds: 0.0 }
+    }
+
+    #[test]
+    fn genres_suggested_where_the_songs_differ() {
+        let v = serde_json::json!({ "genres": [
+            { "name": "trip hop", "count": 9 }, { "name": "electronic", "count": 12 },
+            { "name": "downtempo", "count": 3 }, { "name": "ambient", "count": 1 }
+        ]});
+        let top = top_genres(&v);
+        assert_eq!(top, ["Electronic", "Trip Hop", "Downtempo"], "most votes first, three at most, in tag style");
+        let local = [
+            LocalTrack { genres: String::new(), ..lt(0, "a", Some(1)) },
+            LocalTrack { genres: "trip-hop; Electronic; Downtempo".into(), ..lt(1, "b", Some(2)) },
+            LocalTrack { genres: "Rock".into(), ..lt(2, "c", Some(3)) },
+        ];
+        let mut changes = Vec::new();
+        genre_changes(&mut changes, &local, &top);
+        let tracks: Vec<usize> = changes.iter().map(|c| c.track).collect();
+        assert_eq!(tracks, [0, 2], "the same genres, spelt otherwise, aren't a change");
+        assert_eq!(changes[0].new, "Electronic; Trip Hop; Downtempo");
+        assert!(changes.iter().all(|c| c.field == Field::Genre));
     }
 
     fn release(id: &str, title: &str, artist: &str, tracks: usize, score: u64) -> Value {

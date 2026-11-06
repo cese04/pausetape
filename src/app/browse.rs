@@ -100,6 +100,7 @@ impl App {
             tracks: al.tracks.iter().map(|&i| &self.tracks[i]).collect(),
             card: self.card_facts(ck, a, al),
             cover: !self.lacks_cover(al),
+            genres: self.album_genres(ai, bi).names.iter().map(|g| crate::library::genres::key(g)).collect(),
         }
     }
 

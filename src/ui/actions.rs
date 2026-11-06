@@ -48,6 +48,8 @@ pub(super) enum Action {
     NewPlaylistWith(Vec<usize>),
     /// An artist's albums in the library by artist, opened (from the details panel).
     ShowArtist(usize),
+    /// A genre's artists and albums (from the details panel).
+    ShowGenre(String),
     /// An album selected, its details shown (beside the library, or as a sheet).
     Details(usize, usize),
     /// Songs after the one playing; at the end of the queue.
@@ -140,6 +142,10 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
                 app.saved.album_table = false;
                 (app.duplicates_only, app.look_alikes_only) = (false, false);
                 app.filter = name;
+                app.details_sheet = false;
+            }
+            Action::ShowGenre(g) => {
+                super::genres::open(app, Some(&g));
                 app.details_sheet = false;
             }
             Action::Details(a, b) => {

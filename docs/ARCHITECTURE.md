@@ -83,6 +83,7 @@ src/
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
 │   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
 │   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
+│   ├── genres.rs      genres: several in one tag, one genre in many spellings, MusicBrainz's in tag style
 │   └── search.rs      the search box: words and field:value terms (format:, card:, cover:…)
 ├── card/              putting music on the SD card (and tidying the music folder)
 │   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows,
@@ -112,6 +113,7 @@ src/
 │   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── undo.rs        ⌘Z: taking back changes to playlists and to what goes on the card (not to files)
+│   ├── genres.rs      an album's genres (its songs', else its artist's), every genre with its albums
 │   ├── playback.rs    play queue (play next, add, move, take out), waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
@@ -119,6 +121,7 @@ src/
     ├── sidebar.rs     the sidebar: the library's views, Review, saved searches, playlists, the card, settings
     ├── details.rs     the details of what's selected (cover, songs, card state, commands), beside the library or as a sheet
     ├── drag.rs        dragging songs and albums onto playlists, and a playlist's songs into order
+    ├── genres.rs      the genres view: every genre, each leading to its artists and albums
     ├── theme.rs       palette, fonts, frames; style.spacing on the grid
     ├── layout.rs      the 8-point grid (S1–S6, row and control heights) and `row`: left-to-right rows, centred
     ├── icons.rs       drawn line icons (tabs and commands), no font needed

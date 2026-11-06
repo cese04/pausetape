@@ -167,15 +167,26 @@ fn page(app: &mut App, ui: &mut Ui) {
         } else if app.look_alikes_only {
             "Artists that look alike".to_string()
         } else {
-            match app.filter.trim() {
+            let filter = app.filter.trim().to_string();
+            match filter.as_str() {
                 "" if app.saved.album_table => "Albums".to_string(),
                 "" => "Artists".to_string(),
                 "cover:no" => "Without a cover".to_string(),
                 "damaged:yes" => "Damaged files".to_string(),
                 "edited:yes" => "Corrected, not in the files".to_string(),
+                "genre:none" => "No genre".to_string(),
+                f if f.starts_with("genre:") && !f.contains(' ') => {
+                    let k = crate::library::genres::key(&f["genre:".len()..]);
+                    let name = app.genre_index().genres.iter().find(|g| g.key == k).map(|g| g.name.clone());
+                    name.unwrap_or_else(|| f["genre:".len()..].to_string())
+                }
                 f => format!("Searching “{f}”"),
             }
         };
+        let in_genre = app.filter.trim().starts_with("genre:") && !app.filter.trim().contains(' ');
+        if in_genre && widgets::icon_link(ui, Icon::Back, "All genres").clicked() {
+            app.tab = crate::app::Tab::Genres;
+        }
         ui.label(RichText::new(title).size(20.0).color(ink.text));
         if app.source_missing {
             ui.label(RichText::new("can't reach the music folder: is its drive connected? It's read again once it's back").color(ink.warn));
@@ -303,6 +314,7 @@ fn page(app: &mut App, ui: &mut Ui) {
     }
     let current = app.current();
     let can_add = app.active_playlist.is_some();
+    let by_genre = query.filters.iter().any(|(f, wanted)| *wanted && matches!(f, crate::library::search::Filter::Genre(k) if !k.is_empty()));
     let mods = ui.input(|i| i.modifiers);
     let present: std::collections::BTreeSet<char> = app.index.artists.iter().map(|a| initial(&a.name)).collect();
     let jump = app.jump_to.take();
@@ -458,6 +470,11 @@ fn page(app: &mut App, ui: &mut Ui) {
                             let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                             m.paint(ui.painter(), rect.center(), 3.5, &ink);
                             ui.label(RichText::new(&status).size(13.0).color(if m == Mark::Removing { ink.warn } else { ink.muted }));
+                        }
+                        // In a genre only by its artist's genres (no song of it names one): say so.
+                        if by_genre && app.album_genres(ai, bi).from_artist {
+                            ui.label(RichText::new("by the artist's genre").size(12.5).italics().color(ink.muted))
+                                .on_hover_text("No song of this album names a genre; its artist's, from MusicBrainz, put it here. Look it up to have its own suggested.");
                         }
                         if !below {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| draw(ui, &mut commands, &mut actions, true));

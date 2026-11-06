@@ -1025,6 +1025,22 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - The playlist's page no longer repeats the list of playlists (it's in the sidebar); how
   playlists reach the card is one line, the rest on hover.
 
+### 88. Genres: in the album's details, and a view of their own (2026-11-05)
+- **Genres are read from the songs' tags**, several where a tag holds several ("Electronic;
+  Trip Hop", or separate values); spellings of one genre ("Trip Hop", "trip-hop") count as
+  one, shown as most songs spell it. CUE sheets' `REM GENRE` too. The library is read again
+  once, for them.
+- **The details panel shows an album's genres**, each leading to that genre. An album whose
+  songs name none takes its artist's genres from MusicBrainz, where the artist has been looked
+  up, and says so.
+- **Genres in the sidebar**: every genre with how many albums and artists (by name, or most
+  albums first), and *No genre*. A click shows the genre's artists and their albums, as the
+  library by artist does; an album with several genres is under each, and one there only by
+  its artist's genres is marked so. The search box takes `genre:trip-hop` and `genre:none`.
+- **Look up on MusicBrainz suggests the album's genres** (its release group's, most votes
+  first, up to three), with the other tags; applied, they're corrections like the rest:
+  written into card copies at the next Sync, and into the files with *Write corrected tags*.
+
 ### 89. A folder dropped while work runs is kept, and notices show beside work (2026-11-06)
 - A folder dropped on the window while other work ran (writing tags, a Sync, a scan) was turned
   away with a notice, and the status bar, showing the work, hid that notice: the drop seemed to

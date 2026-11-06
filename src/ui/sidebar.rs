@@ -24,6 +24,7 @@ pub fn narrow(ctx: &egui::Context) -> bool {
 enum Go {
     Albums,
     Artists,
+    Genres,
     /// The library through a search ("cover:no").
     Search(String),
     Duplicates,
@@ -75,6 +76,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     match go {
         Go::Albums => library(app, String::new(), Some(true)),
         Go::Artists => library(app, String::new(), Some(false)),
+        Go::Genres => app.tab = Tab::Genres,
         Go::Search(s) => {
             let again = app.tab == Tab::Library && app.filter.trim() == s;
             library(app, if again { String::new() } else { s }, None);
@@ -198,6 +200,12 @@ fn library(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
     }
     if item(ui, Icon::Artists, "Artists", Some(text::count(app.index.artists.len())), in_library && !app.saved.album_table, narrow).on_hover_text("albums by artist, with their songs").clicked() {
         *go = Some(Go::Artists);
+    }
+    // A genre's artists and albums are the library by artist, searched by genre: still "Genres".
+    let in_genres = app.tab == Tab::Genres || app.tab == Tab::Library && app.filter.trim().starts_with("genre:");
+    let genres = app.genre_index().genres.len();
+    if item(ui, Icon::Discover, "Genres", Some(text::count(genres)), in_genres, narrow).on_hover_text("every genre, and each one's artists and albums").clicked() {
+        *go = Some(Go::Genres);
     }
 }
 

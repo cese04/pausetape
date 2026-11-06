@@ -11,6 +11,7 @@ mod cards;
 mod covers;
 mod edit;
 mod events;
+mod genres;
 mod music;
 mod playback;
 mod testcard;
@@ -31,6 +32,7 @@ pub use add::Adding;
 pub use browse::{AlbumRow, SortBy};
 pub use covers::FoundCover;
 pub use edit::{Shared, TagEdit};
+pub use genres::GenreIndex;
 pub use undo::Undo;
 
 use crate::audio::{self, Audio};
@@ -99,6 +101,8 @@ pub enum Tab {
     Library,
     /// MusicBrainz suggestions for every album looked up, to go through.
     Suggestions,
+    /// Every genre, to open one's artists and albums.
+    Genres,
     Card,
     Playlists,
     Settings,
@@ -318,6 +322,12 @@ pub struct App {
     mb_rx: Receiver<Reply>,
     /// The artist panel's MusicBrainz entry, by cluster key.
     pub artist_info: HashMap<String, ArtistState>,
+    /// Every stored entry has been read from the library database (for the genres view).
+    artists_loaded: bool,
+    /// Every genre with its albums, made again when the library changes (`genre_index`).
+    genre_index: GenreIndex,
+    /// The genres view lists the genres with most albums first, rather than by name.
+    pub genres_by_size: bool,
     pub lookups: HashMap<String, Lookup>,
     /// Plan for tidying the source in place, once previewed.
     pub tidy_plan: Option<Vec<PlanItem>>,
@@ -451,6 +461,9 @@ impl App {
             mb_tx,
             mb_rx,
             artist_info: HashMap::new(),
+            artists_loaded: false,
+            genre_index: GenreIndex::default(),
+            genres_by_size: false,
             lookups: HashMap::new(),
             tidy_plan: None,
             in_place: 0,
