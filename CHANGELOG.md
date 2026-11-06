@@ -886,3 +886,10 @@ Calibre's device view, for music: the library is where you choose what goes on t
   instead of the grey chip the hover nearly matched; grey text on it stays at 4.5:1 or more
   with every accent. **A row under the pointer** (or with the keyboard's focus) is now a
   visible step darker; before, its background was 1.08:1 against the page.
+
+### 74. A bar that shows how full the card will be (2026-11-05)
+- The card's room was a hairline (1.3:1 against the page) with a thin line over it. It's now a
+  flat bar, 6 points high, of the card as the next Sync leaves it: what stays on it in ink,
+  what Sync adds in the accent, what it takes off as an outline in the warning colour (that
+  space comes free), and what's left free; past the end, in the warning colour, what doesn't
+  fit. Hovering says each in figures. The library's strip shows it a little longer.

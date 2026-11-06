@@ -19,7 +19,7 @@ use crate::card::pattern::{Field, Pattern, default_for};
 use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
 use crate::library::search::fold;
-use super::layout::{ICON, S1, S2, S3, row, row_wrapped};
+use super::layout::{ICON, ROW, S1, S2, S3, row, row_wrapped};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
@@ -89,18 +89,40 @@ fn room(app: &App) -> Option<(crate::card::SpaceInfo, u64)> {
     app.card_room()
 }
 
-/// A hairline as long as the room, and over it a bar as long as what's needed; red past the end.
-fn space_bar(ui: &mut Ui, need: u64, room: u64, width: f32) {
+/// The card as the next Sync leaves it, in one flat bar as long as the room: what stays (ink),
+/// what Sync adds (accent), what it takes off (an outline in the warning colour: that space
+/// comes free), then what's free. Past the room's end, what doesn't fit, in the warning colour.
+/// The figures show on hover.
+fn space_bar(app: &App, ui: &mut Ui, need: u64, room: u64, width: f32) {
     let ink = ink(ui);
-    let (rect, _) = ui.allocate_exact_size(vec2(width, 12.0), Sense::hover());
+    let (adding, removing) = (app.card_state.add_bytes.min(need), app.card_state.remove_bytes);
+    let staying = need - adding;
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW), Sense::hover());
+    let bar = egui::Rect::from_center_size(rect.center(), vec2(width, 6.0));
     let scale = width / room.max(need).max(1) as f32;
-    let y = rect.center().y;
-    ui.painter().hline(rect.left()..=rect.left() + room as f32 * scale, y, Stroke::new(1.0, ink.faint));
-    let used = rect.left() + need.min(room) as f32 * scale;
-    ui.painter().hline(rect.left()..=used, y, Stroke::new(3.0, ink.accent));
-    if need > room {
-        ui.painter().hline(used..=rect.left() + need as f32 * scale, y, Stroke::new(3.0, ink.warn));
+    let x = |bytes: u64| bar.left() + bytes as f32 * scale;
+    let p = ui.painter();
+    let span = |from: u64, to: u64| egui::Rect::from_x_y_ranges(x(from)..=x(to), bar.y_range());
+    p.rect_filled(span(0, room), 3.0, ink.faint);
+    p.rect_filled(span(0, staying.min(room)), 3.0, ink.text);
+    if adding > 0 {
+        p.rect_filled(span(staying.min(room), need.min(room)), 0.0, ink.accent);
     }
+    if removing > 0 && need < room {
+        p.rect_stroke(span(need, (need + removing).min(room)), 0.0, Stroke::new(1.0, ink.warn), egui::StrokeKind::Inside);
+    }
+    if need > room {
+        p.rect_filled(span(room, need), 3.0, ink.warn);
+    }
+    let mut parts = vec![format!("{} on the card and staying", text::bytes(staying))];
+    if adding > 0 {
+        parts.push(format!("{} added at the next Sync", text::bytes(adding)));
+    }
+    if removing > 0 {
+        parts.push(format!("{} taken off", text::bytes(removing)));
+    }
+    parts.push(if need > room { format!("{} over", text::bytes(need - room)) } else { format!("{} free after Sync", text::bytes(room - need)) });
+    resp.on_hover_text(parts.join("\n"));
 }
 
 /// Changes since the last write, and the buttons that compare and sync.
@@ -167,7 +189,7 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
                         ui.label(RichText::new(&name).color(ink.text));
                         match room(app) {
                             Some((_, room)) => {
-                                space_bar(ui, need, room, 120.0);
+                                space_bar(app, ui, need, room, 160.0);
                                 muted(ui, format!("{} chosen of {} room", text::bytes(need), text::bytes(room)))
                                     .on_hover_text("Room: what's free on the card plus what this setup's own files take there.");
                                 if need > room {
@@ -502,7 +524,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     if adoptable > 0 {
         muted(ui, format!("counting the {} a take-over moves into place as already there", text::bytes(adoptable)));
     }
-    space_bar(ui, need, room, ui.available_width().min(560.0));
+    space_bar(app, ui, need, room, ui.available_width().min(560.0));
     if need > room {
         fit(app, ui, sizes, need - room);
     }
