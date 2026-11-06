@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false   # see every platform's result, not just the first failure
       matrix:
-        os: [macos-14, windows-latest, ubuntu-22.04]
+        os: [macos-15, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
