@@ -182,7 +182,13 @@ fn page(app: &mut App, ui: &mut Ui) {
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let dirty = app.dirty_in_files();
-            if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("Write {dirty} corrected tags to source files")).clicked() {
+            let covers = app.tracks.iter().filter(|t| t.dirty && t.cue.is_none() && t.cover.is_some()).count();
+            let hint = if covers > 0 {
+                format!("Writes the corrections into the music files. {covers} of them get a cover, which makes the file's tags bigger than the room kept for them, so the whole file is written again: on a USB drive, count on about a minute per gigabyte. It can be stopped and carried on later.")
+            } else {
+                "Writes the corrections into the music files.".to_string()
+            };
+            if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("Write {dirty} corrected tags to source files")).on_hover_text(hint).clicked() {
                 app.save_tags_to_source();
             }
             if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
@@ -190,6 +196,11 @@ fn page(app: &mut App, ui: &mut Ui) {
             }
         });
     });
+    // What the last tag write (or card operation) couldn't do.
+    if app.problems.is_some() {
+        ui.add_space(S1);
+        super::card::problems(app, ui);
+    }
     // Songs the card's player can't play are said in their rows (a badge) and dealt with in the
     // card tab, where converting them is chosen.
     ui.add_space(S2);

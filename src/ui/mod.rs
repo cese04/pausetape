@@ -112,16 +112,25 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
     let Some(first) = dropped.first() else { return };
     if app.dialog_open() {
         app.notice("close the dialog first, then drop it again");
-    } else if let Some(b) = &app.busy {
-        app.notice(format!("wait until {} is done, then drop it again", b.label));
     } else if !first.is_dir() {
         app.notice("drop the folder the music is in (an album, or a folder of albums), not single files");
     } else {
-        if dropped.len() > 1 {
-            app.notice("one folder at a time: checking the first");
-        }
+        let name = first.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let more = if dropped.len() > 1 { " (one folder at a time: the first)" } else { "" };
         app.tab = Tab::Library;
-        app.check_folder(first.clone());
+        match &app.busy {
+            // Kept for when the work under way is done, rather than lost.
+            Some(b) => {
+                app.notice(format!("“{name}” is checked against the library once {} is done{more}", b.label));
+                app.pending_add = Some(first.clone());
+            }
+            None => {
+                if !more.is_empty() {
+                    app.notice(format!("checking “{name}”{more}"));
+                }
+                app.check_folder(first.clone());
+            }
+        }
     }
 }
 
@@ -192,8 +201,8 @@ fn header(app: &mut App, ui: &mut Ui) {
 }
 
 /// One line at the foot of the window. On the left, the library in figures and what's selected;
-/// on the right, work under way (how far, time left, Stop) or else the latest notice, with
-/// *Undo* when it offers one.
+/// on the right, work under way (how far, time left, Stop), and the latest notice, with *Undo*
+/// when it offers one.
 fn status_bar(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     ui.set_height(CONTROL + S1);
@@ -207,10 +216,16 @@ fn status_bar(app: &mut App, ui: &mut Ui) {
             facts.push_str(&format!(" · {} selected", plural(app.selected_albums.len(), "album")));
         }
         ui.label(RichText::new(facts).size(13.0).color(ink.muted));
+        // Work under way at the right end; the latest notice in what's left beside it, so a
+        // notice made while work runs is still seen.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if app.busy.is_some() {
                 job(app, ui);
-            } else if let Some(n) = app.notices.last().cloned() {
+            }
+            if let Some(n) = app.notices.last().cloned()
+                && ui.available_width() > 160.0
+            {
+                ui.add_space(S2);
                 notice(app, ui, &n);
             }
         });
