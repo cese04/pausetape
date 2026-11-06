@@ -33,6 +33,17 @@ pub(super) enum Action {
     /// Add a song to the selection or take it out; add a run of songs.
     Select(usize),
     SelectRun(Vec<usize>),
+    /// A plain click on a song: it alone is selected.
+    OnlySong(usize),
+    /// The arrow keys moved to a song: select it alone, or (with Shift) add it; bring it into view.
+    SongCursor(usize, bool),
+    /// The same in the album table, by album id and row.
+    AlbumCursor(String, usize, bool),
+    /// ⌘D: these albums onto the card, or off it if they're all there.
+    ToggleCard(Vec<(usize, usize)>),
+    /// Songs to the end of a playlist (by position); into a new playlist.
+    AddToPlaylist(usize, Vec<usize>),
+    NewPlaylistWith(Vec<usize>),
     ClearSelection,
     /// Move album copies another copy covers to the Trash (artist, album).
     TrashCopies(Vec<(usize, usize)>),
@@ -79,6 +90,34 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             Action::EditTags(songs) => app.edit_tags(songs),
             Action::Select(t) => app.toggle_selected(t),
             Action::SelectRun(ts) => app.select_run(ts),
+            Action::OnlySong(t) => {
+                app.selected = [t].into();
+                app.select_anchor = Some(t);
+            }
+            Action::SongCursor(t, extend) => {
+                if !extend {
+                    app.selected.clear();
+                }
+                app.selected.insert(t);
+                app.select_anchor = Some(t);
+                app.scroll_to_song = Some(t);
+            }
+            Action::AlbumCursor(id, row, extend) => {
+                if !extend {
+                    app.selected_albums.clear();
+                }
+                app.selected_albums.insert(id.clone());
+                app.album_anchor = Some(id);
+                app.album_scroll_to = Some(row);
+            }
+            Action::ToggleCard(albums) => app.toggle_on_card(albums),
+            Action::AddToPlaylist(i, songs) => app.add_songs_to_playlist(i, &songs),
+            Action::NewPlaylistWith(songs) => {
+                app.new_playlist();
+                if let Some(i) = app.active_playlist {
+                    app.add_songs_to_playlist(i, &songs);
+                }
+            }
             Action::ClearSelection => {
                 app.selected.clear();
                 app.select_anchor = None;

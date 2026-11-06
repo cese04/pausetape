@@ -6,7 +6,10 @@ mod albums;
 mod artist_panel;
 mod card;
 mod cassette;
+mod confirm;
 pub mod folders;
+mod keys;
+mod menu;
 pub mod icons;
 pub mod layout;
 mod library;
@@ -39,6 +42,7 @@ const ROW_H: f32 = layout::ROW;
 /// off, so they never read as content. Everything inside keeps to the page's side margin.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
+    keys::global(app, ui);
     let chrome = |x: f32, y: f32| egui::Frame::new().fill(ink.bar).inner_margin(margin(x, y));
     let r = egui::Panel::top("nav").frame(chrome(S4, S1)).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
@@ -75,8 +79,43 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
     player_test::dialog(app, ui);
+    // ⌘F is for the search box of the tab it opened; if that tab didn't draw one, it lapses.
+    app.focus_search = false;
+    drop_to_add(app, ui);
     card::sync_confirm_dialog(app, ui);
+    confirm::dialog(app, ui);
     folders::add_dialog(app, ui);
+}
+
+/// A folder dropped on the window is music to add, as "add music" would: while it's held over
+/// the window, the page says so; once dropped, it's checked against the library.
+fn drop_to_add(app: &mut App, ui: &mut Ui) {
+    let (hovering, dropped) = ui.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect::<Vec<_>>()));
+    if hovering {
+        let ink = ink(ui);
+        let area = ui.ctx().content_rect().shrink(S2);
+        let p = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("drop to add")));
+        p.rect_filled(area, 8.0, ink.bg.gamma_multiply(0.92));
+        p.rect_filled(area, 8.0, ink.accent.gamma_multiply(0.10));
+        p.rect_stroke(area, 8.0, Stroke::new(1.5, ink.accent), egui::StrokeKind::Inside);
+        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first (folders tab), then drop music to add" };
+        p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(20.0), ink.text);
+        p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(14.0), ink.muted);
+    }
+    let Some(first) = dropped.first() else { return };
+    if app.dialog_open() {
+        app.notice("close the dialog first, then drop it again");
+    } else if let Some(b) = &app.busy {
+        app.notice(format!("wait until {} is done, then drop it again", b.label));
+    } else if !first.is_dir() {
+        app.notice("drop the folder the music is in (an album, or a folder of albums), not single files");
+    } else {
+        if dropped.len() > 1 {
+            app.notice("one folder at a time: checking the first");
+        }
+        app.tab = Tab::Library;
+        app.check_folder(first.clone());
+    }
 }
 
 /// The tab bar: the app's name, the tabs, and what's running in the background.
@@ -89,15 +128,14 @@ fn header(app: &mut App, ui: &mut Ui) {
         // In a narrow window only the open tab keeps its name; the others show their icon.
         let compact = ui.available_width() < 900.0;
         for (t, icon, name) in [
-            (Tab::Folders, Icon::Folder, "folders"),
-            (Tab::Library, Icon::Library, "library"),
-            (Tab::Card, Icon::Card, "card"),
-            (Tab::Playlists, Icon::Playlists, "playlists"),
-            (Tab::Settings, Icon::Settings, "settings"),
+            (Tab::Folders, Icon::Folder, "Folders"),
+            (Tab::Library, Icon::Library, "Library"),
+            (Tab::Card, Icon::Card, "Card"),
+            (Tab::Playlists, Icon::Playlists, "Playlists"),
+            (Tab::Settings, Icon::Settings, "Settings"),
         ] {
             let active = app.tab == t;
-            let label = if compact && !active { "" } else { name };
-            if widgets::nav_tab(ui, icon, label, active).on_hover_text(name).clicked() {
+            if widgets::nav_tab(ui, icon, name, !compact || active, active).on_hover_text(name).clicked() {
                 app.tab = t;
                 // The library tab always opens on the whole library.
                 app.duplicates_only = false;
@@ -146,10 +184,15 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
         icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
-        ui.allocate_ui(egui::vec2(ui.available_width() - S5, 0.0), |ui| {
+        let offers_undo = app.notice_offers_undo();
+        let undo_w = if offers_undo { widgets::text_width(ui, "undo (⌘Z)", 13.5) + S4 } else { 0.0 };
+        ui.allocate_ui(egui::vec2(ui.available_width() - S5 - undo_w, 0.0), |ui| {
             ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
         });
-        if widgets::icon_button(ui, Icon::Close).on_hover_text("dismiss").clicked() {
+        if offers_undo && widgets::icon_link(ui, Icon::Back, "Undo (⌘Z)").clicked() {
+            app.undo_last();
+        }
+        if widgets::icon_button(ui, Icon::Close, "Dismiss").clicked() {
             app.notices.clear();
         }
     });

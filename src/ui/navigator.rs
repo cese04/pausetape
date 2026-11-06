@@ -186,7 +186,7 @@ impl Navigator {
                 }
             }
             let picker = if is_computer(&self.dir) { rfd::FileDialog::new() } else { rfd::FileDialog::new().set_directory(&self.dir) };
-            if link(ui, "system picker…").clicked()
+            if link(ui, "System picker…").clicked()
                 && let Some(p) = picker.pick_folder()
             {
                 go = Some(p);
@@ -239,7 +239,9 @@ impl Navigator {
         ScrollArea::vertical().id_salt("nav").max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
             let row = |ui: &mut Ui, label: String, right: Option<String>, folder: bool| -> bool {
                 let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::click());
-                if resp.hovered() {
+                super::widgets::name(ui, &resp, egui::Role::Button, &label);
+                super::widgets::focus_ring(ui, &resp, rect, 4.0);
+                if resp.hovered() || resp.has_focus() {
                     ui.painter().rect_filled(rect, 4.0, ink.faint);
                 }
                 let y = rect.center().y;

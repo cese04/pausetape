@@ -777,3 +777,100 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - A version's release gets the Mac disk image (macos.yml) and the Windows and Linux programs
   (ci.yml), no longer also the Mac program on its own, which only opens in Terminal and would
   confuse someone choosing what to download.
+
+### 65. Keyboard focus you can see; controls screen readers can name (2026-11-05)
+- Tab moves through the app's own controls (links, commands, buttons, tabs, chips, song and
+  album rows, column headings, the A–Z rail, the folder browser), and the one with the focus
+  now has a ring in the accent around it; Space or Enter presses it. Before, Tab worked but
+  nothing showed where it was. A click doesn't give focus, so the ring only appears from the
+  keyboard.
+- Each of those controls now tells VoiceOver, Narrator and other screen readers its name and
+  what it is (button, link, tab, row; selected or not). They were drawn by hand and said
+  nothing. Icon-only buttons take the name they show on hover.
+- While a control has the focus, Space presses it and ←/→ move to the next control, instead
+  of also pausing or seeking the player.
+
+### 66. Undo for playlists and the card's music; asking before what can't be undone (2026-11-05)
+- **⌘Z** (Ctrl+Z on Windows and Linux) takes back the latest change to playlists (a playlist
+  made, renamed or deleted, a song added, moved or taken out) or to what a card setup puts on
+  its card (albums and artists sent or taken off, tick all and untick all, names and order on
+  the card), up to 50 of them. The notice says what was undone. Changes to files keep their
+  own undo commands, so a keystroke never moves files; text fields keep their own ⌘Z.
+- **Deleting a playlist** no longer happens silently: the notice says so and offers *undo*, and
+  card setups stop listing it.
+- **Renaming a playlist** is taken when the field is left, and a name that's empty or another
+  playlist's (card folders ignore case) is refused with a notice, keeping the old one. Before,
+  each keystroke renamed it in every card setup, and two playlists could share a name. A pencil
+  beside the name shows it can be renamed. New playlists get a number no other has.
+- **Deleting a card setup** asks first and says what goes with it: its record of the files it
+  put on the card, which no setup will then update or take off, and how to clear them first.
+- **Forgetting the stored tags** (Settings) asks first and says what it costs: the next rescan
+  opens every file again.
+
+### 67. A click selects, a double click plays, in every view (2026-11-05)
+- In the library by artist, a click on a song played it, and selecting needed ⌘-click: the
+  opposite of the album table, Finder, Explorer and other players, so looking around with the
+  mouse interrupted the music. Now a click selects the song (alone), ⌘-click adds or removes
+  one, shift-click a run, and a double click plays from that song to the album's end.
+- One selected song is only highlighted; the bar with what to do with a selection appears from
+  two songs, so a click doesn't push the list down. Esc clears either.
+
+### 68. Keyboard shortcuts for the library (2026-11-05)
+- **↑ ↓** move the selection through the songs shown (library by artist) or the albums (album
+  table), scrolling to keep it in view; with **Shift**, they add to it. **Enter** plays what's
+  selected (one song plays on through its album, as a double click does).
+- **⌘A** selects everything shown, **⌘I** edits the tags of what's selected, **⌘D** sends the
+  selected albums (or the albums of the selected songs) to the card, or takes them off if
+  they're all there.
+- **⌘F** goes to the library's search box (in the card tab, to its filter); **⌘⇧S** syncs the
+  card, saying why not if it isn't connected or something else is running.
+- On Windows and Linux, Ctrl in place of ⌘. Settings › Keyboard lists them all, as each
+  system writes them, and the Sync, *send to card* and *edit tags* commands show theirs on
+  hover. Shortcuts wait while you type in a field or a dialog is open; the arrows and Enter
+  also leave a control focused with Tab alone.
+
+### 69. One right-click menu for music, everywhere (2026-11-05)
+- Right-click an artist's name, an album's title (library by artist), an album's row (album
+  table), a song, or a playlist's song: the same menu each time, in the same order. **Play**
+  (a song plays on through its album) · **Add to playlist ▸** (any playlist, or a new one) ·
+  **Send to the card** or **Take off the card** · **Edit tags** · **Find cover** (when there's
+  none) · **Look up on MusicBrainz** (one album) · **Open folder**. A playlist's song adds
+  **Remove from the playlist**, a library song adding to or taking out of the selection.
+- On something in a selection of several, the menu acts on the whole selection ("Play 3 songs",
+  "Send 2 albums to the card").
+- Before, songs could only go into the open playlist, with a + that showed on hover; the + stays,
+  and adding now says so in a notice that offers *undo*.
+
+### 70. Drop a folder on the window to add its music (2026-11-05)
+- Dragging a folder (an album, or a folder of albums) over the window covers the page with
+  "Drop a folder to add its music to your library"; dropping it does what *add music* does
+  after choosing a folder: checks it against the library, then asks what to copy.
+- Single files are turned down with a note to drop their folder instead (checking the folder
+  they're in could mean all of Downloads); of several folders, the first is checked. While a
+  dialog is open or something is running, the drop waits and a notice says why.
+
+### 71. One look and one name per action (2026-11-05)
+- The same action looked and was called different things in different places: *Change
+  folder…* was a button in the folders tab and a quiet link in the library; reading the folder
+  again was *read again* there and *rescan* here; adding music was *add music from a folder…*
+  and *add music*; the card was *Change card…* in the folders tab and a link in the card tab;
+  Sync was filled in the card tab and outlined in the library. Now each has one name and one
+  look: outlined buttons for **Change folder…**, **Rescan**, **Add music…** and **Change
+  card…**, and Sync filled wherever it is, as the main thing to do.
+- Leaving a dialog is a framed **Cancel** in each (the tag editor's had an icon), or **Not now**
+  where the offer comes back (taking a card over), or **Done** where there's nothing to cancel.
+- In the card tab the card's path gives way to *Change card…*, shortened with "…" and shown
+  whole on hover, so the button is never pushed out of a narrow window.
+
+### 72. Commands in sentence case; one word for each thing (2026-11-05)
+- Every command now starts with a capital, as buttons did already: *Rescan*, *Edit tags*,
+  *Find cover*, *Open folder*, *Tick all*, the tabs (*Library*, *Card*…), *Artists* and
+  *Albums*. Before, buttons were capitalised and the links beside them weren't. Descriptions
+  and states stay in lower case.
+- The card's states are said one way everywhere: *on the card*, *added at the next Sync*,
+  *taken off at the next Sync* (in the album table, shortened to *added at Sync* and *taken off
+  at Sync*); before, the same state was also *on card*, *at next sync* or *coming off*. Sync is
+  always written with a capital, as on its button. *Send to card* became **Send to the card**.
+- What the app called a *write* (what a card gets, its names and order, its record of what's
+  there) is a **card setup** wherever it's shown: the card tab's list is *Card setups*, and
+  "this write" became "this setup". The code keeps its names.

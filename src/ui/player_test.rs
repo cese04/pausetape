@@ -47,7 +47,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                 } else if widgets::primary_with(ui, Icon::Card, if on_card { "Write the test folder again" } else { "Write the test folder to the card" }).clicked() {
                     app.write_test_card();
                 }
-                if on_card && widgets::icon_link(ui, Icon::Remove, "take it off the card").on_hover_text("removes only the files the test wrote").clicked() {
+                if on_card && widgets::icon_link(ui, Icon::Remove, "Take it off the card").on_hover_text("removes only the files the test wrote").clicked() {
                     app.remove_test_card();
                 }
             });

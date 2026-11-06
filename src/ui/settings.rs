@@ -27,7 +27,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             row(ui, |ui| {
                 let dark = ui.visuals().dark_mode;
                 for accent in Accent::ALL {
-                    if widgets::swatch(ui, accent.colour(dark), app.saved.accent == accent).on_hover_text(accent.name()).clicked() {
+                    if widgets::swatch(ui, accent.colour(dark), app.saved.accent == accent, accent.name()).on_hover_text(accent.name()).clicked() {
                         app.saved.accent = accent;
                         app.apply_theme();
                     }
@@ -54,13 +54,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             help(ui, "Rescans only open files that are new or changed since they were last read.");
             ui.add(egui::Label::new(RichText::new(crate::library::db::default_path().display().to_string()).size(12.0).color(ink(ui).muted)).truncate());
             row(ui, |ui| {
-                if app.busy.is_none() && icon_link(ui, Icon::Rescan, "read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
+                if app.busy.is_none() && icon_link(ui, Icon::Rescan, "Read every file again").on_hover_text("for tags edited by tools that don't update the file's date").clicked() {
                     app.read_all_again();
                 }
-                if icon_link(ui, Icon::Trash, "forget stored tags").on_hover_text("unsaved corrections are kept").clicked()
-                    && let Some(db) = &mut app.db
-                {
-                    let _ = db.clear();
+                if icon_link(ui, Icon::Trash, "Forget stored tags").on_hover_text("asks first; unsaved corrections are kept").clicked() {
+                    app.confirm = Some(crate::app::Confirm::ForgetTags);
                 }
             });
         });
@@ -78,7 +76,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             for (i, (a, b)) in p.merges.iter().enumerate() {
                 row(ui, |ui| {
                     ui.label(format!("“{}” and “{}”: the same artist", name(a), name(b)));
-                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                    if icon_link(ui, Icon::Close, "Undo").clicked() {
                         undo = Some(Undo::Merge(i));
                     }
                 });
@@ -86,7 +84,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             for (a, b) in &p.rejected {
                 row(ui, |ui| {
                     ui.label(format!("“{}” and “{}”: different artists", name(a), name(b)));
-                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                    if icon_link(ui, Icon::Close, "Undo").clicked() {
                         undo = Some(Undo::Reject(a.clone(), b.clone()));
                     }
                 });
@@ -94,7 +92,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             for (k, n) in &p.names {
                 row(ui, |ui| {
                     ui.label(format!("{k} shown as “{n}”"));
-                    if icon_link(ui, Icon::Close, "undo").clicked() {
+                    if icon_link(ui, Icon::Close, "Undo").clicked() {
                         undo = Some(Undo::Name(k.clone()));
                     }
                 });
@@ -150,6 +148,21 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 );
             }
         });
+
+        ui.add_space(S2);
+        widgets::section(ui, Icon::Info, "Keyboard");
+        ui.add_space(S1);
+        // Keys in the column where settings have their names.
+        for (keys, what) in super::keys::list(ui.ctx()) {
+            row(ui, |ui| {
+                ui.allocate_ui_with_layout(egui::vec2(widgets::LABEL_W, 0.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_width(widgets::LABEL_W);
+                    ui.label(RichText::new(keys).color(ink(ui).text));
+                });
+                ui.label(RichText::new(what).color(ink(ui).muted));
+            });
+        }
+        help(ui, "The arrows, Enter and the shortcuts for selecting, tags and the card act on the library. Shortcuts wait while you type in a field or a dialog is open.");
 
         ui.add_space(S2);
         widgets::section(ui, Icon::Search, "MusicBrainz");

@@ -35,7 +35,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     } else if !query.is_empty() && !rows.is_empty() {
         row(ui, |ui| {
             muted(ui, format!("{} match", plural(rows.len(), "album")));
-            if widgets::icon_link(ui, Icon::Check, "select them all").on_hover_text("to send them to the card, edit their tags or find their covers together").clicked() {
+            if widgets::icon_link(ui, Icon::Check, "Select them all").on_hover_text("to send them to the card, edit their tags or find their covers together").clicked() {
                 actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
             }
         });
@@ -62,6 +62,8 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     for (k, (name, by, right)) in headings.enumerate() {
         let cell = egui::Rect::from_min_size(rect.min + vec2(lefts[k + 1], 0.0), vec2(widths[k + 1] - if right { RIGHT_PAD } else { 8.0 }, 22.0));
         let r = ui.interact(cell, egui::Id::unique(("album heading", k)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+        widgets::name(ui, &r, egui::Role::ColumnHeader, &format!("sort by {name}"));
+        widgets::focus_ring(ui, &r, cell, 2.0);
         let sorted = app.album_sort.0 == by;
         let arrow = match (sorted, app.album_sort.1) {
             (false, _) => "",
@@ -83,15 +85,30 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
     }
     let mods = ui.input(|i| i.modifiers);
     let current = app.current();
-    ScrollArea::vertical().auto_shrink(false).show_rows(ui, ROW_H, rows.len(), |ui, range| {
+    // Only the rows in view are drawn, so a row the arrow keys moved to out of view is scrolled
+    // to by its position: to the top edge going up, the bottom edge going down.
+    let mut area = ScrollArea::vertical().auto_shrink(false);
+    if let Some(n) = app.album_scroll_to.take() {
+        let (pitch, was) = (ROW_H + ui.spacing().item_spacing.y, app.album_rows_shown.clone());
+        if n <= was.start {
+            area = area.vertical_scroll_offset(n as f32 * pitch);
+        } else if n + 1 >= was.end {
+            area = area.vertical_scroll_offset((n + 2).saturating_sub(was.len()) as f32 * pitch);
+        }
+    }
+    let mut drawn = 0..0;
+    area.show_rows(ui, ROW_H, rows.len(), |ui, range| {
+        drawn = range.clone();
         for n in range {
             let row = &rows[n];
             let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
-            let p = ui.painter_at(rect);
             let selected = app.selected_albums.contains(&row.id);
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Row, true, selected, format!("{}, {}", row.artist_name, row.title)));
+            widgets::focus_ring(ui, &resp, rect, 4.0);
+            let p = ui.painter_at(rect);
             if selected {
                 p.rect_filled(rect, 4.0, ink.chip);
-            } else if resp.hovered() {
+            } else if resp.hovered() || resp.has_focus() {
                 p.rect_filled(rect, 0.0, ink.hover);
             }
             let y = rect.center().y;
@@ -122,10 +139,10 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             right(6, text::bytes(row.bytes));
             let card_word = match mark {
                 None => String::new(),
-                Some(Mark::On) => "on card".into(),
-                Some(Mark::Adding) => "at next sync".into(),
+                Some(Mark::On) => "on the card".into(),
+                Some(Mark::Adding) => "added at Sync".into(),
                 Some(Mark::ByHand) => "by hand".into(),
-                Some(Mark::Removing) => "coming off".into(),
+                Some(Mark::Removing) => "taken off at Sync".into(),
             };
             text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
             if row.cover {
@@ -144,35 +161,53 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             } else if resp.clicked() {
                 actions.push(Action::OnlyAlbum(row.id.clone()));
             }
-            resp.context_menu(|ui| album_menu(app, ui, row, actions));
+            // On an album in the selection, the menu is for the whole selection.
+            resp.context_menu(|ui| {
+                let of = if selected && app.selected_albums.len() > 1 { super::menu::Of::Songs(app.selected_album_songs(&rows)) } else { super::menu::Of::Album(row.artist, row.album) };
+                super::menu::music(app, ui, of, actions, |_, _| {});
+            });
         }
     });
+    app.album_rows_shown = drawn;
+    album_keys(app, ui, &rows, actions);
 }
 
-/// Right-click on an album row.
-fn album_menu(app: &App, ui: &mut Ui, row: &AlbumRow, actions: &mut Vec<Action>) {
-    let al = &app.index.artists[row.artist].albums[row.album];
-    let mut item = |ui: &mut Ui, icon, text: &str, action: Action| {
-        if widgets::icon_link(ui, icon, text).clicked() {
-            actions.push(action);
-            ui.close();
+/// The keyboard in the album table: ↑/↓ move the selection (with Shift, extend it), Enter plays,
+/// ⌘A selects every row, ⌘I edits tags, ⌘D sends the albums to the card or takes them off.
+fn album_keys(app: &App, ui: &Ui, rows: &[AlbumRow], actions: &mut Vec<Action>) {
+    if rows.is_empty() || super::keys::taken(app, ui) {
+        return;
+    }
+    let navigation = super::keys::navigation_free(app, ui);
+    let at = app.album_anchor.as_ref().and_then(|a| rows.iter().position(|r| &r.id == a));
+    for (key, step) in [(egui::Key::ArrowDown, 1isize), (egui::Key::ArrowUp, -1)] {
+        if let Some(extend) = super::keys::nav_key(ui, key).filter(|_| navigation) {
+            let next = match at {
+                Some(i) => (i as isize + step).clamp(0, rows.len() as isize - 1) as usize,
+                None if step > 0 => 0,
+                None => rows.len() - 1,
+            };
+            actions.push(Action::AlbumCursor(rows[next].id.clone(), next, extend));
         }
-    };
-    item(ui, Icon::Play, "play", Action::Play(al.tracks.clone(), 0));
-    item(ui, Icon::Rename, "edit tags", Action::EditTags(al.tracks.clone()));
-    if row.card.chosen {
-        item(ui, Icon::Remove, "take off card", Action::CardAlbums(vec![(row.artist, row.album)], false));
-    } else {
-        item(ui, Icon::Add, "send to card", Action::CardAlbums(vec![(row.artist, row.album)], true));
     }
-    if !row.cover && app.busy.is_none() {
-        item(ui, Icon::Image, "find cover", Action::FindCovers(vec![(row.artist, row.album)]));
+    let chosen: Vec<&AlbumRow> = rows.iter().filter(|r| app.selected_albums.contains(&r.id)).collect();
+    if chosen.is_empty() {
+        if super::keys::pressed(ui, &super::keys::SELECT_ALL) {
+            actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
+        }
+        return;
     }
-    if let Some(dir) = app.tracks[al.tracks[0]].path.parent()
-        && widgets::icon_link(ui, Icon::Folder, "open folder").clicked()
-    {
-        crate::platform::reveal(dir);
-        ui.close();
+    if navigation && super::keys::nav_key(ui, egui::Key::Enter).is_some() {
+        actions.push(Action::Play(app.selected_album_songs(rows), 0));
+    }
+    if super::keys::pressed(ui, &super::keys::SELECT_ALL) {
+        actions.push(Action::AddAlbums(rows.iter().map(|r| r.id.clone()).collect()));
+    }
+    if super::keys::pressed(ui, &super::keys::EDIT_TAGS) {
+        actions.push(Action::EditTags(app.selected_album_songs(rows)));
+    }
+    if super::keys::pressed(ui, &super::keys::CARD) {
+        actions.push(Action::ToggleCard(chosen.iter().map(|r| (r.artist, r.album)).collect()));
     }
 }
 
@@ -196,23 +231,23 @@ fn selection_bar(app: &App, ui: &mut Ui, rows: &[AlbumRow], actions: &mut Vec<Ac
             }
             ui.label(RichText::new(what).color(ink.text));
             ui.add_space(S1);
-            if widgets::icon_link(ui, Icon::Add, "send to card").on_hover_text("copied at the next Sync").clicked() {
+            if widgets::icon_link(ui, Icon::Add, "Send to the card").on_hover_text(format!("copied at the next Sync ({} sends or takes off)", ui.ctx().format_shortcut(&super::keys::CARD))).clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), true));
             }
-            if widgets::icon_link(ui, Icon::Remove, "take off card").on_hover_text("taken off at the next Sync").clicked() {
+            if widgets::icon_link(ui, Icon::Remove, "Take off the card").on_hover_text("taken off at the next Sync").clicked() {
                 actions.push(Action::CardAlbums(albums.clone(), false));
             }
-            if widgets::icon_link(ui, Icon::Rename, "edit tags").on_hover_text("set album artist, year… for all their songs").clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "Edit tags").on_hover_text(format!("set album artist, year… for all their songs ({})", ui.ctx().format_shortcut(&super::keys::EDIT_TAGS))).clicked() {
                 actions.push(Action::EditTags(songs.clone()));
             }
             let coverless: Vec<(usize, usize)> = chosen.iter().filter(|r| !r.cover).map(|r| (r.artist, r.album)).collect();
-            if !coverless.is_empty() && app.busy.is_none() && widgets::icon_link(ui, Icon::Image, format!("find covers ({})", coverless.len())).clicked() {
+            if !coverless.is_empty() && app.busy.is_none() && widgets::icon_link(ui, Icon::Image, format!("Find covers ({})", coverless.len())).clicked() {
                 actions.push(Action::FindCovers(coverless));
             }
-            if widgets::icon_link(ui, Icon::Play, "play").clicked() {
+            if widgets::icon_link(ui, Icon::Play, "Play").clicked() {
                 actions.push(Action::Play(songs, 0));
             }
-            if widgets::icon_link(ui, Icon::Close, "clear").on_hover_text("or press Esc").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Clear").on_hover_text("or press Esc").clicked() {
                 actions.push(Action::ClearAlbums);
             }
         });

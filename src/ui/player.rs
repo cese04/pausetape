@@ -168,7 +168,7 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     if t.cover.is_some() {
         let when = if t.cue.is_some() { "in card copies when you next write" } else { "in card copies when you next write, and in the music files with \"write corrected tags\"" };
         muted(ui, "cover will be added to the songs' tags ·").on_hover_text(format!("{name}: {when}"));
-        if super::widgets::link(ui, "don't").on_hover_text("keep the songs as they are").clicked() {
+        if super::widgets::link(ui, "Don't").on_hover_text("keep the songs as they are").clicked() {
             let album = app.index.artists.iter().flat_map(|a| &a.albums).find(|al| al.tracks.contains(&ti));
             let songs = album.map(|al| al.tracks.clone()).unwrap_or_else(|| vec![ti]);
             app.drop_cover(&songs);
@@ -177,16 +177,18 @@ fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     }
     muted(ui, format!("cover from {}, not in the songs' tags ·", text::shorten(&name, 28)));
     let hint = "Embed this image as the cover of the album's songs (resized to 600 px JPEG). Most players, the Echo Mini's stock firmware among them, show embedded covers, not image files in the folder.";
-    if super::widgets::link(ui, "add it").on_hover_text(hint).clicked() {
+    if super::widgets::link(ui, "Add it").on_hover_text(hint).clicked() {
         app.add_cover(ti, file);
     }
 }
 
-/// Space, ←/→ seek 10 s, N/P for next/previous, unless typing in a field.
+/// Space, ←/→ seek 10 s, N/P for next/previous, unless typing in a field. While a control
+/// has the keyboard's focus (Tab), Space presses it and the arrows move between controls.
 fn keyboard(app: &mut App, ui: &Ui, st: &Status, len: Duration) {
     if ui.ctx().egui_wants_keyboard_input() {
         return;
     }
+    let focused = ui.ctx().memory(|m| m.focused().is_some());
     let (space, left, right, n, prev) = ui.input(|i| {
         (
             i.key_pressed(egui::Key::Space),
@@ -196,13 +198,13 @@ fn keyboard(app: &mut App, ui: &Ui, st: &Status, len: Duration) {
             i.key_pressed(egui::Key::P),
         )
     });
-    if space {
+    if space && !focused {
         app.audio.toggle();
     }
-    if left {
+    if left && !focused {
         app.audio.seek(st.pos.saturating_sub(Duration::from_secs(10)));
     }
-    if right {
+    if right && !focused {
         app.audio.seek((st.pos + Duration::from_secs(10)).min(len));
     }
     if n {

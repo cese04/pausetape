@@ -2,7 +2,7 @@
 //! `crate::ui`; this module owns the data, starts background work and folds its results back in.
 //!
 //! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `edit` (tags
-//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `cards` (noticing cards plugged in), `writes` (card writes, reorganising, playlists), `playback`, and `events`
+//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `cards` (noticing cards plugged in), `writes` (card writes, reorganising, playlists), `undo` (taking back changes to playlists and to what goes on the card), `playback`, and `events`
 //! (the per-frame message pump).
 
 mod add;
@@ -14,6 +14,7 @@ mod events;
 mod music;
 mod playback;
 mod testcard;
+mod undo;
 mod writes;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -30,6 +31,7 @@ pub use add::Adding;
 pub use browse::{AlbumRow, SortBy};
 pub use covers::FoundCover;
 pub use edit::{Shared, TagEdit};
+pub use undo::Undo;
 
 use crate::audio::{self, Audio};
 use crate::card::playlist::{self, Playlist};
@@ -227,6 +229,15 @@ pub struct CardState {
     pub planned_bytes: u64,
 }
 
+/// A change that can't be undone, waiting for a yes.
+#[derive(Clone)]
+pub enum Confirm {
+    /// Deleting a card setup, by id: its record of the files it put on the card goes with it.
+    DeleteWrite(String),
+    /// Forgetting the tags the library database keeps, so every file is read again.
+    ForgetTags,
+}
+
 /// Files a card operation couldn't handle, and where the full list was saved.
 pub struct Problems {
     pub what: String,
@@ -277,6 +288,19 @@ pub struct App {
     pub test_card: Option<Vec<(card::Sample, Result<(), String>)>>,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
+    /// Changes to playlists and to what goes on the card, latest last, for ⌘Z.
+    pub undo_stack: Vec<Undo>,
+    /// The notice about the latest of them, which offers "undo" while it's showing.
+    pub undo_notice: Option<String>,
+    /// A dialog asking before a change that can't be undone.
+    pub confirm: Option<Confirm>,
+    /// ⌘F was pressed: the open tab's search box takes the keyboard on its next frame.
+    pub focus_search: bool,
+    /// A song or album row (album table position) chosen from the keyboard, to scroll into view.
+    pub scroll_to_song: Option<usize>,
+    pub album_scroll_to: Option<usize>,
+    /// The album table rows drawn last frame, to tell whether one is in view.
+    pub album_rows_shown: std::ops::Range<usize>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     mb: Option<(String, musicbrainz::Client)>,
@@ -390,6 +414,13 @@ impl App {
             test_card: None,
             busy: None,
             notices: Vec::new(),
+            undo_stack: Vec::new(),
+            undo_notice: None,
+            confirm: None,
+            focus_search: false,
+            scroll_to_song: None,
+            album_scroll_to: None,
+            album_rows_shown: 0..0,
             tx,
             rx,
             mb: None,

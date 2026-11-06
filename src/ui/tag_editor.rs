@@ -25,16 +25,16 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
             ui.label(RichText::new(format!("{} selected", plural(app.selected.len(), "song"))).color(ink.text));
             ui.add_space(S1);
             let songs: Vec<usize> = app.selected.iter().copied().collect();
-            if widgets::icon_link(ui, Icon::Rename, "edit their tags").clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "Edit their tags").on_hover_text(ui.ctx().format_shortcut(&super::keys::EDIT_TAGS)).clicked() {
                 actions.push(Action::EditTags(songs.clone()));
             }
-            if widgets::icon_link(ui, Icon::Play, "play them").clicked() {
+            if widgets::icon_link(ui, Icon::Play, "Play them").clicked() {
                 actions.push(Action::Play(songs, 0));
             }
-            if widgets::icon_link(ui, Icon::Close, "clear").on_hover_text("or press Esc").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Clear").on_hover_text("or press Esc").clicked() {
                 actions.push(Action::ClearSelection);
             }
-            help(ui, "⌘-click adds or removes a song, shift-click a run of songs.");
+            help(ui, "Click a song to select it alone, ⌘-click to add or remove one, shift-click for a run; double-click plays.");
         });
     });
     ui.add_space(S1);
@@ -99,7 +99,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text("or ⌘-Return").clicked() {
                 save = true;
             }
-            if widgets::button_with(ui, Icon::Close, "Cancel").on_hover_text("or Esc").clicked() {
+            if widgets::button(ui, "Cancel").on_hover_text("or Esc").clicked() {
                 cancel = true;
             }
         });

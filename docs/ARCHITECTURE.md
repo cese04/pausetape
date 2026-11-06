@@ -111,6 +111,7 @@ src/
 │   ├── cards.rs       noticing cards plugged in by their label; refusing another setup's card
 │   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
+│   ├── undo.rs        ⌘Z: taking back changes to playlists and to what goes on the card (not to files)
 │   ├── playback.rs    play queue, waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
@@ -129,6 +130,9 @@ src/
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     ├── albums.rs      the library as a sortable table of albums
     ├── player_test.rs the dialog for testing the card's player
+    ├── confirm.rs     asking before a change that can't be undone (deleting a card setup, forgetting stored tags)
+    ├── keys.rs        keyboard shortcuts: the keys, when they're listened for, the list in Settings
+    ├── menu.rs        the right-click menu on music, the same on artists, albums, songs and playlists' songs
     └── screenshots.rs debug-only screenshot demo (PAUSETAPE_SHOT)
 ```
 
@@ -172,7 +176,7 @@ App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
 ## Safety rules the code keeps
 
 - The **music folder is read-only** unless the user runs *Reorganise* (with preview and undo),
-  *write corrected tags to source files*, *add music* (copies into `Added`), or moves extra
+  *write corrected tags to source files*, *Add music…* (copies into `Added`), or moves extra
   copies to the Trash (only while the copy that stays is there; recoverable from the Trash).
 - A **card write never deletes a file it didn't create**, and not even those if the size
   changed since. *Take over the card* only moves files on the card (with an undo record), on
