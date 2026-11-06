@@ -324,7 +324,8 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 21p. Details panel › **Lyrics**, with an album playing: the song's lyrics from LRCLIB (or a
     `.lrc` beside it, or its tags), the line being sung in the accent and kept in view; a click
     on a line goes there; above the words, whether they're in time. Before the first line and
-    in a solo, three dots fill and count down (*the words start in 0:23*); unsynced lyrics say
+    in a solo, three dots fill in the accent; a break of a minute or more also counts down
+    (*the words start in 5:12*; try Dream Theater's *Octavarium*). Unsynced lyrics say
     *Words only*. The arrows show the album's other songs (not in time). A song with
     none says so, with *Try again*. *Find lyrics for the whole album* (or right-click › Find
     lyrics) fetches them ahead, counted in the status bar. Offline, lyrics found before still

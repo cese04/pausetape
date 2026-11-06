@@ -70,12 +70,15 @@ impl Lyrics {
     }
 }
 
-/// Nothing new sung for this long after a line starts: a break is shown.
-const BREAK_AFTER: Duration = Duration::from_secs(10);
+/// Nothing new sung for this long after a line starts: a break is shown (a slow verse, its lines
+/// long drawn out, isn't one).
+const BREAK_AFTER: Duration = Duration::from_secs(15);
 /// How long a line is taken to be sung for, when nothing marks where it ends.
-const SUNG_FOR: Duration = Duration::from_secs(5);
+const SUNG_FOR: Duration = Duration::from_secs(8);
 /// Breaks shorter than this aren't shown: a breath between lines.
 const SHORTEST_BREAK: Duration = Duration::from_secs(4);
+/// A break this long is told in words (how long, and how long left); a shorter one is its dots.
+pub const LONG_BREAK: Duration = Duration::from_secs(60);
 
 /// A line sung from `at`, or a break where none is (`words` None); it lasts until the next.
 #[derive(Clone, Debug, PartialEq)]
@@ -263,7 +266,7 @@ mod tests {
         let l = Lyrics::from_text("[00:20]a\n[00:22]b\n[00:50]c\n[00:53]\n[01:10]d\n[01:12]\n[01:14]e", Source::Lrclib).unwrap();
         let s = l.stretches(Duration::from_secs(120));
         let got: Vec<(u64, Option<&str>)> = s.iter().map(|s| (s.at.as_secs(), s.words.as_deref())).collect();
-        assert_eq!(got, [(0, None), (20, Some("a")), (22, Some("b")), (27, None), (50, Some("c")), (53, None), (70, Some("d")), (74, Some("e")), (79, None)]);
+        assert_eq!(got, [(0, None), (20, Some("a")), (22, Some("b")), (30, None), (50, Some("c")), (53, None), (70, Some("d")), (74, Some("e")), (82, None)]);
         assert_eq!(stretch_at(&s, Duration::from_secs(10)), Some(0), "the intro is under way");
     }
 

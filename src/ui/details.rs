@@ -345,7 +345,10 @@ fn in_time(app: &mut App, ui: &mut Ui, l: &crate::lyrics::Lyrics, t: usize, play
                     (false, _, true) => format!("{long} to the end, without words"),
                     (false, ..) => format!("{long} without words"),
                 };
-                pause_row(ui, done, sung, &words, playing)
+                // A short one is its dots (its length when pointed at); a long one says it.
+                let told = end.saturating_sub(part.at) >= crate::lyrics::LONG_BREAK;
+                let r = pause_row(ui, done, sung, told.then_some(words.as_str()), playing);
+                if told { r } else { r.on_hover_text(format!("{long} without words")) }
             }
         };
         if playing {
@@ -362,8 +365,8 @@ fn in_time(app: &mut App, ui: &mut Ui, l: &crate::lyrics::Lyrics, t: usize, play
 }
 
 /// A break in the lyrics: three dots, filled in the accent as it goes by (`done`, while it's
-/// under way), and what it is in words beside them.
-fn pause_row(ui: &mut Ui, done: Option<f32>, sung: bool, words: &str, playing: bool) -> egui::Response {
+/// under way), and what it is in words beside them, if it's told.
+fn pause_row(ui: &mut Ui, done: Option<f32>, sung: bool, words: Option<&str>, playing: bool) -> egui::Response {
     let ink = ink(ui);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), if playing { Sense::click() } else { Sense::hover() });
     let p = ui.painter();
@@ -371,16 +374,18 @@ fn pause_row(ui: &mut Ui, done: Option<f32>, sung: bool, words: &str, playing: b
     for k in 0..3 {
         let c = egui::pos2(rect.left() + 4.0 + 10.0 * k as f32, y);
         let color = match done {
-            Some(d) => ink.muted.lerp_to_gamma(ink.accent, (d * 3.0 - k as f32).clamp(0.0, 1.0)),
+            // Under way, all three in the accent from the start, faint until they fill.
+            Some(d) => ink.accent.gamma_multiply(0.35).lerp_to_gamma(ink.accent, (d * 3.0 - k as f32).clamp(0.0, 1.0)),
             None if sung => ink.faint,
             None => ink.muted,
         };
         p.circle_filled(c, 2.5, color);
     }
-    let color = if done.is_some() { ink.accent } else { ink.muted };
-    let x = rect.left() + 34.0;
-    let g = p.layout_no_wrap(words.to_string(), FontId::proportional(12.5), color);
-    p.galley(egui::pos2(x, y - g.size().y / 2.0), g, color);
+    if let Some(words) = words {
+        let color = if done.is_some() { ink.accent } else { ink.muted };
+        let g = p.layout_no_wrap(words.to_string(), FontId::proportional(12.5), color);
+        p.galley(egui::pos2(rect.left() + 34.0, y - g.size().y / 2.0), g, color);
+    }
     resp
 }
 

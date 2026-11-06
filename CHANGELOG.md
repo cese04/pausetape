@@ -1071,10 +1071,12 @@ Calibre's device view, for music: the library is where you choose what goes on t
   lyrics (*Play it* to have them in time).
 - **In time or not, said first**: above the words, *In time · click a line to go to it*, *In
   time while it plays*, or *Words only: these aren't in time with the song*.
-- **Where nothing is sung** (the intro, a solo, the end) a break shows: three dots and how long
-  it lasts. Under way, the dots fill in the accent and it counts down: *the words start in
-  0:23*, *the next line in 0:07*. A break is where an empty LRC line marks one, or 5 seconds
-  into a line when the next is more than 10 away; under 4 seconds, none is shown.
+- **Where nothing is sung** (the intro, a solo, the end) a break shows as three dots; under way,
+  they're in the accent and fill as it goes. A break of a minute or more also says how long it
+  lasts, and under way counts down: *the words start in 5:12*, *the next line in 2:41*. A
+  shorter one is only its dots (its length when pointed at), so songs with many short breaks
+  stay quiet. A break is where an empty LRC line marks one, or 8 seconds into a line when the
+  next is more than 15 away (a slow verse isn't one); under 4 seconds, none is shown.
 - **Where they come from:** the song's own first (a `.lrc` file with its name beside it, or the
   lyrics in its tags), else **LRCLIB** (lrclib.net, an open lyrics database matched by artist,
   title, album and length within 2 seconds, then by artist and title within 3). The panel says
