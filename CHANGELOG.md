@@ -938,3 +938,14 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - In the library by artist, an album's commands (*Play*, *Find cover*, *Look up*, *Edit tags*,
   *Send to the card*…) were drawn over its title and state in a narrow window. Where they
   don't fit beside them, they go on a line of their own under the title, in the same order.
+
+### 80. Covers in BMP, GIF or WebP; a way to find one where none shows (2026-11-05)
+- Some taggers embed the cover as a BMP (or GIF, or WebP); Pausetape read only JPEG and PNG.
+  Such an album showed its initial in the player and, since its songs do have a picture, the
+  library didn't count it as without a cover, so *Find cover* wasn't offered anywhere. Those
+  formats are now read (shown, and made a JPEG when embedded in copies).
+- An embedded picture that still can't be read (damaged) gives way to an image in the album's
+  folder, as when there's none embedded.
+- When the player has no cover to show, it says so and offers **Find cover** beside the queue,
+  where the missing cover is noticed: it looks in the album's folder, then on the Cover Art
+  Archive, as *Find cover* in the library does.

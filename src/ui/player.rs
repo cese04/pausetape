@@ -328,7 +328,27 @@ fn up_next(app: &mut App, ui: &mut Ui) {
 fn cover_suggestion(app: &mut App, ui: &mut Ui) {
     let Some(ti) = app.current() else { return };
     let t = &app.tracks[ti];
-    let Some(file) = app.cover.as_ref().filter(|(p, tex, _)| *p == t.path && tex.is_some()).and_then(|(_, _, f)| f.clone()) else { return };
+    // Looked for and nothing to show (none in the songs or beside them, or one that can't be
+    // read): offer to find one, here where it's missed.
+    let shown = app.cover.as_ref().filter(|(p, ..)| *p == t.path);
+    if shown.is_some_and(|(_, tex, _)| tex.is_none()) {
+        if app.busy.is_some() {
+            return;
+        }
+        let Some(&album) = app.albums_of(&[ti].into()).first() else { return };
+        ui.add_space(S2);
+        let link_w = super::widgets::text_width(ui, "Find cover", 13.5) + S2;
+        if ui.available_width() >= link_w + 120.0 {
+            let words = "no cover to show ·";
+            super::widgets::fitted(ui, RichText::new(words).color(ink(ui).muted), ui.available_width() - link_w, Sense::hover());
+        }
+        let hint = "Looks in the album's folder, then on the Cover Art Archive (MusicBrainz). What's found is added to the songs at the next Sync, and to the files with \"write corrected tags\".";
+        if ui.available_width() >= link_w && super::widgets::link(ui, "Find cover").on_hover_text(hint).clicked() {
+            app.find_covers(vec![album]);
+        }
+        return;
+    }
+    let Some(file) = shown.filter(|(_, tex, _)| tex.is_some()).and_then(|(_, _, f)| f.clone()) else { return };
     let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     ui.add_space(S2);
     // The words, shortened to the room there is, then the link; with too little room for words,
