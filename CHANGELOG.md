@@ -1092,3 +1092,9 @@ Calibre's device view, for music: the library is where you choose what goes on t
   asking, as LRCLIB asks.
 - **Kept**: in the library database, found or not found, so they show offline after and nothing
   is asked twice. The music folder isn't touched, and nothing goes on the card for now.
+
+### 92. The details panel's cover follows a found one (2026-11-06)
+- A cover found (*Find cover*), added from the playing song's folder, dropped, or written into
+  the files showed in the player but not in the details panel, which kept the cover it had
+  first loaded for the album. Both are now looked up again whenever their songs' cover changes,
+  the one shown kept until the new one is ready.

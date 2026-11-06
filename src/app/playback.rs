@@ -158,7 +158,23 @@ impl App {
             return;
         }
         self.detail_cover = Some((p.to_path_buf(), None));
-        let p = p.to_path_buf();
+        self.load_detail_cover(p.to_path_buf());
+    }
+
+    /// These songs' cover changed (found, added, dropped, written into them): the player's and
+    /// the details panel's are looked up again, what's shown kept until the new one comes.
+    pub(super) fn covers_changed(&mut self, songs: &[usize]) {
+        if let Some(c) = self.current().filter(|c| songs.contains(c)) {
+            self.load_cover(self.tracks[c].path.clone());
+        }
+        if let Some((p, _)) = &self.detail_cover
+            && songs.iter().any(|&i| self.tracks[i].path == *p)
+        {
+            self.load_detail_cover(p.clone());
+        }
+    }
+
+    fn load_detail_cover(&mut self, p: std::path::PathBuf) {
         let pending = self.tracks.iter().find(|t| t.path == p).and_then(|t| t.cover.clone());
         self.spawn(move |tx| {
             let rgba = match pending {

@@ -109,9 +109,7 @@ impl App {
             self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
         }
         self.write_preview = None;
-        if let Some(c) = self.current().filter(|c| touched.contains(c)) {
-            self.load_cover(self.tracks[c].path.clone());
-        }
+        self.covers_changed(&touched);
         let mut s = format!("{}covers for {}", if stopped { "stopped: " } else { "" }, plural_albums(from_folder + from_archive));
         let mut from = Vec::new();
         if from_folder > 0 {
@@ -143,9 +141,7 @@ impl App {
             self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
         }
         self.write_preview = None;
-        if let Some(c) = self.current().filter(|c| tracks.contains(c)) {
-            self.load_cover(self.tracks[c].path.clone());
-        }
+        self.covers_changed(tracks);
     }
 }
 
