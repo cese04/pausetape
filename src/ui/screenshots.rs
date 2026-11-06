@@ -156,8 +156,10 @@ impl Shooter {
                 let long = "writing /Volumes/Elements/Music/Lamp - 東京ユートピア通信 (2011)/03 - Jesus bleibet meine Freude [Herz und Mund und Tat und Leben BWV 147].mp3: Permission denied (os error 13)";
                 app.problems = Some(crate::app::Problems { what: "writing tags".into(), list: vec![long.to_string(); 3], log: None });
             }
-            // PAUSETAPE_SHOT_LYRICS=1: the details panel on the lyrics.
+            // PAUSETAPE_SHOT_LYRICS=1: the details panel on the lyrics (=unfollowed: as if
+            // scrolled by hand, not following the song).
             app.details_lyrics = std::env::var_os("PAUSETAPE_SHOT_LYRICS").is_some();
+            app.lyrics_follow = std::env::var("PAUSETAPE_SHOT_LYRICS").map_or(true, |v| v != "unfollowed");
             // PAUSETAPE_SHOT_CARD_SETUP=1: the card's view on its setup rather than its albums.
             app.card_setup_open = std::env::var_os("PAUSETAPE_SHOT_CARD_SETUP").is_some();
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.

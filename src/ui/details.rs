@@ -48,22 +48,79 @@ fn about(app: &App) -> About {
     }
 }
 
+/// What an album's panel showed, for what's pinned over it.
+struct Shown {
+    title: String,
+    /// Where *Songs | Lyrics* are, on the screen.
+    tabs: egui::Rect,
+    /// Lyrics in time with the song playing.
+    in_time: bool,
+}
+
 /// The panel's contents, in a column `WIDTH` wide.
 pub fn show(app: &mut App, ui: &mut Ui, actions: &mut Vec<Action>) {
     let ink = ink(ui);
     let width = ui.available_width();
-    ScrollArea::vertical().id_salt("details").auto_shrink([false, false]).show(ui, |ui| {
+    let top_id = egui::Id::unique("details back to the top");
+    let mut area = ScrollArea::vertical().id_salt("details").auto_shrink([false, false]);
+    if ui.data_mut(|d| d.remove_temp::<bool>(top_id)).is_some() {
+        area = area.vertical_scroll_offset(0.0);
+    }
+    let out = area.show(ui, |ui| {
         ui.set_width(width);
         ui.set_max_width(width);
         match about(app) {
-            About::Album(a, b, playing) => album(app, ui, a, b, playing, actions),
-            About::Several(albums) => several(app, ui, &albums, actions),
+            About::Album(a, b, playing) => Some(album(app, ui, a, b, playing, actions)),
+            About::Several(albums) => {
+                several(app, ui, &albums, actions);
+                None
+            }
             About::Nothing => {
                 ui.add_space(S3);
                 ui.label(RichText::new("Select an album to see it here: its cover, its songs, and where it stands with the card.").color(ink.muted));
+                None
             }
         }
     });
+    let Some(shown) = out.inner else { return };
+    let area = out.inner_rect;
+    // Scrolled by hand (the wheel, or the scroll bar held): the lyrics stop pulling it back.
+    let wheel = ui.rect_contains_pointer(area) && ui.input(|i| i.smooth_scroll_delta.y != 0.0);
+    let bar = ui.input(|i| i.pointer.primary_down() && i.pointer.press_origin().is_some_and(|p| area.contains(p) && p.x > area.right() - S2));
+    if app.details_lyrics && (wheel || bar) {
+        app.lyrics_follow = false;
+    }
+    // Once *Songs | Lyrics* is scrolled away, the album and they stay at the top: a way back up
+    // that the lyrics, following the song down, don't fight.
+    if shown.tabs.top() < area.top() {
+        let strip = egui::Rect::from_min_size(area.min, vec2(area.width(), ROW + S1));
+        ui.painter().rect_filled(strip, 0.0, ink.bg);
+        ui.painter().hline(strip.x_range(), strip.bottom(), egui::Stroke::new(1.0, ink.faint));
+        let mut pinned = ui.new_child(egui::UiBuilder::new().max_rect(strip).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let tabs_w = widgets::text_width(&pinned, "Songs", 15.5) + S2 + widgets::text_width(&pinned, "Lyrics", 15.5) + S1;
+        let up = widgets::icon_button(&mut pinned, Icon::Up, "Back to the top of the album").clicked();
+        let w = pinned.available_width() - tabs_w - S2;
+        let title = widgets::fitted(&mut pinned, RichText::new(&shown.title).italics().size(15.0).color(ink.text), w, Sense::click()).on_hover_text("back to the top of the album").on_hover_cursor(egui::CursorIcon::PointingHand);
+        if up || title.clicked() {
+            ui.data_mut(|d| d.insert_temp(top_id, true));
+            app.lyrics_follow = false;
+        }
+        pinned.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(S1);
+            tabs(app, ui, true);
+        });
+    }
+    // Not following: a way back to the line being sung, at the foot of the panel.
+    if app.details_lyrics && shown.in_time && !app.lyrics_follow {
+        let words = "Follow the song";
+        let w = S2 + super::layout::ICON + S1 + widgets::text_width(ui, words, 14.5) + S2;
+        let at = egui::Rect::from_center_size(egui::pos2(area.center().x, area.bottom() - S2 - super::layout::CONTROL / 2.0), vec2(w, super::layout::CONTROL));
+        let mut foot = ui.new_child(egui::UiBuilder::new().max_rect(at));
+        if widgets::primary_with(&mut foot, Icon::Down, words).on_hover_text("back to the line being sung, and keep it in view").clicked() {
+            app.lyrics_follow = true;
+            ui.data_mut(|d| d.remove_temp::<Option<usize>>(egui::Id::unique("lyrics line followed")));
+        }
+    }
 }
 
 /// The same, as a sheet over the page.
@@ -87,7 +144,23 @@ pub fn sheet(app: &mut App, ui: &mut Ui) {
     super::actions::apply(app, actions);
 }
 
-fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, actions: &mut Vec<Action>) {
+/// *Songs | Lyrics*: `reversed` when laid out right to left.
+fn tabs(app: &mut App, ui: &mut Ui, reversed: bool) {
+    let order = if reversed { [true, false] } else { [false, true] };
+    for (n, lyrics) in order.into_iter().enumerate() {
+        if n > 0 {
+            ui.add_space(S2);
+        }
+        let r = widgets::tab(ui, if lyrics { "Lyrics" } else { "Songs" }, app.details_lyrics == lyrics);
+        let r = if lyrics { r.on_hover_text("the words of the song playing (in time), or of another of the album's") } else { r };
+        if r.clicked() {
+            app.details_lyrics = lyrics;
+            app.lyrics_follow = true;
+        }
+    }
+}
+
+fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, actions: &mut Vec<Action>) -> Shown {
     let ink = ink(ui);
     let artist = &app.index.artists[ai];
     let al = &artist.albums[bi];
@@ -185,19 +258,12 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
     }
     ui.add_space(S2);
     // Its songs, or one song's lyrics.
-    row(ui, |ui| {
-        if widgets::tab(ui, "Songs", !app.details_lyrics).clicked() {
-            app.details_lyrics = false;
-        }
-        ui.add_space(S2);
-        if widgets::tab(ui, "Lyrics", app.details_lyrics).on_hover_text("the words of the song playing (in time), or of another of the album's").clicked() {
-            app.details_lyrics = true;
-        }
-    });
+    let tabs_at = row(ui, |ui| tabs(app, ui, false)).response.rect;
     ui.add_space(S1);
+    let mut shown = Shown { title, tabs: tabs_at, in_time: false };
     if app.details_lyrics {
-        lyrics(app, ui, &tracks, actions);
-        return;
+        shown.in_time = lyrics(app, ui, &tracks, actions);
+        return shown;
     }
     let current = app.current();
     for (pos, &t) in tracks.iter().enumerate() {
@@ -221,11 +287,13 @@ fn album(app: &mut App, ui: &mut Ui, ai: usize, bi: usize, playing: bool, action
         }
         resp.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Songs(vec![t]), actions, |_, _| {}));
     }
+    shown
 }
 
 /// One of the album's songs' lyrics: the song playing (following the singing, a click on a
 /// line going there), else the one chosen with the arrows, the one selected, or the first.
-fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action>) {
+/// Whether they're in time with the song playing.
+fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action>) -> bool {
     let ink = ink(ui);
     let current = app.current().filter(|c| tracks.contains(c));
     let selected = tracks.iter().copied().find(|t| app.selected.contains(t));
@@ -251,7 +319,7 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
     });
     ui.add_space(S1);
     let state = app.lyrics_of(t).clone();
-    let mut again = false;
+    let (mut again, mut in_time_now) = (false, false);
     match state {
         LyricsState::Looking => {
             row(ui, |ui| {
@@ -290,6 +358,7 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
                 ui.add(egui::Label::new(RichText::new(&l.plain).size(14.5).color(ink.text)).wrap());
             } else {
                 in_time(app, ui, &l, t, playing);
+                in_time_now = playing;
             }
             ui.add_space(S1);
             let from = match l.source {
@@ -312,6 +381,11 @@ fn lyrics(app: &mut App, ui: &mut Ui, tracks: &[usize], actions: &mut Vec<Action
     if app.busy.is_none() && widgets::icon_link(ui, Icon::Search, "Find lyrics for the whole album").on_hover_text("ahead of time, kept to read offline").clicked() {
         actions.push(Action::FindLyrics(tracks.to_vec()));
     }
+    if in_time_now {
+        // Room below, so *Follow the song* never sits over the last lines.
+        ui.add_space(super::layout::CONTROL + S3);
+    }
+    in_time_now
 }
 
 /// Synced lyrics, line by line, with the breaks where nothing is sung. Playing, the line being
@@ -355,8 +429,9 @@ fn in_time(app: &mut App, ui: &mut Ui, l: &crate::lyrics::Lyrics, t: usize, play
             let r = r.on_hover_cursor(egui::CursorIcon::PointingHand);
             if r.clicked() {
                 app.audio.seek(part.at);
+                app.lyrics_follow = true;
             }
-            if now == Some(i) && followed != Some(i) {
+            if app.lyrics_follow && now == Some(i) && followed != Some(i) {
                 r.scroll_to_me(Some(egui::Align::Center));
                 ui.data_mut(|d| d.insert_temp(follow_id, Some(i)));
             }

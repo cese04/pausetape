@@ -402,6 +402,9 @@ pub struct App {
     /// The details panel shows lyrics rather than the songs, and of which song.
     pub details_lyrics: bool,
     pub lyrics_song: Option<usize>,
+    /// The panel keeps the line being sung in view: until the panel is scrolled by hand, and
+    /// again on *Follow the song*, a click on a line, or the next song.
+    pub lyrics_follow: bool,
     pub renaming: Option<(usize, String)>,
     /// UI-thread connection to the library database (scans open their own).
     pub db: Option<Db>,
@@ -442,6 +445,7 @@ impl App {
             lyrics_tx: None,
             details_lyrics: false,
             lyrics_song: None,
+            lyrics_follow: true,
             filter: String::new(),
             duplicates_only: false,
             look_alikes_only: false,

@@ -1077,6 +1077,10 @@ Calibre's device view, for music: the library is where you choose what goes on t
   shorter one is only its dots (its length when pointed at), so songs with many short breaks
   stay quiet. A break is where an empty LRC line marks one, or 8 seconds into a line when the
   next is more than 15 away (a slow verse isn't one); under 4 seconds, none is shown.
+- **The panel doesn't fight back**: once *Songs | Lyrics* is scrolled away, the album's title
+  and the two tabs stay pinned at the top (the title, or ↑, goes back up). Scrolling the panel
+  by hand stops it following the singing; *Follow the song*, at its foot, takes it back to the
+  line being sung (as does a click on a line, or the next song).
 - **Where they come from:** the song's own first (a `.lrc` file with its name beside it, or the
   lyrics in its tags), else **LRCLIB** (lrclib.net, an open lyrics database matched by artist,
   title, album and length within 2 seconds, then by artist and title within 3). The panel says

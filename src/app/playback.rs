@@ -38,6 +38,7 @@ impl App {
             self.qpos = i;
             // The lyrics follow the song that's begun, not one chosen before it.
             self.lyrics_song = None;
+            self.lyrics_follow = true;
             self.show_current();
         }
     }
