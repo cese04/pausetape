@@ -50,7 +50,6 @@ impl App {
         CardFacts { on, changing, better, chosen: chosen || planned }
     }
 
-    /// What the search box looks at in album `bi` of artist `ai`.
     /// The albums (artist, album) these songs belong to, in library order.
     pub fn albums_of(&self, songs: &BTreeSet<usize>) -> Vec<(usize, usize)> {
         let mut out = Vec::new();
@@ -81,6 +80,7 @@ impl App {
         self.card_albums(&albums, on);
     }
 
+    /// What the search box looks at in album `bi` of artist `ai`.
     pub fn album_facts(&self, ai: usize, bi: usize) -> AlbumFacts<'_> {
         let a = &self.index.artists[ai];
         let al = &a.albums[bi];

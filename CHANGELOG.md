@@ -955,3 +955,18 @@ Calibre's device view, for music: the library is where you choose what goes on t
   time, the volume and the end of the cover note were pushed off its right edge. The time now
   keeps its place, and the title, then artist · album · year, shorten with "…" to the room
   there is (whole on hover).
+
+### 82. A sidebar in place of the tabs (2026-11-05)
+- The tabs across the top are gone. A sidebar on the left holds the whole app, as Calibre's
+  tag browser does: the music folder (a menu to change it, rescan it or add music), the
+  library's two views (**Albums**, **Artists**, with how many), **Review** (what's worth a look:
+  albums without a cover, duplicates, artists that look alike, damaged files, corrections not
+  yet in the files; only what there is, with how many), saved **Searches** (right-click to
+  forget one), **Playlists** (and *New playlist*), the **Card** (with how many albums the next
+  Sync changes), and **Settings** at the foot. What's shown is filled in with the accent's tint.
+  In a window narrower than 900 points it keeps only its icons, their names on hover.
+- **The search box is in the top bar**, beside the app's name, with *Filters* and *Save*: it
+  searches the library from anywhere (typing opens the library).
+- The library's page starts with what it shows ("Albums", "Without a cover", "Searching
+  “format:flac”"), and *Collapse all* or *Write N corrected tags* where they apply. The chips
+  that led to what's worth a look became the sidebar's Review.

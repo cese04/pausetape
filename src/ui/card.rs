@@ -1295,3 +1295,9 @@ fn rename_widget(ui: &mut Ui, renaming: &Option<(bool, String, String)>, is_arti
         }
     }
 }
+
+/// How many albums the next Sync adds, swaps or takes off, for the sidebar.
+pub fn pending_count(app: &App) -> usize {
+    let s = &app.card_state;
+    s.added + s.replaced + s.removed
+}

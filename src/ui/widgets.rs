@@ -107,26 +107,6 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
     resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(label)
 }
 
-/// A tab in the top bar: icon and name in a pill, filled when it's the open one. Without
-/// `show_name` (a narrow window) only the icon is drawn; the name is still its tooltip and
-/// what screen readers say.
-pub fn nav_tab(ui: &mut Ui, icon: Icon, text: &str, show_name: bool, active: bool) -> Response {
-    let ink = ink(ui);
-    let galley = ui.painter().layout_no_wrap(if show_name { text.to_string() } else { String::new() }, FontId::proportional(15.0), Color32::PLACEHOLDER);
-    let words = if show_name { S1 + galley.size().x } else { 0.0 };
-    let (rect, resp) = ui.allocate_exact_size(vec2(S2 + ICON + words + S2, CONTROL), Sense::click());
-    resp.widget_info(|| WidgetInfo::selected(Role::Tab, ui.is_enabled(), active, text));
-    focus_ring(ui, &resp, rect, rect.height() / 2.0);
-    // The open tab's pill takes a hint of the accent, and its icon the accent itself.
-    let fill = if active { ink.chip.lerp_to_gamma(ink.accent, 0.12) } else if hot(&resp) { ink.hover } else { Color32::TRANSPARENT };
-    ui.painter().rect_filled(rect, rect.height() / 2.0, fill);
-    let color = if active || hot(&resp) { ink.text } else { ink.muted };
-    let y = rect.center().y;
-    icon_at(ui, rect.left() + S2, y, 0.5, icon, if active { ink.accent } else { color });
-    words_at(ui, rect.left() + S2 + ICON + S1, y, galley, color);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
 /// A fact that leads somewhere: icon and text in an outlined pill.
 pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) -> Response {
     let ink = ink(ui);

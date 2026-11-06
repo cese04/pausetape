@@ -20,6 +20,7 @@ mod playlists;
 #[cfg(debug_assertions)]
 pub mod screenshots;
 mod settings;
+mod sidebar;
 mod tag_editor;
 pub mod text;
 pub mod theme;
@@ -32,15 +33,15 @@ use text::plural;
 use theme::ink;
 use icons::Icon;
 use widgets::hairline_progress;
-use layout::{CONTROL, ICON, S1, S2, S3, S4, S5, margin, row};
+use layout::{CONTROL, ICON, S1, S2, S4, S5, margin, row};
 
 const MAX_W: f32 = 820.0;
 
 const ROW_H: f32 = layout::ROW;
 
-/// The panels, top to bottom: the tab bar; a strip for work under way and the latest notice;
-/// the open tab; the player. The tab bar and the player are the app's frame: tinted and ruled
-/// off, so they never read as content. Everything inside keeps to the page's side margin.
+/// The panels: the top bar (name and search); at the foot, the status bar and above it the
+/// player; the sidebar on the left; the open view in the rest. The bars, the sidebar and the
+/// player are the app's frame: tinted and ruled off, so they never read as content.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     keys::global(app, ui);
@@ -56,6 +57,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let r = egui::Panel::bottom("player").frame(chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 })).show_separator_line(false).show(ui, |ui| player::show(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
+    // The sidebar, between the top bar and the player, ruled off from the page.
+    let side_w = if sidebar::narrow(ui.ctx()) { sidebar::NARROW } else { sidebar::WIDE };
+    let r = egui::Panel::left("sidebar").frame(egui::Frame::new().fill(ink.bar)).exact_size(side_w).resizable(false).show_separator_line(false).show(ui, |ui| sidebar::show(app, ui));
+    let edge = r.response.rect;
+    ui.painter().vline(edge.right(), edge.y_range(), Stroke::new(1.0, ink.faint));
     let page = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S2 as i8, bottom: S2 as i8 });
     egui::CentralPanel::default().frame(page).show(ui, |ui| {
         // The library uses the whole width (its A–Z rail belongs at the window's edge); the other
@@ -114,29 +120,32 @@ fn drop_to_add(app: &mut App, ui: &mut Ui) {
     }
 }
 
-/// The tab bar: the app's name, the tabs, and what's running in the background.
+/// The top bar: the app's name, and the search box, which looks through the library from
+/// anywhere (typing in it opens the library).
 fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     row(ui, |ui| {
         cassette::mark(ui, 18.0);
         ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
-        ui.add_space(S3);
-        // In a narrow window only the open tab keeps its name; the others show their icon.
-        let compact = ui.available_width() < 900.0;
-        for (t, icon, name) in [
-            (Tab::Folders, Icon::Folder, "Folders"),
-            (Tab::Library, Icon::Library, "Library"),
-            (Tab::Card, Icon::Card, "Card"),
-            (Tab::Playlists, Icon::Playlists, "Playlists"),
-            (Tab::Settings, Icon::Settings, "Settings"),
-        ] {
-            let active = app.tab == t;
-            if widgets::nav_tab(ui, icon, name, !compact || active, active).on_hover_text(name).clicked() {
-                app.tab = t;
-                // The library tab always opens on the whole library.
-                app.duplicates_only = false;
-                app.look_alikes_only = false;
-            }
+        ui.add_space(S4);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
+        let width = (ui.available_width() * 0.45).clamp(160.0, 420.0);
+        let before = app.filter.clone();
+        let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", width).on_hover_text(crate::library::search::HELP);
+        if app.focus_search && app.tab != Tab::Card {
+            app.focus_search = false;
+            r.request_focus();
+        }
+        if app.filter != before && app.tab != Tab::Library {
+            app.tab = Tab::Library;
+            app.duplicates_only = false;
+            app.look_alikes_only = false;
+        }
+        library::filters_menu(app, ui);
+        let typed = app.filter.trim().to_string();
+        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "Save").on_hover_text("keep this search in the sidebar").clicked() {
+            app.saved.searches.push(typed);
         }
     });
 }
