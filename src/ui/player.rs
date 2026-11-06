@@ -11,7 +11,7 @@ use super::theme::ink;
 use super::widgets::{Media, media_button, muted};
 use crate::app::App;
 use crate::audio::Status;
-use super::layout::{ROW, S1, S2, S4, S5, S6, row};
+use super::layout::{ROW, S1, S2, S3, S4, S5, S6, row};
 
 /// Every transport button sits in a slot this tall, so different sizes share one centre line.
 const SLOT: f32 = S6;
@@ -19,6 +19,15 @@ const SLOT: f32 = S6;
 const WAVE: f32 = S4;
 /// Side of the cover square: the title, the sparkline and the buttons beside it, with their gaps.
 const COVER: f32 = ROW + S1 + WAVE + S1 + SLOT;
+/// The compact player's height, and its cover's side.
+const MINI: f32 = S5;
+/// A window lower than this always has the compact player, so the page keeps most of it.
+const LOW: f32 = 640.0;
+
+/// One line rather than the full player: asked for (a click on the cover), or the window is low.
+pub fn compact(app: &App, ctx: &egui::Context) -> bool {
+    app.saved.compact_player || ctx.content_rect().height() < LOW
+}
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
@@ -27,7 +36,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new(e).color(ink.warn).size(12.0));
     }
     let Some(ti) = app.current() else {
-        muted(ui, "Nothing playing. Click a track in the library.");
+        muted(ui, "Nothing playing. Double-click a song in the library.");
         return;
     };
     let len = st.len.filter(|d| !d.is_zero()).unwrap_or(app.tracks[ti].duration);
@@ -35,27 +44,70 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.ctx().request_repaint_after(Duration::from_millis(200));
     }
 
-    ui.horizontal_top(|ui| {
-        cover_art(app, ui, ti);
-        ui.add_space(S1);
-        ui.vertical(|ui| {
-            title_row(app, ui, ti, &st, len);
-            scrubber(app, ui, ti, &st, len);
-            transport(app, ui, &st, len);
+    if compact(app, ui.ctx()) {
+        compact_row(app, ui, ti, &st, len);
+    } else {
+        ui.horizontal_top(|ui| {
+            cover_art(app, ui, ti, COVER);
+            ui.add_space(S1);
+            ui.vertical(|ui| {
+                title_row(app, ui, ti, &st, len);
+                scrubber(app, ui, ti, &st, len);
+                transport(app, ui, &st, len);
+            });
         });
-    });
+    }
     keyboard(app, ui, &st, len);
 }
 
-fn cover_art(app: &App, ui: &mut Ui, ti: usize) {
+/// The player on one line: cover, title and artist, the buttons, the sparkline, the time, the
+/// queue and the volume.
+fn compact_row(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
     let ink = ink(ui);
-    let (rect, _) = ui.allocate_exact_size(vec2(COVER, COVER), Sense::hover());
+    ui.allocate_ui_with_layout(vec2(ui.available_width(), MINI), Layout::left_to_right(Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = S2;
+        cover_art(app, ui, ti, MINI);
+        let t = &app.tracks[ti];
+        let words_w = (ui.available_width() * 0.25).clamp(100.0, 280.0);
+        ui.allocate_ui_with_layout(vec2(words_w, MINI), Layout::top_down(Align::Min), |ui| {
+            ui.set_width(words_w);
+            ui.spacing_mut().item_spacing.y = 0.0;
+            super::widgets::fitted(ui, RichText::new(t.display_title()).size(15.0).color(ink.text), words_w, Sense::hover());
+            let meta: Vec<String> = [t.artist.clone(), t.album.clone()].into_iter().flatten().collect();
+            super::widgets::fitted(ui, RichText::new(meta.join(" · ")).size(13.0).color(ink.muted), words_w, Sense::hover());
+        });
+        buttons(app, ui, st, S3, S4);
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            volume_control(app, ui, false);
+            queue_button(app, ui, st, len, true);
+            muted(ui, format!("{} / {}", text::duration(st.pos), text::duration(len)));
+            scrubber(app, ui, ti, st, len);
+        });
+    });
+}
+
+fn cover_art(app: &mut App, ui: &mut Ui, ti: usize, side: f32) {
+    let ink = ink(ui);
+    let (rect, resp) = ui.allocate_exact_size(vec2(side, side), Sense::click());
+    // A click on the cover folds the player to one line, or opens it out again.
+    let forced = ui.ctx().content_rect().height() < LOW;
+    let hint = match (app.saved.compact_player, forced) {
+        (_, true) => "The window is too low for the full player",
+        (false, _) => "Fold the player to one line",
+        (true, _) => "Open the player out",
+    };
+    super::widgets::name(ui, &resp, egui::Role::Button, hint);
+    super::widgets::focus_ring(ui, &resp, rect, 3.0);
+    if !forced && resp.clicked() {
+        app.saved.compact_player = !app.saved.compact_player;
+    }
+    resp.on_hover_text(hint).on_hover_cursor(if forced { egui::CursorIcon::Default } else { egui::CursorIcon::PointingHand });
     let t = &app.tracks[ti];
     match app.cover.as_ref().filter(|(p, _, _)| *p == t.path).and_then(|(_, tex, _)| tex.as_ref()) {
         Some(tex) => {
             // Fit inside the square without cropping; most covers are square anyway.
             let size = tex.size_vec2();
-            let scale = (COVER / size.x).min(COVER / size.y);
+            let scale = (side / size.x).min(side / size.y);
             let r = egui::Rect::from_center_size(rect.center(), size * scale);
             egui::Image::new(tex).corner_radius(3.0).paint_at(ui, r);
         }
@@ -63,7 +115,7 @@ fn cover_art(app: &App, ui: &mut Ui, ti: usize) {
             // No art: a quiet square with the album's initial, in the manner of a library card.
             ui.painter().rect(rect, 3.0, ink.hover, Stroke::new(1.0, ink.faint), egui::StrokeKind::Inside);
             let initial = t.album.as_deref().or(t.title.as_deref()).and_then(|s| s.chars().next()).unwrap_or('♪');
-            ui.painter().text(rect.center(), Align2::CENTER_CENTER, initial, FontId::proportional(40.0), ink.faint);
+            ui.painter().text(rect.center(), Align2::CENTER_CENTER, initial, FontId::proportional(side * 0.33), ink.faint);
         }
     }
 }
@@ -129,32 +181,143 @@ fn scrubber(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration) {
 fn transport(app: &mut App, ui: &mut Ui, st: &Status, len: Duration) {
     row(ui, |ui| {
         ui.spacing_mut().item_spacing.x = S2;
-        if media_button(ui, Media::Previous, S4, SLOT, false).on_hover_text("previous (P)").clicked() {
-            app.prev();
-        }
-        let playing = !st.paused && st.path.is_some();
-        let toggle = media_button(ui, if playing { Media::Pause } else { Media::Play }, S5, SLOT, true).on_hover_text("play / pause (space)");
-        if toggle.clicked() {
-            // After the queue ended there is nothing loaded: start the current track again.
-            if st.path.is_none() { app.play(app.queue.clone(), app.qpos) } else { app.audio.toggle() }
-        }
-        if media_button(ui, Media::Next, S4, SLOT, false).on_hover_text("next (N)").clicked() {
-            app.next();
-        }
+        buttons(app, ui, st, S4, S5);
         ui.add_space(S2);
-        let played = if len.is_zero() { 0.0 } else { st.pos.as_secs_f32() / len.as_secs_f32() };
-        super::cassette::tape(ui, S4, playing, played);
-        muted(ui, format!("{} of {}", app.qpos + 1, app.queue.len()));
+        queue_button(app, ui, st, len, false);
         cover_suggestion(app, ui);
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| volume_control(app, ui, true));
+    });
+}
+
+/// Previous, play/pause and next: `small` across, play `large`.
+fn buttons(app: &mut App, ui: &mut Ui, st: &Status, small: f32, large: f32) {
+    let slot = large.max(SLOT.min(MINI));
+    if media_button(ui, Media::Previous, small, slot, false).on_hover_text("Previous (P)").clicked() {
+        app.prev();
+    }
+    let playing = !st.paused && st.path.is_some();
+    let toggle = media_button(ui, if playing { Media::Pause } else { Media::Play }, large, slot, true).on_hover_text("Play / pause (Space)");
+    if toggle.clicked() {
+        // After the queue ended there is nothing loaded: start the current track again.
+        if st.path.is_none() { app.play(app.queue.clone(), app.qpos) } else { app.audio.toggle() }
+    }
+    if media_button(ui, Media::Next, small, slot, false).on_hover_text("Next (N)").clicked() {
+        app.next();
+    }
+}
+
+/// The volume slider, after a speaker or (in the full player) the word.
+fn volume_control(app: &mut App, ui: &mut Ui, word: bool) {
+    let mut v = app.saved.volume;
+    if volume(ui, &mut v) {
+        app.saved.volume = v;
+        app.audio.volume(v);
+    }
+    if word {
+        muted(ui, "volume");
+    }
+}
+
+/// Where the queue stands ("2 of 6"), beside the cassette winding on (full player) or alone
+/// (compact); a click opens the queue: what played, what plays, what's next.
+fn queue_button(app: &mut App, ui: &mut Ui, st: &Status, len: Duration, compact: bool) {
+    let ink = ink(ui);
+    let inner = ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = S1;
+        if !compact {
+            let playing = !st.paused && st.path.is_some();
+            let played = if len.is_zero() { 0.0 } else { st.pos.as_secs_f32() / len.as_secs_f32() };
+            super::cassette::tape(ui, S4, playing, played);
+        }
+        ui.label(RichText::new(format!("{} of {}", app.qpos + 1, app.queue.len())).color(ink.muted));
+    });
+    let rect = inner.response.rect.expand(S1 / 2.0);
+    let resp = ui.interact(rect, egui::Id::unique("queue button"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Up next: what plays after this song");
+    super::widgets::name(ui, &resp, egui::Role::Button, "Up next");
+    super::widgets::focus_ring(ui, &resp, rect, 4.0);
+    if resp.hovered() || resp.has_focus() {
+        ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, ink.line), egui::StrokeKind::Inside);
+    }
+    let popup = egui::Popup::from_toggle_button_response(&resp)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .align(egui::RectAlign::TOP_START)
+        .gap(S1)
+        .width(440.0)
+        .frame(super::theme::dialog_frame(ui).inner_margin(egui::Margin::same(S2 as i8)));
+    // The screenshot demo shows it open (PAUSETAPE_SHOT_QUEUE=1).
+    #[cfg(debug_assertions)]
+    let popup = if std::env::var_os("PAUSETAPE_SHOT").is_some() && std::env::var_os("PAUSETAPE_SHOT_QUEUE").is_some() { popup.open(true) } else { popup };
+    popup.show(|ui| up_next(app, ui));
+}
+
+/// The queue: what played (faint), what plays (in the accent), what's next, each with a way to
+/// move it or take it out; a double click plays one.
+fn up_next(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    row(ui, |ui| {
+        super::widgets::caps(ui, "up next");
+        let left = app.queue.len().saturating_sub(app.qpos + 1);
+        muted(ui, if left == 0 { "nothing after this song".to_string() } else { super::text::plural(left, "song") });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let mut v = app.saved.volume;
-            if volume(ui, &mut v) {
-                app.saved.volume = v;
-                app.audio.volume(v);
+            if left > 0 && super::widgets::icon_link(ui, super::icons::Icon::Close, "Clear what's next").clicked() {
+                app.clear_upcoming();
             }
-            muted(ui, "volume");
         });
     });
+    ui.add_space(S1);
+    enum Do {
+        Jump(usize),
+        Remove(usize),
+        Move(usize, usize),
+    }
+    let mut todo = None;
+    let n = app.queue.len();
+    egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
+        for (pos, &t) in app.queue.iter().enumerate() {
+            let track = &app.tracks[t];
+            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+            super::widgets::row_background(ui, &resp, rect, false);
+            let (now, past) = (pos == app.qpos, pos < app.qpos);
+            let color = if now { ink.accent } else if past { ink.muted } else { ink.text };
+            let p = ui.painter_at(rect);
+            let y = rect.center().y;
+            p.text(pos2(rect.left() + S3, y), Align2::RIGHT_CENTER, if now { "▸".to_string() } else { (pos + 1).to_string() }, FontId::proportional(13.0), if now { ink.accent } else { ink.muted });
+            let mut words = track.display_title();
+            if let Some(a) = &track.artist {
+                words = format!("{words}  ·  {a}");
+            }
+            let controls_w = if now { 0.0 } else { 3.0 * ROW };
+            let g = super::widgets::truncated(ui, words, FontId::proportional(14.0), color, rect.width() - S4 - S5 - controls_w);
+            p.galley(pos2(rect.left() + S4, y - g.size().y / 2.0), g, color);
+            p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), FontId::proportional(13.0), ink.muted);
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
+            if resp.double_clicked() {
+                todo = Some(Do::Jump(pos));
+            }
+            if !now {
+                // Three slots at the right end: up, down, take out (up and down only where they lead).
+                let mut small = |slot: f32, icon, label: &str| {
+                    let at = egui::Rect::from_min_size(pos2(rect.right() - (3.0 - slot) * ROW, rect.top()), vec2(ROW, ROW));
+                    ui.put(at, |ui: &mut Ui| super::widgets::icon_button(ui, icon, label)).clicked()
+                };
+                if pos > 0 && small(0.0, super::icons::Icon::Up, "Move up") {
+                    todo = Some(Do::Move(pos, pos - 1));
+                }
+                if pos + 1 < n && small(1.0, super::icons::Icon::Down, "Move down") {
+                    todo = Some(Do::Move(pos, pos + 1));
+                }
+                if small(2.0, super::icons::Icon::Close, "Take out of the queue") {
+                    todo = Some(Do::Remove(pos));
+                }
+            }
+        }
+    });
+    match todo {
+        Some(Do::Jump(pos)) => app.audio.jump(pos),
+        Some(Do::Remove(pos)) => app.remove_from_queue(pos),
+        Some(Do::Move(from, to)) => app.move_in_queue(from, to),
+        None => {}
+    }
 }
 
 /// When the cover shown comes from an image file rather than the songs' tags, offer to add it:

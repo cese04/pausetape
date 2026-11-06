@@ -5,4 +5,4 @@ mod player;
 mod prefetch;
 
 pub use decode::{clear_converted, envelope, ffmpeg, ffmpeg_encodes, ffmpeg_is_bundled};
-pub use player::{Audio, Status};
+pub use player::{Audio, Item, Status};

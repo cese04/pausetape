@@ -69,6 +69,8 @@ pub struct Saved {
     pub album_table: bool,
     /// Searches kept for reuse ("quality:lossless jazz").
     pub searches: Vec<String>,
+    /// The player folded to one line (a click on its cover).
+    pub compact_player: bool,
 }
 
 impl Default for Saved {
@@ -87,6 +89,7 @@ impl Default for Saved {
             accent: Default::default(),
             album_table: false,
             searches: Vec::new(),
+            compact_player: false,
         }
     }
 }

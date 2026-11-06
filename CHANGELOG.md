@@ -902,3 +902,17 @@ Calibre's device view, for music: the library is where you choose what goes on t
   A notice too long for it ends in "…" and shows whole on hover.
 - The same bar says how many songs, artists and albums the library has, and how many are
   selected; the library's heading no longer repeats the counts.
+
+### 76. The queue, Play next, and a player that folds to one line (2026-11-05)
+- **Play next** and **Add to the queue** in every right-click menu (once something is playing):
+  songs go right after the one playing, or at the end, and the song playing goes on.
+- **The queue opens from the player** (a click on "2 of 8", beside the cassette): what played,
+  what's playing (in the accent) and what's next, each song with *Move up*, *Move down* and
+  *Take out of the queue*; a double click plays one; *Clear what's next* empties the rest.
+  It closes with a click elsewhere or Esc.
+- The playback thread can now change its queue while it plays: it's told where each song went,
+  so the one playing keeps playing and what follows it is what the queue says.
+- **A click on the player's cover folds it to one line** (cover, title and artist, the buttons,
+  the sparkline, the time, the queue, the volume), and back; the choice is kept. A window lower
+  than 640 points always has the one-line player, so the page keeps most of it: at 760 × 540 the
+  library now shows its list.

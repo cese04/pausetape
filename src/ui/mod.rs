@@ -53,7 +53,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let r = egui::Panel::bottom("status").frame(chrome(S5, S1 / 2.0)).exact_size(CONTROL + S1).show_separator_line(false).show(ui, |ui| status_bar(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
-    let r = egui::Panel::bottom("player").frame(chrome(S5, S2)).show_separator_line(false).show(ui, |ui| player::show(app, ui));
+    let r = egui::Panel::bottom("player").frame(chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 })).show_separator_line(false).show(ui, |ui| player::show(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
     let page = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S2 as i8, bottom: S2 as i8 });

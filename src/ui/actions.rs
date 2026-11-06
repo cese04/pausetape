@@ -44,6 +44,9 @@ pub(super) enum Action {
     /// Songs to the end of a playlist (by position); into a new playlist.
     AddToPlaylist(usize, Vec<usize>),
     NewPlaylistWith(Vec<usize>),
+    /// Songs after the one playing; at the end of the queue.
+    PlayNext(Vec<usize>),
+    AddToQueue(Vec<usize>),
     ClearSelection,
     /// Move album copies another copy covers to the Trash (artist, album).
     TrashCopies(Vec<(usize, usize)>),
@@ -112,6 +115,8 @@ pub(super) fn apply(app: &mut App, actions: Vec<Action>) {
             }
             Action::ToggleCard(albums) => app.toggle_on_card(albums),
             Action::AddToPlaylist(i, songs) => app.add_songs_to_playlist(i, &songs),
+            Action::PlayNext(songs) => app.play_next(&songs),
+            Action::AddToQueue(songs) => app.add_to_queue(&songs),
             Action::NewPlaylistWith(songs) => {
                 app.new_playlist();
                 if let Some(i) = app.active_playlist {

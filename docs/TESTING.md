@@ -294,6 +294,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     turned down with a note to drop its folder.
 21g. Right-click an artist's name, an album's title, a row of the album table and a playlist's
     song: the same menu each time. **Add to playlist ▸ New playlist** makes one with those songs.
+21h. Play an album, then right-click another album › **Play next**: the song playing goes on;
+    click "2 of N" in the player: the queue shows the new songs right after it. Move one, take
+    one out, double-click one: it plays. **Add to the queue** puts songs at the end.
+21i. Click the player's cover: it folds to one line (and back). Make the window lower than about
+    640 points: it folds by itself, and the cover says why it won't open out.
 
 ### H. Odds and ends
 22. HiDPI / scaled display (125%, 150%): crisp text, nothing cut off.
