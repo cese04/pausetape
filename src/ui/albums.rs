@@ -105,12 +105,8 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
             let selected = app.selected_albums.contains(&row.id);
             resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Row, true, selected, format!("{}, {}", row.artist_name, row.title)));
             widgets::focus_ring(ui, &resp, rect, 4.0);
+            widgets::row_background(ui, &resp, rect, selected);
             let p = ui.painter_at(rect);
-            if selected {
-                p.rect_filled(rect, 4.0, ink.chip);
-            } else if resp.hovered() || resp.has_focus() {
-                p.rect_filled(rect, 0.0, ink.hover);
-            }
             let y = rect.center().y;
             let font = FontId::proportional(14.5);
             let small = FontId::proportional(12.5);

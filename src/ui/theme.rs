@@ -15,7 +15,15 @@ pub struct Ink {
     pub text: Color32,
     pub muted: Color32,
     pub faint: Color32,
+    /// The edge of a control (a field, a checkbox, an outlined button) where only the edge says
+    /// it's there: 3:1 or more against the page, as `faint` (for rules and dividers) isn't.
+    pub line: Color32,
     pub hover: Color32,
+    /// A song or album row under the pointer: a step darker than `hover`, so the row shows.
+    pub row_hover: Color32,
+    /// A selected row: a tint of the accent, light enough for `muted` text to stay at 4.5:1;
+    /// a bar of the accent at its left edge says it more plainly.
+    pub selected: Color32,
     /// The chosen accent: what's open, playing or under way, and the main button.
     pub accent: Color32,
     /// Warnings and problems, whatever the accent.
@@ -31,10 +39,10 @@ pub struct Ink {
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Accent {
-    #[default]
     Brick,
     Ochre,
     Moss,
+    #[default]
     Teal,
     Blue,
     Plum,
@@ -54,6 +62,11 @@ impl Accent {
             Accent::Plum => "plum",
             Accent::Graphite => "graphite",
         }
+    }
+
+    /// How much of the accent a selected row takes: graphite, nearly the ink, takes less.
+    fn tint(self) -> f32 {
+        if self == Accent::Graphite { 0.07 } else { 0.10 }
     }
 
     pub fn colour(self, dark: bool) -> Color32 {
@@ -96,7 +109,10 @@ fn palette(dark: bool, accent: Accent) -> Ink {
             text: Color32::from_rgb(0xe4, 0xe0, 0xd8),
             muted: Color32::from_rgb(0x92, 0x8d, 0x84),
             faint: Color32::from_rgb(0x3b, 0x38, 0x33),
+            line: Color32::from_rgb(0x73, 0x6e, 0x65),
             hover: Color32::from_rgb(0x22, 0x1f, 0x1c),
+            row_hover: Color32::from_rgb(0x2a, 0x27, 0x23),
+            selected: Color32::from_rgb(0x18, 0x17, 0x15).lerp_to_gamma(accent.colour(true), accent.tint()),
             accent: accent.colour(true),
             warn: Color32::from_rgb(0xe4, 0x82, 0x70),
             bar: Color32::from_rgb(0x1f, 0x1d, 0x1a),
@@ -108,7 +124,10 @@ fn palette(dark: bool, accent: Accent) -> Ink {
             text: Color32::from_rgb(0x33, 0x30, 0x2b),
             muted: Color32::from_rgb(0x6b, 0x67, 0x5f),
             faint: Color32::from_rgb(0xe0, 0xdb, 0xcf),
+            line: Color32::from_rgb(0x8f, 0x89, 0x7e),
             hover: Color32::from_rgb(0xf2, 0xef, 0xe7),
+            row_hover: Color32::from_rgb(0xec, 0xe8, 0xde),
+            selected: Color32::from_rgb(0xfa, 0xf8, 0xf2).lerp_to_gamma(accent.colour(false), accent.tint()),
             accent: accent.colour(false),
             warn: Color32::from_rgb(0xa5, 0x40, 0x2f),
             bar: Color32::from_rgb(0xf0, 0xec, 0xe2),
@@ -219,7 +238,7 @@ pub fn install(ctx: &egui::Context) {
             ] {
                 w.bg_fill = Color32::TRANSPARENT;
                 w.weak_bg_fill = Color32::TRANSPARENT;
-                w.bg_stroke = Stroke::new(1.0, ink.faint);
+                w.bg_stroke = Stroke::new(1.0, ink.line);
                 w.fg_stroke = Stroke::new(1.0, fg);
                 w.corner_radius = CornerRadius::ZERO;
                 w.expansion = 0.0;
@@ -229,10 +248,11 @@ pub fn install(ctx: &egui::Context) {
     }
 }
 
-/// A softly outlined panel used to group one step of a task.
+/// A panel grouping one step of a task, or what belongs to one thing: set apart by its
+/// background alone (the tint of the tab bar), with no outline, as the design is flat.
 pub fn panel_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().fill(ink.hover).stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::same(S2 as i8))
+    egui::Frame::new().fill(ink.bar).corner_radius(4.0).inner_margin(egui::Margin::same(S2 as i8))
 }
 
 /// A dialog over the app: the paper, with a grid's breadth of room inside.
@@ -244,7 +264,7 @@ pub fn dialog_frame(ui: &Ui) -> egui::Frame {
 /// Outlined in the warning colour: something the user should know before it surprises them.
 pub fn warning_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
+    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(4.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! The menu a right-click opens on music, wherever it is: an artist, an album (its title, or its
 //! row in the table), songs (one, or the selection it's in), a playlist's songs. The same
-//! commands in the same order, so what's learnt in one place works in the others.
+//! commands in the same order, so what's learnt in one place works in the others. (Play next and
+//! Add to the queue show once something's playing; before that, Play does it.)
 
 use egui::Ui;
 
@@ -53,6 +54,10 @@ pub(super) fn music(app: &App, ui: &mut Ui, of: Of, actions: &mut Vec<Action>, e
         _ => Action::Play(songs.clone(), 0),
     };
     item(ui, actions, Icon::Play, format!("Play{them}"), play);
+    if !app.queue.is_empty() {
+        item(ui, actions, Icon::Forward, format!("Play{them} next"), Action::PlayNext(songs.clone()));
+        item(ui, actions, Icon::Playlists, format!("Add{them} to the queue"), Action::AddToQueue(songs.clone()));
+    }
 
     ui.menu_button(format!("Add{them} to playlist"), |ui| {
         for (i, p) in app.saved.playlists.iter().enumerate() {

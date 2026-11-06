@@ -15,6 +15,9 @@ use super::decode::{Span, open_span};
 
 enum Cmd {
     Queue(Vec<Item>, usize),
+    /// The queue edited while it plays: its new entries, and where each old position went
+    /// (`None`: before every entry kept). What's playing goes on; only its position changes.
+    Edit(Vec<Item>, Vec<Option<usize>>),
     Jump(usize),
     Toggle,
     Seek(Duration),
@@ -197,6 +200,10 @@ impl Audio {
                     // No output: keep what was asked for, to play once there is one.
                     match cmd {
                         Ok(Cmd::Queue(items, from)) => (queue.items, resume) = (items, Some((from, Duration::ZERO, false))),
+                        Ok(Cmd::Edit(items, moved)) => {
+                            queue.items = items;
+                            resume = resume.and_then(|(i, pos, paused)| moved.get(i).copied().flatten().map(|i| (i, pos, paused)));
+                        }
                         Ok(Cmd::Jump(i)) => resume = Some((i, Duration::ZERO, false)),
                         Ok(Cmd::Volume(v)) => volume = v,
                         Ok(Cmd::Stop) => resume = None,
@@ -209,6 +216,11 @@ impl Audio {
                     Ok(Cmd::Queue(items, from)) => {
                         queue.items = items;
                         queue.start(from, player, &shared, &wake);
+                    }
+                    Ok(Cmd::Edit(items, moved)) => {
+                        queue.items = items;
+                        let mut st = shared.lock().unwrap();
+                        st.index = st.index.and_then(|i| moved.get(i).copied().flatten());
                     }
                     Ok(Cmd::Jump(i)) => queue.start(i, player, &shared, &wake),
                     Ok(Cmd::Toggle) => {
@@ -258,6 +270,12 @@ impl Audio {
     /// Play `items` from position `from`, then the rest in order, without the UI's help.
     pub fn play_queue(&self, items: Vec<Item>, from: usize) {
         let _ = self.tx.send(Cmd::Queue(items, from));
+    }
+
+    /// Change the queue without stopping what plays: `moved[old]` is where each old entry went
+    /// (for one taken out, where the entry before it went: playback goes on after that).
+    pub fn edit_queue(&self, items: Vec<Item>, moved: Vec<Option<usize>>) {
+        let _ = self.tx.send(Cmd::Edit(items, moved));
     }
 
     /// Play the queue from position `i` (stepping over entries that can't play).

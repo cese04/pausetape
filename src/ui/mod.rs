@@ -28,10 +28,11 @@ pub mod widgets;
 use egui::{RichText, Stroke, Ui};
 
 use crate::app::{App, Tab};
+use text::plural;
 use theme::ink;
 use icons::Icon;
 use widgets::hairline_progress;
-use layout::{ICON, S1, S2, S3, S4, S5, margin, row};
+use layout::{CONTROL, ICON, S1, S2, S3, S4, S5, margin, row};
 
 const MAX_W: f32 = 820.0;
 
@@ -47,17 +48,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let r = egui::Panel::top("nav").frame(chrome(S4, S1)).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.bottom(), Stroke::new(1.0, ink.faint));
-    let notice_text = app.notices.last().cloned();
-    if app.busy.is_some() || notice_text.is_some() {
-        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S1 as i8, bottom: 0 });
-        egui::Panel::top("status").frame(frame).show_separator_line(false).show(ui, |ui| {
-            job(app, ui);
-            if let Some(n) = &notice_text {
-                notice(app, ui, n);
-            }
-        });
-    }
-    let r = egui::Panel::bottom("player").frame(chrome(S5, S2)).show_separator_line(false).show(ui, |ui| player::show(app, ui));
+    // The status bar, at the very bottom: always there and always one line, so neither work
+    // starting nor a notice ever moves the page.
+    let r = egui::Panel::bottom("status").frame(chrome(S5, S1 / 2.0)).exact_size(CONTROL + S1).show_separator_line(false).show(ui, |ui| status_bar(app, ui));
+    let edge = r.response.rect;
+    ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
+    let r = egui::Panel::bottom("player").frame(chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 })).show_separator_line(false).show(ui, |ui| player::show(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
     let page = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S2 as i8, bottom: S2 as i8 });
@@ -145,55 +141,73 @@ fn header(app: &mut App, ui: &mut Ui) {
     });
 }
 
-/// What's running: how far along, the time left at the pace so far, and a way to stop it.
-fn job(app: &mut App, ui: &mut Ui) {
+/// One line at the foot of the window. On the left, the library in figures and what's selected;
+/// on the right, work under way (how far, time left, Stop) or else the latest notice, with
+/// *Undo* when it offers one.
+fn status_bar(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let Some(b) = &app.busy else { return };
-    row(ui, |ui| {
+    ui.set_height(CONTROL + S1);
+    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
         ui.spacing_mut().item_spacing.x = S2;
-        cassette::spinner(ui, ICON);
-        ui.label(RichText::new(&b.label).size(14.5).color(ink.text));
-        let mut facts = match (b.done, b.total) {
-            (_, 0) if b.done > 0 => b.done.to_string(),
-            (_, 0) => String::new(),
-            (d, t) => format!("{d} of {t}"),
-        };
-        if b.stopping() {
-            facts = "stopping after the file it's on…".into();
-        } else if let Some(left) = b.time_left() {
-            facts.push_str(&format!(" · {} left", text::time_left(left)));
+        let albums: usize = app.index.artists.iter().map(|a| a.albums.len()).sum();
+        let mut facts = if app.tracks.is_empty() { String::new() } else { format!("{} · {} · {}", plural(app.tracks.len(), "song"), plural(app.index.artists.len(), "artist"), plural(albums, "album")) };
+        if !app.selected.is_empty() {
+            facts.push_str(&format!(" · {} selected", plural(app.selected.len(), "song")));
+        } else if !app.selected_albums.is_empty() {
+            facts.push_str(&format!(" · {} selected", plural(app.selected_albums.len(), "album")));
         }
-        ui.label(RichText::new(facts).size(13.5).color(ink.muted));
-        if b.total > 0 {
-            hairline_progress(ui, b.done as f32 / b.total as f32, (ui.available_width() - 120.0).clamp(60.0, 260.0));
-        }
-        if let Some(stop) = b.stop.clone().filter(|_| !b.stopping()) {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let hint = "Finishes the file it's on and stops there. What's done stays done: a stopped write keeps what it copied, and the next Sync carries on.";
-                if widgets::button_with(ui, Icon::Close, "Stop").on_hover_text(hint).clicked() {
-                    stop.store(true, std::sync::atomic::Ordering::Relaxed);
-                }
-            });
-        }
+        ui.label(RichText::new(facts).size(13.0).color(ink.muted));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if app.busy.is_some() {
+                job(app, ui);
+            } else if let Some(n) = app.notices.last().cloned() {
+                notice(app, ui, &n);
+            }
+        });
     });
 }
 
-/// The latest message from the app, until the next one or until closed.
+/// What's running: the reels turning, what it is, how far along, the time left at the pace so
+/// far, and a way to stop it. Laid out right to left, from the Stop button.
+fn job(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    let Some(b) = &app.busy else { return };
+    if let Some(stop) = b.stop.clone().filter(|_| !b.stopping()) {
+        let hint = "Finishes the file it's on and stops there. What's done stays done: a stopped write keeps what it copied, and the next Sync carries on.";
+        if widgets::button_with(ui, Icon::Close, "Stop").on_hover_text(hint).clicked() {
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    if b.total > 0 {
+        hairline_progress(ui, b.done as f32 / b.total as f32, (ui.available_width() / 4.0).clamp(60.0, 200.0));
+    }
+    let mut facts = match (b.done, b.total) {
+        (_, 0) if b.done > 0 => b.done.to_string(),
+        (_, 0) => String::new(),
+        (d, t) => format!("{d} of {t}"),
+    };
+    if b.stopping() {
+        facts = "stopping after the file it's on…".into();
+    } else if let Some(left) = b.time_left() {
+        facts.push_str(&format!(" · {} left", text::time_left(left)));
+    }
+    ui.label(RichText::new(facts).size(13.0).color(ink.muted));
+    ui.label(RichText::new(&b.label).size(13.5).color(ink.text));
+    cassette::spinner(ui, ICON);
+}
+
+/// The latest message from the app, until the next one or until closed: on one line, shortened
+/// with "…" if it must be (all of it on hover). Laid out right to left, from the close button.
 fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     let ink = ink(ui);
-    row(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
-        icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
-        let offers_undo = app.notice_offers_undo();
-        let undo_w = if offers_undo { widgets::text_width(ui, "undo (⌘Z)", 13.5) + S4 } else { 0.0 };
-        ui.allocate_ui(egui::vec2(ui.available_width() - S5 - undo_w, 0.0), |ui| {
-            ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
-        });
-        if offers_undo && widgets::icon_link(ui, Icon::Back, "Undo (⌘Z)").clicked() {
-            app.undo_last();
-        }
-        if widgets::icon_button(ui, Icon::Close, "Dismiss").clicked() {
-            app.notices.clear();
-        }
-    });
+    if widgets::icon_button(ui, Icon::Close, "Dismiss").clicked() {
+        app.notices.clear();
+        app.undo_notice = None;
+    }
+    if app.notice_offers_undo() && widgets::icon_link(ui, Icon::Back, format!("Undo ({})", ui.ctx().format_shortcut(&keys::UNDO))).clicked() {
+        app.undo_last();
+    }
+    widgets::fitted(ui, RichText::new(text).size(13.0).color(ink.text), ui.available_width() - ICON - S2, egui::Sense::hover()).on_hover_text(text);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
+    icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
 }

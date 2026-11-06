@@ -143,6 +143,13 @@ impl Shooter {
                 app.write_mut().options.pattern = Some(p);
                 app.refresh_on_card();
             }
+            // PAUSETAPE_SHOT_QUEUE=1: two songs of another album to play next, and the queue open.
+            if std::env::var_os("PAUSETAPE_SHOT_QUEUE").is_some()
+                && let Some(other) = app.index.artists.iter().flat_map(|a| &a.albums).find(|al| !al.tracks.iter().any(|t| app.queue.contains(t)))
+            {
+                let next: Vec<usize> = other.tracks.iter().take(2).copied().collect();
+                app.play_next(&next);
+            }
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
             if std::env::var_os("PAUSETAPE_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();

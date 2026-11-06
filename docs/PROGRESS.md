@@ -227,6 +227,8 @@ Smaller items, ordered by value.
 ### Player
 
 - **Up-next queue** with shuffle and repeat, and *play next* / *add to queue* on any track. *M*
+  *Done 2026-11-05, but shuffle and repeat:* the queue opens from the player; *Play next* and
+  *Add to the queue* are in every right-click menu.
 - **Gapless playback** by queueing the next track in the audio engine ahead of time; matters
   for live albums and *Love* itself. *M*
 - **macOS media keys and Now Playing** (via the `souvlaki` crate). *M*

@@ -13,7 +13,8 @@ deunicode = "1.6.2"
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui = "0.37"
 encoding_rs = "0.8"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+# Covers: JPEG and PNG, and the BMP, GIF and WebP some taggers embed.
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "bmp", "gif", "webp"] }
 libc = "0.2.191"
 lofty = "0.25.5"
 rfd = "0.17.2"

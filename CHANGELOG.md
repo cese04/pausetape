@@ -874,3 +874,84 @@ Calibre's device view, for music: the library is where you choose what goes on t
 - What the app called a *write* (what a card gets, its names and order, its record of what's
   there) is a **card setup** wherever it's shown: the card tab's list is *Card setups*, and
   "this write" became "this setup". The code keeps its names.
+
+### 73. Teal by default, warnings apart from it; edges and selections that show (2026-11-05)
+- **The default accent is teal.** Brick, the accent until now, was also the colour of every
+  warning, so the Sync button, the playhead and the open tab looked like "none", "taken off"
+  and "isn't formatted FAT32". Warnings and what can't be undone stay brick red. An accent
+  chosen in Settings is kept (an install that never chose one keeps the brick it saved).
+- **Fields, checkboxes and dropdowns have an edge you can see**, 3:1 or more against the page
+  in both themes (it was 1.3:1); the faint colour stays for rules and dividers.
+- **A selected song or album** is tinted with the accent and has a bar of it at its left edge,
+  instead of the grey chip the hover nearly matched; grey text on it stays at 4.5:1 or more
+  with every accent. **A row under the pointer** (or with the keyboard's focus) is now a
+  visible step darker; before, its background was 1.08:1 against the page.
+
+### 74. A bar that shows how full the card will be (2026-11-05)
+- The card's room was a hairline (1.3:1 against the page) with a thin line over it. It's now a
+  flat bar, 6 points high, of the card as the next Sync leaves it: what stays on it in ink,
+  what Sync adds in the accent, what it takes off as an outline in the warning colour (that
+  space comes free), and what's left free; past the end, in the warning colour, what doesn't
+  fit. Hovering says each in figures. The library's strip shows it a little longer.
+
+### 75. A status bar at the foot of the window (2026-11-05)
+- Work under way (the reels turning, what it is, how far, the time left, **Stop**) and the
+  latest notice (with **Undo** when it offers one) used to appear in a strip under the tabs,
+  which pushed the whole page down as they came and went: whatever was under the pointer
+  moved. They now share one line at the foot of the window, always there, below the player.
+  A notice too long for it ends in "…" and shows whole on hover.
+- The same bar says how many songs, artists and albums the library has, and how many are
+  selected; the library's heading no longer repeats the counts.
+
+### 76. The queue, Play next, and a player that folds to one line (2026-11-05)
+- **Play next** and **Add to the queue** in every right-click menu (once something is playing):
+  songs go right after the one playing, or at the end, and the song playing goes on.
+- **The queue opens from the player** (a click on "2 of 8", beside the cassette): what played,
+  what's playing (in the accent) and what's next, each song with *Move up*, *Move down* and
+  *Take out of the queue*; a double click plays one; *Clear what's next* empties the rest.
+  It closes with a click elsewhere or Esc.
+- The playback thread can now change its queue while it plays: it's told where each song went,
+  so the one playing keeps playing and what follows it is what the queue says.
+- **A click on the player's cover folds it to one line** (cover, title and artist, the buttons,
+  the sparkline, the time, the queue, the volume), and back; the choice is kept. A window lower
+  than 640 points always has the one-line player, so the page keeps most of it: at 760 × 540 the
+  library now shows its list.
+
+### 77. An artist's links folded away until asked for (2026-11-05)
+- Opening an artist showed up to 17 buttons to stores, streaming services and sites (Buy,
+  Listen, Discover) before its albums. They're now behind **Where to buy and listen (N)**, in
+  the artist's line of commands beside *Rename*; **Hide the links** folds them again. Genres,
+  country and years stay in view. Each artist is remembered open or folded until the app quits.
+
+### 78. Flat panels (2026-11-05)
+- Panels (the card's strip, the selection bars, an artist's facts, MusicBrainz suggestions, the
+  folders tab's steps, the views of duplicates and look-alikes) were marked twice, with a
+  background and an outline, at 8-point corners. Following the flat design, each is now set
+  apart by its background alone, the tint of the tab bar, at 4-point corners. Warnings keep
+  their outline, which is what marks them.
+
+### 79. Nothing runs into the player's volume or an album's commands (2026-11-05)
+- In the player, the note about a cover found as an image file ("cover from …, not in the
+  songs' tags · Add it") ran on into the volume control in narrower windows. The volume now
+  keeps its place, the note shortens with "…" to the room left (whole on hover), and where
+  there's no room for words, a lone **Add cover** (or **Don't add**) link says it all.
+- In the library by artist, an album's commands (*Play*, *Find cover*, *Look up*, *Edit tags*,
+  *Send to the card*…) were drawn over its title and state in a narrow window. Where they
+  don't fit beside them, they go on a line of their own under the title, in the same order.
+
+### 80. Covers in BMP, GIF or WebP; a way to find one where none shows (2026-11-05)
+- Some taggers embed the cover as a BMP (or GIF, or WebP); Pausetape read only JPEG and PNG.
+  Such an album showed its initial in the player and, since its songs do have a picture, the
+  library didn't count it as without a cover, so *Find cover* wasn't offered anywhere. Those
+  formats are now read (shown, and made a JPEG when embedded in copies).
+- An embedded picture that still can't be read (damaged) gives way to an image in the album's
+  folder, as when there's none embedded.
+- When the player has no cover to show, it says so and offers **Find cover** beside the queue,
+  where the missing cover is noticed: it looks in the album's folder, then on the Cover Art
+  Archive, as *Find cover* in the library does.
+
+### 81. A long title no longer pushes the player past the window (2026-11-05)
+- A song with a very long title (or artist and album) widened the player beyond the window: the
+  time, the volume and the end of the cover note were pushed off its right edge. The time now
+  keeps its place, and the title, then artist · album · year, shorten with "…" to the room
+  there is (whole on hover).

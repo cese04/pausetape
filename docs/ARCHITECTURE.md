@@ -98,7 +98,7 @@ src/
 │   ├── volumes.rs     mounted drives (drive letters on Windows), free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
 ├── audio/             playing music
-│   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI
+│   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI; edits it without stopping
 │   ├── decode.rs      Symphonia or ffmpeg (conversion cache), loudness envelope
 │   └── prefetch.rs    decoding a few seconds ahead of the output, so a busy disk isn't heard
 ├── app/               state and the glue between background work and the UI
@@ -112,7 +112,7 @@ src/
 │   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
 │   ├── undo.rs        ⌘Z: taking back changes to playlists and to what goes on the card (not to files)
-│   ├── playback.rs    play queue, waveform and cover loading
+│   ├── playback.rs    play queue (play next, add, move, take out), waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
     ├── mod.rs         panels, tab bar, running job (time left, Stop), message line, tab dispatch
@@ -125,7 +125,7 @@ src/
     ├── library.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab
     ├── artist_panel.rs under an open artist: look-alike names, MusicBrainz facts and links, renaming
     ├── cassette.rs    the cassette: the mark beside the name, reels turning for work under way, the player's tape
-    ├── player.rs      player bar
+    ├── player.rs      player bar, full or on one line; the queue it opens
     ├── navigator.rs   in-app folder browser for the pickers
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     ├── albums.rs      the library as a sortable table of albums
