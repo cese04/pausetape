@@ -167,6 +167,10 @@ that are merely odd (unreadable, not blank) aren't called damaged. The library d
 went up, so every file is read once more at the next start. On this library: 24 of the 25 ELP
 files, and only those.
 
+**Widened 2026-11-06** ([CHANGELOG §96](../CHANGELOG.md)): a file that starts blank is damaged
+even when it reads (audio after the zeros is what's left of it), and so is an unreadable one that
+ends inside its own ID3v2 tag. 70 files in this library.
+
 ### R9
 **Songs with unsaved corrections are copied again at every Sync.**
 [copy.rs:222](../src/card/copy.rs#L222) (`up_to_date` returns false for corrected songs)

@@ -216,7 +216,7 @@ custom layouts and pruning, card write → deselect → rewrite, database reuse 
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash, undo never replacing a file,
 song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
-tag of a file, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another, artist links sorted for the panel, artist entries kept, renaming an artist in its tags, search links. They use temporary folders and fake audio files,
+tag of a file, MP3s tagged twice or padded with zeros, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another, artist links sorted for the panel, artist entries kept, renaming an artist in its tags, search links. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`PAUSETAPE_BENCH=<dir>`), `decodes_formats`
 (`PAUSETAPE_FORMATS=<dir>`), `section_matches_cut` (`PAUSETAPE_SECTION=…`, see the test),
@@ -227,6 +227,6 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 ## Conventions
 
 - Comments explain *why*, not what.
-- Long lines (~160 characters); see PROGRESS §6 about `rustfmt.toml` before running `cargo fmt`.
+- Long lines (~160 characters), formatted by hand; `rustfmt.toml` keeps rustfmt (`cargo fmt`, editors) from rewriting them.
 - UI copy uses plain words ("Write to the card", "songs") and avoids file-system jargon where
   possible.

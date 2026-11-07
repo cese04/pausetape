@@ -61,8 +61,9 @@ pub struct Track {
     pub cover: Option<PathBuf>,
     /// The file's tags hold a picture (players show embedded covers, not images beside the file).
     pub embedded_cover: bool,
-    /// The file is damaged: its header can't be read and it starts blank (zeros), as files do
-    /// that a failing card or disk lost. It can't be played or converted.
+    /// The file is damaged: it starts blank (zeros), or its header can't be read and it ends
+    /// inside its tag, as files do that a failing card or disk, or a copy cut short, lost.
+    /// It can't be played or converted.
     pub damaged: bool,
 }
 

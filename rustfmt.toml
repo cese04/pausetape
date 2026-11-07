@@ -1,0 +1,4 @@
+# The code is formatted by hand (lines up to ~160 characters, short `let … else` on one line).
+# This keeps rustfmt from rewriting it, whoever runs it: `cargo fmt`, rust-analyzer, or an
+# editor extension such as Trunk, which brings its own, older rustfmt.
+disable_all_formatting = true

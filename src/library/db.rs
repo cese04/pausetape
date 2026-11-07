@@ -18,8 +18,9 @@ use crate::musicbrainz::ArtistInfo;
 
 /// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
 /// and bit depth; 4: embedded cover; 5: damaged files), so files get re-read.
-/// 6: tracks hold their genres (read again once).
-const SCHEMA_VERSION: i64 = 6;
+/// 6: tracks hold their genres (read again once). 7: damaged also when blank but readable, or cut
+/// short inside the tag.
+const SCHEMA_VERSION: i64 = 7;
 /// Corrections saved since this version stay valid: the fields they change haven't changed.
 const EDITS_SINCE: i64 = 3;
 

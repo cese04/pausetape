@@ -340,6 +340,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     none says so, with *Try again*. *Find lyrics for the whole album* (or right-click › Find
     lyrics) fetches them ahead, counted in the status bar. Offline, lyrics found before still
     show.
+21q. Correct a tag of an MP3 tagged twice (two ID3v2 tags in a row, or zeros between the tag and
+    the audio; Cocteau Twins and Rush here) and *Write corrected tags*: it's written, with no
+    "no format could be determined", and reads back corrected after a rescan; it still plays,
+    its length the same. No `.<name>.pausetape` file is left beside it. Files that start blank
+    are listed as damaged.
 21n. A fresh start (empty data folder): a welcome asks for the music folder, then the card
     (which can wait); *Start* closes it. Music already on the card is explained after it.
 
