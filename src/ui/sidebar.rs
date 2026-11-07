@@ -15,6 +15,9 @@ use crate::app::{App, Tab};
 pub const WIDE: f32 = 224.0;
 pub const NARROW: f32 = 48.0;
 const NARROW_BELOW: f32 = 900.0;
+/// Whether the items are drawn closer (see `show`), and how many were drawn in the list.
+const TIGHT: &str = "sidebar items closer";
+const ITEMS: &str = "sidebar items drawn";
 
 pub fn narrow(ctx: &egui::Context) -> bool {
     ctx.content_rect().width() < NARROW_BELOW
@@ -50,13 +53,23 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             go = Some(Go::Settings);
         }
         ui.with_layout(Layout::top_down(Align::Min), |ui| {
-            ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let tight = ui.ctx().data_mut(|d| {
+                d.remove_temp::<usize>(egui::Id::unique(ITEMS));
+                d.get_temp::<bool>(egui::Id::unique(TIGHT)).unwrap_or(false)
+            });
+            let out = ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 library(app, ui, narrow, &mut go);
                 review(app, ui, narrow, &mut go);
                 searches(app, ui, narrow, &mut go, &mut forget);
                 playlists(app, ui, narrow, &mut go);
                 card(app, ui, narrow, &mut go);
             });
+            // Where the items, at their full height, would need scrolling, they're drawn a little
+            // closer from the next frame: the card's section at the foot stays in view. Measured
+            // at the full height either way, so it doesn't flip back and forth.
+            let items = ui.ctx().data_mut(|d| d.remove_temp::<usize>(egui::Id::unique(ITEMS))).unwrap_or(0);
+            let full = out.content_size.y + if tight { items as f32 * S1 / 2.0 } else { 0.0 };
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(TIGHT), full > out.inner_rect.height()));
         });
     });
     if let Some(i) = forget {
@@ -143,7 +156,11 @@ fn named(ui: &mut Ui, icon: Icon, name: &str, count: Option<String>, active: boo
 
 fn item_in(ui: &mut Ui, icon: Icon, name: &str, count: Option<String>, active: bool, narrow: bool, family: egui::FontFamily) -> egui::Response {
     let ink = ink(ui);
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW + S1 / 2.0), Sense::click());
+    let tight = ui.ctx().data_mut(|d| {
+        *d.get_temp_mut_or_default::<usize>(egui::Id::unique(ITEMS)) += 1;
+        d.get_temp::<bool>(egui::Id::unique(TIGHT)).unwrap_or(false)
+    });
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), if tight { ROW } else { ROW + S1 / 2.0 }), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, active, name));
     let rect = rect.shrink2(vec2(S1 / 2.0, 0.0));
     widgets::focus_ring(ui, &resp, rect, 4.0);

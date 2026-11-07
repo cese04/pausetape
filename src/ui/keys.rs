@@ -14,6 +14,10 @@ pub const CARD: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key
 pub const SYNC: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
 pub const UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
 
+/// A click with the command key, and the command key with Return, named as the system names them.
+pub const COMMAND_CLICK: &str = if cfg!(target_os = "macos") { "⌘-click" } else { "Ctrl+click" };
+pub const COMMAND_RETURN: &str = if cfg!(target_os = "macos") { "⌘-Return" } else { "Ctrl+Enter" };
+
 /// Every shortcut and what it does, for Settings.
 pub fn list(ctx: &egui::Context) -> Vec<(String, &'static str)> {
     let f = |s: &KeyboardShortcut| ctx.format_shortcut(s);

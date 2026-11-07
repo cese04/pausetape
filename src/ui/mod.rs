@@ -194,7 +194,13 @@ fn header(app: &mut App, ui: &mut Ui) {
         ui.add_space(S4);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
         icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        let width = (ui.available_width() * 0.45).clamp(160.0, 420.0);
+        // Room kept beside it for *Filters* (and *Save*, once something's typed), however large
+        // the text.
+        let gap = ui.spacing().item_spacing.x;
+        let typed = !app.filter.trim().is_empty();
+        let filters = widgets::text_width(ui, "Filters (0)", egui::TextStyle::Button.resolve(ui.style()).size) + 2.0 * ui.spacing().button_padding.x;
+        let beside = filters + gap + if typed { widgets::icon_link_width(ui, "Save") + gap } else { 0.0 };
+        let width = (ui.available_width() * 0.45).clamp(160.0, 420.0).min(ui.available_width() - beside).max(4.0 * S4);
         let before = app.filter.clone();
         let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", width).on_hover_text(crate::library::search::HELP);
         if app.focus_search {

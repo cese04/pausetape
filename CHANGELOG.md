@@ -1172,3 +1172,30 @@ ID3v2 tag, it looks for the audio within 1 KB. Two shapes of file keep it from f
   the last push, and rewrapped 24 of them: lines cut at 100 characters, `let … else` spread over
   three lines, imports in the old order. `rustfmt.toml` now says `disable_all_formatting`, which
   every rustfmt reads, old and new, run by `cargo fmt`, rust-analyzer or Trunk.
+
+### 98. Windows: read-only songs, and keys by their names (2026-11-06)
+- *Write corrected tags* refused songs marked read-only on Windows ("access denied", with no
+  reason given); on the first music library tried there, 1,327 of them were. They're now
+  unlocked and written, and stay writable, as was asked for. Taking over a card does the same
+  with its read-only files on Windows, as it already did with locked ones on macOS
+  (`platform::unlock`).
+- Hints that said "⌘-click" and "⌘-Return" say "Ctrl+click" and "Ctrl+Enter" on Windows and
+  Linux, as Settings › Keyboard already did.
+- The list of what *Reorganise* would move showed `Artist\Album/01 - Title` on Windows: one
+  separator now.
+
+### 99. Narrow windows and long names keep things apart (2026-11-07)
+- A long genre (`Post-Punk, Shoegaze, Drone, …`) as a chip in the details panel was wider than
+  the panel, and egui then reserved too little of the page for it: the albums, and the A–Z rail,
+  ran under the panel. Chips now end in "…" at their column's edge, with the whole name on hover.
+- The library's title wraps in the room *Collapse all* and *Write corrected tags* leave it,
+  rather than running under them; where that room is too little, they go on a line of their own.
+- The one-line player gives what's left after its buttons to the time, then the queue, then the
+  volume, and the sparkline only if there's room to scrub; what doesn't fit is left out rather
+  than drawn over the buttons.
+- The album table leaves out cover, size, format and year, in that order, where it's too narrow
+  for every column, rather than cutting the last ones off at the edge.
+- In *Up next*, a shortened artist ends a gap short of the duration rather than touching it.
+- The top bar's search box gets shorter so *Filters* (and *Save*) stay whole with large text.
+- Where the sidebar would need scrolling (a window 760 high), its items sit a little closer, so
+  the card's section at the foot stays in view.

@@ -16,7 +16,7 @@ use super::ROW_H;
 use crate::app::{App, Lookup};
 use crate::card::Player;
 use crate::library::Track;
-use super::layout::{ICON, S1, S2, S4, S6, row, row_wrapped, font, list_rows};
+use super::layout::{ICON, ROW, S1, S2, S4, S6, row, row_wrapped, font, list_rows};
 
 /// Longest folder path shown before it's shortened with "…" in the middle.
 const FOLDER_CHARS: usize = 60;
@@ -166,53 +166,76 @@ fn page(app: &mut App, ui: &mut Ui) {
     let right_edge = ui.max_rect().right();
     ui.shrink_clip_rect(ui.max_rect());
     // What's shown, in words, and what can be done with all of it. (The folder, the views and
-    // what's worth a look are in the sidebar; the search box is in the top bar.)
-    row_wrapped(ui, |ui| {
-        let title = if app.duplicates_only {
-            "Duplicates".to_string()
-        } else if app.look_alikes_only {
-            "Artists that look alike".to_string()
-        } else {
-            let filter = app.filter.trim().to_string();
-            match filter.as_str() {
-                "" if app.saved.album_table => "Albums".to_string(),
-                "" => "Artists".to_string(),
-                "cover:no" => "Without a cover".to_string(),
-                "damaged:yes" => "Damaged files".to_string(),
-                "edited:yes" => "Corrected, not in the files".to_string(),
-                "genre:none" => "No genre".to_string(),
-                f if f.starts_with("genre:") && !f.contains(' ') => {
-                    let k = crate::library::genres::key(&f["genre:".len()..]);
-                    let name = app.genre_index().genres.iter().find(|g| g.key == k).map(|g| g.name.clone());
-                    name.unwrap_or_else(|| f["genre:".len()..].to_string())
-                }
-                f => format!("Searching “{f}”"),
+    // what's worth a look are in the sidebar; the search box is in the top bar.) The title wraps
+    // in the room the commands leave it; where that's too little, they go on a line of their own.
+    let title = if app.duplicates_only {
+        "Duplicates".to_string()
+    } else if app.look_alikes_only {
+        "Artists that look alike".to_string()
+    } else {
+        let filter = app.filter.trim().to_string();
+        match filter.as_str() {
+            "" if app.saved.album_table => "Albums".to_string(),
+            "" => "Artists".to_string(),
+            "cover:no" => "Without a cover".to_string(),
+            "damaged:yes" => "Damaged files".to_string(),
+            "edited:yes" => "Corrected, not in the files".to_string(),
+            "genre:none" => "No genre".to_string(),
+            f if f.starts_with("genre:") && !f.contains(' ') => {
+                let k = crate::library::genres::key(&f["genre:".len()..]);
+                let name = app.genre_index().genres.iter().find(|g| g.key == k).map(|g| g.name.clone());
+                name.unwrap_or_else(|| f["genre:".len()..].to_string())
             }
-        };
-        let in_genre = app.filter.trim().starts_with("genre:") && !app.filter.trim().contains(' ');
-        if in_genre && widgets::icon_link(ui, Icon::Back, "All genres").clicked() {
-            app.tab = crate::app::Tab::Genres;
+            f => format!("Searching “{f}”"),
         }
-        ui.label(RichText::new(title).size(font::HEADING).color(ink.text));
-        if app.source_missing {
-            ui.label(RichText::new("can't reach the music folder: is its drive connected? It's read again once it's back").color(ink.warn));
-        }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let dirty = app.dirty_in_files();
+    };
+    let in_genre = app.filter.trim().starts_with("genre:") && !app.filter.trim().contains(' ');
+    let dirty = app.dirty_in_files();
+    let write = (dirty > 0).then(|| format!("Write {dirty} corrected tags to source files"));
+    let collapse = !app.saved.album_table;
+    let gap = ui.spacing().item_spacing.x;
+    let commands_w: f32 = write.iter().map(String::as_str).chain(collapse.then_some("Collapse all")).map(|w| widgets::icon_link_width(ui, w) + gap).sum();
+    let back_w = if in_genre { widgets::icon_link_width(ui, "All genres") + gap } else { 0.0 };
+    let title_w = widgets::text_width(ui, &title, font::HEADING);
+    let beside = ui.available_width() - back_w - commands_w - S2 >= title_w.min(360.0);
+    let commands = |ui: &mut Ui, app: &mut App, layout: Layout| {
+        ui.with_layout(layout, |ui| {
             let covers = app.tracks.iter().filter(|t| t.dirty && t.cue.is_none() && t.cover.is_some()).count();
             let hint = if covers > 0 {
                 format!("Writes the corrections into the music files. {covers} of them get a cover, which makes the file's tags bigger than the room kept for them, so the whole file is written again: on a USB drive, count on about a minute per gigabyte. It can be stopped and carried on later.")
             } else {
                 "Writes the corrections into the music files.".to_string()
             };
-            if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("Write {dirty} corrected tags to source files")).on_hover_text(hint).clicked() {
+            if let Some(w) = &write
+                && widgets::icon_link(ui, Icon::Check, w).on_hover_text(hint).clicked()
+            {
                 app.save_tags_to_source();
             }
-            if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
+            if collapse && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
                 app.expanded.clear();
             }
         });
+    };
+    row_wrapped(ui, |ui| {
+        if in_genre && widgets::icon_link(ui, Icon::Back, "All genres").clicked() {
+            app.tab = crate::app::Tab::Genres;
+        }
+        let left = ui.available_size_before_wrap().x;
+        let room = if beside { left - commands_w - S2 } else { left };
+        ui.allocate_ui_with_layout(vec2(room, ROW), Layout::left_to_right(Align::Center).with_main_wrap(true), |ui| {
+            ui.label(RichText::new(title).size(font::HEADING).color(ink.text));
+            if app.source_missing {
+                ui.label(RichText::new("can't reach the music folder: is its drive connected? It's read again once it's back").color(ink.warn));
+            }
+        });
+        if beside {
+            commands(ui, app, Layout::right_to_left(Align::Min));
+        }
     });
+    if !beside && commands_w > 0.0 {
+        let one_row = commands_w <= ui.available_width();
+        commands(ui, app, if one_row { Layout::right_to_left(Align::Center) } else { Layout::top_down(Align::Max) });
+    }
     // What the last tag write (or card operation) couldn't do.
     if app.problems.is_some() {
         ui.add_space(S1);
@@ -414,7 +437,7 @@ fn page(app: &mut App, ui: &mut Ui) {
                         commands.push((Icon::Image, "Find cover".into(), covers_hint(device, "No cover in the songs. Looks in the album's folder, then on the Cover Art Archive."), Some(Action::FindCovers(vec![(ai, bi)]))));
                     }
                     commands.push((Icon::Search, "Look up".into(), "suggest tags from MusicBrainz".into(), Some(Action::LookupAlbum(ai, bi))));
-                    commands.push((Icon::Rename, "Edit tags".into(), "Album, artists, year, numbers and titles. To edit any songs together, ⌘-click them.".into(), Some(Action::EditTags(al.tracks.clone()))));
+                    commands.push((Icon::Rename, "Edit tags".into(), format!("Album, artists, year, numbers and titles. To edit any songs together, {} them.", super::keys::COMMAND_CLICK), Some(Action::EditTags(al.tracks.clone()))));
                     // A copy with all these songs in higher quality: offer it instead.
                     if chosen
                         && let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()).filter(|s| s.higher)
@@ -556,7 +579,7 @@ fn page(app: &mut App, ui: &mut Ui) {
                                 let songs = if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] };
                                 super::menu::music(app, ui, super::menu::Of::Songs(songs), &mut actions, |ui, actions| {
                                     ui.separator();
-                                    if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "Take out of the selection (⌘-click)" } else { "Add to the selection (⌘-click)" }).clicked() {
+                                    if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, format!("{} ({})", if selected { "Take out of the selection" } else { "Add to the selection" }, super::keys::COMMAND_CLICK)).clicked() {
                                         actions.push(Action::Select(ti));
                                         ui.close();
                                     }

@@ -23,6 +23,10 @@ const FIXED: [(&str, SortBy, f32, bool); 6] = [
     ("card", SortBy::Card, 120.0, false),
     ("cover", SortBy::Cover, 56.0, false),
 ];
+/// Where the table is too narrow for every column, these go first, in this order (cover, size,
+/// format, year: indexes into `FIXED`), so the artist and album keep room to be read.
+const DROPPED_FIRST: [usize; 4] = [5, 3, 1, 0];
+const NAMES_KEEP: f32 = 240.0;
 const MARK_W: f32 = 16.0;
 /// Space after a right-aligned number, so the next column doesn't run into it.
 const RIGHT_PAD: f32 = 18.0;
@@ -44,22 +48,33 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
         ui.label(RichText::new(format!("not understood: {} (hover over the search box for what works)", query.unknown.join(" "))).size(font::UI).color(ink.warn));
     }
     let width = ui.available_width() - 14.0;
-    let fixed: f32 = FIXED.iter().map(|c| c.2).sum::<f32>() + MARK_W;
+    let mut fixed_w = FIXED.map(|c| c.2);
+    for i in DROPPED_FIRST {
+        if width - MARK_W - fixed_w.iter().sum::<f32>() >= NAMES_KEEP {
+            break;
+        }
+        fixed_w[i] = 0.0;
+    }
+    let fixed: f32 = fixed_w.iter().sum::<f32>() + MARK_W;
     let artist_w = ((width - fixed) * 0.42).max(80.0);
     let album_w = (width - fixed - artist_w).max(80.0);
     // Column left edges: mark, artist, album, then the fixed ones.
     let mut lefts = vec![0.0, MARK_W, MARK_W + artist_w];
     let mut x = MARK_W + artist_w + album_w;
-    for c in FIXED {
+    for w in fixed_w {
         lefts.push(x);
-        x += c.2;
+        x += w;
     }
-    let widths: Vec<f32> = [MARK_W, artist_w, album_w].into_iter().chain(FIXED.iter().map(|c| c.2)).collect();
+    // A column left out is 0 wide, and nothing is drawn in it.
+    let widths: Vec<f32> = [MARK_W, artist_w, album_w].into_iter().chain(fixed_w).collect();
 
     // Headings: click to sort, again to turn the order around.
     let (rect, _) = ui.allocate_exact_size(vec2(width, 22.0), Sense::hover());
     let headings = [("artist", SortBy::Artist, false), ("album", SortBy::Album, false)].into_iter().chain(FIXED.iter().map(|c| (c.0, c.1, c.3)));
     for (k, (name, by, right)) in headings.enumerate() {
+        if widths[k + 1] == 0.0 {
+            continue;
+        }
         let cell = egui::Rect::from_min_size(rect.min + vec2(lefts[k + 1], 0.0), vec2(widths[k + 1] - if right { RIGHT_PAD } else { 8.0 }, 22.0));
         let r = ui.interact(cell, egui::Id::unique(("album heading", k)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
         widgets::name(ui, &r, egui::Role::ColumnHeader, &format!("sort by {name}"));
@@ -122,6 +137,9 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
                 }
                 let playing = current.is_some_and(|c| al.tracks.contains(&c));
                 let text_at = |k: usize, s: String, f: &FontId, color| {
+                    if widths[k] == 0.0 {
+                        return;
+                    }
                     let g = truncated(ui, s, f.clone(), color, widths[k] - 10.0);
                     p.galley(egui::pos2(cell(k), y - g.size().y / 2.0), g, color);
                 };
@@ -132,6 +150,9 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
                 text_at(3, row.year.map(|y| y.to_string()).unwrap_or_default(), &data, ink.muted);
                 text_at(4, row.format.clone(), &data, if row.plays_on_device { ink.muted } else { ink.warn });
                 let right = |k: usize, s: String| {
+                    if widths[k] == 0.0 {
+                        return;
+                    }
                     p.text(egui::pos2(cell(k) + widths[k] - RIGHT_PAD, y), Align2::RIGHT_CENTER, s, data.clone(), ink.muted);
                 };
                 right(5, row.songs.to_string());
@@ -144,7 +165,7 @@ pub fn show(app: &mut App, ui: &mut Ui, query: &Query, actions: &mut Vec<Action>
                     Some(Mark::Removing) => "taken off at Sync".into(),
                 };
                 text_at(7, card_word, &small, if mark == Some(Mark::Removing) { ink.warn } else { ink.muted });
-                if row.cover {
+                if row.cover && widths[8] > 0.0 {
                     icons::paint(&p, egui::Rect::from_center_size(egui::pos2(cell(8) + 8.0, y), vec2(14.0, 14.0)), Icon::Image, ink.muted);
                 } else {
                     text_at(8, "none".into(), &small, ink.warn);
@@ -254,7 +275,7 @@ fn selection_bar(app: &App, ui: &mut Ui, rows: &[AlbumRow], actions: &mut Vec<Ac
                 actions.push(Action::ClearAlbums);
             }
         });
-        widgets::help(ui, "Click an album to select it, ⌘-click to add or remove one, shift-click for a run; double-click plays it.");
+        widgets::help(ui, format!("Click an album to select it, {} to add or remove one, shift-click for a run; double-click plays it.", super::keys::COMMAND_CLICK));
     });
     ui.add_space(S1);
 }
