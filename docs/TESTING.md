@@ -346,6 +346,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     its length the same. No `.<name>.pausetape` file is left beside it. Files that start blank
     are listed as damaged. On Windows, a song marked read-only (Properties › Read-only) is
     written too, and is no longer read-only afterwards; so is the song that's playing.
+21r. Play a song whose audio breaks off part way (Kendrick Lamar's *GNX* here: stretches of
+    zeros, from a copy that didn't finish). Within a second or two a notice says it's damaged and
+    how ("its audio stops making sense at 0:01", "none of its audio can be read"); the player
+    goes on to the next song; the song shows *damaged* on its row (its reason on hover) and is
+    under *Review › Damaged files*, still marked for the card (it's copied as it is). Quit and
+    reopen: it still is. Replace the file with a sound copy: after a rescan it isn't any more.
 21n. A fresh start (empty data folder): a welcome asks for the music folder, then the card
     (which can wait); *Start* closes it. Music already on the card is explained after it.
 

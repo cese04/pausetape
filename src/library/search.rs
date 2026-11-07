@@ -18,7 +18,7 @@ pub enum Filter {
     Year(Option<u16>, Option<u16>),
     /// Has songs with corrections not yet in the files.
     Edited(bool),
-    /// Has damaged files (`Track::damaged`).
+    /// Has damaged files (`Track::harmed`).
     Damaged(bool),
     /// Has this genre (by `genres::key`); "" for albums with none.
     Genre(String),
@@ -183,7 +183,7 @@ impl Filter {
             Filter::Cover(has) => a.cover == *has,
             Filter::Year(from, to) => a.year.is_some_and(|y| from.is_none_or(|f| y >= f) && to.is_none_or(|t| y <= t)),
             Filter::Edited(e) => a.tracks.iter().any(|t| t.dirty) == *e,
-            Filter::Damaged(d) => a.tracks.iter().any(|t| t.damaged) == *d,
+            Filter::Damaged(d) => a.tracks.iter().any(|t| t.harmed()) == *d,
             Filter::Genre(k) if k.is_empty() => a.genres.is_empty(),
             Filter::Genre(k) => a.genres.contains(k),
         }

@@ -96,7 +96,7 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str
     if show_artist && let Some(a) = &t.artist {
         title = format!("{title}  ·  {a}");
     }
-    let right_cols = if device.plays(t) && !repeat { 130.0 } else { 250.0 };
+    let right_cols = if device.plays(t) && !t.harmed() && !repeat { 130.0 } else { 250.0 };
     let title_x = number_end + 14.0;
     let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - title_x - right_cols);
     p.galley(egui::pos2(rect.left() + title_x, y - galley.size().y / 2.0), galley, ink.text);
@@ -106,7 +106,7 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str
     x -= 56.0;
     if repeat {
         p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(font::META), ink.warn);
-    } else if !device.plays(t) {
+    } else if t.harmed() || !device.plays(t) {
         // A small outlined badge: the format, and what it means for the player.
         let label = text::format_badge(t, device);
         let g = ui.painter().layout_no_wrap(label, FontId::proportional(font::CAPS), ink.warn);

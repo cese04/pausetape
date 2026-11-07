@@ -32,8 +32,11 @@ pub fn bytes(n: u64) -> String {
     }
 }
 
-/// Why a file is flagged for the card's player, for tooltips.
+/// Why a file is flagged (damaged, or not for the card's player), for tooltips.
 pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> {
+    if let Some(note) = t.damage_note() {
+        return Some(note);
+    }
     if device.plays(t) {
         return None;
     }
@@ -48,8 +51,11 @@ pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> 
     })
 }
 
-/// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play".
+/// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play" / "damaged".
 pub fn format_badge(t: &crate::library::Track, device: Player) -> String {
+    if t.harmed() {
+        return "damaged".into();
+    }
     let state = match (t.plays_here(), t.ffmpeg_can_decode()) {
         (true, _) => format!("not on {}", device.short()),
         (false, true) => "needs ffmpeg".into(),

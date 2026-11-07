@@ -279,6 +279,7 @@ fn split(image: &Track, sheet: &Sheet, file: &SheetFile, sheet_path: &Path) -> V
                 cover: None,
                 embedded_cover: image.embedded_cover,
                 damaged: image.damaged,
+                damage: image.damage.clone(),
                 dirty: false,
             }
         })

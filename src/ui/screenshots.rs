@@ -86,7 +86,9 @@ impl Shooter {
             let who = std::env::var("PAUSETAPE_SHOT_ARTIST").unwrap_or_else(|_| "Radiohead".into());
             let found = app.index.artists.iter().enumerate().find(|(_, a)| a.name.eq_ignore_ascii_case(&who));
             if let Some((ai, a)) = found {
-                let al = a.albums.iter().position(|al| al.tracks.iter().any(|&i| app.tracks[i].cue.is_some())).unwrap_or(0);
+                // PAUSETAPE_SHOT_ALBUM=<text>: the album whose title holds it, instead.
+                let named = std::env::var("PAUSETAPE_SHOT_ALBUM").ok().and_then(|n| a.albums.iter().position(|al| al.title.as_deref().is_some_and(|t| t.to_lowercase().contains(&n.to_lowercase()))));
+                let al = named.or_else(|| a.albums.iter().position(|al| al.tracks.iter().any(|&i| app.tracks[i].cue.is_some()))).unwrap_or(0);
                 let (queue, cluster) = (a.albums[al].tracks.clone(), a.cluster);
                 app.play(queue, 1);
                 app.lookup_album(ai, al);

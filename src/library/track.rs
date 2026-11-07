@@ -65,6 +65,11 @@ pub struct Track {
     /// inside its tag, as files do that a failing card or disk, or a copy cut short, lost.
     /// It can't be played or converted.
     pub damaged: bool,
+    /// What playing the file found wrong with its audio ("its audio stops making sense at
+    /// 0:04"), which the scan can't see. It's still played and copied as it is: what's left of
+    /// it may well play, and players skip a bad stretch where this app's decoder stops. Kept
+    /// until the file changes and is read again.
+    pub damage: Option<String>,
 }
 
 impl Track {
@@ -103,6 +108,21 @@ impl Track {
     /// The built-in decoder (Symphonia) handles this file without help.
     pub fn native(&self) -> bool {
         APP_FORMATS.contains(&self.ext.as_str()) && self.codec.as_deref().is_none_or(|c| NATIVE_MP4_CODECS.contains(&c))
+    }
+
+    /// Damaged, as the scan found it or as playing it did: listed with the damaged files.
+    pub fn harmed(&self) -> bool {
+        self.damaged || self.damage.is_some()
+    }
+
+    /// What's wrong with a damaged file, in words; `None` for a sound one.
+    pub fn damage_note(&self) -> Option<String> {
+        let fresh = "A fresh copy of it (from where it came) mends it.";
+        if self.damaged {
+            Some(format!("This file is damaged: part of it was lost (it starts blank, or stops inside its tags), so it's left off the card. {fresh}"))
+        } else {
+            self.damage.as_ref().map(|what| format!("This file is damaged: {what}. It's still played, and copied to the card, as it is. {fresh}"))
+        }
     }
 
     /// Pausetape's player can play this file, natively or by converting it with ffmpeg.
