@@ -31,7 +31,7 @@ walkdir = "2.5.0"
 [target.'cfg(windows)'.dependencies]
 # Listing drive letters, their labels, filesystems and free space; whether the system asks for
 # less motion.
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_Console", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_IO", "Win32_System_Ioctl", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 lto = "thin"

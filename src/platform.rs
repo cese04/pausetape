@@ -1,5 +1,5 @@
 //! Things that differ per operating system and aren't about music: where the app keeps its
-//! data, opening a folder in the system file manager, and the Trash.
+//! data, opening a folder in the system file manager, the Trash, and ejecting a card.
 
 use std::path::{Path, PathBuf};
 
@@ -139,4 +139,124 @@ fn without_recycle_bin(path: &Path) -> bool {
     // SAFETY: `root` is a NUL-terminated drive root such as "E:\".
     let kind = unsafe { windows_sys::Win32::Storage::FileSystem::GetDriveTypeW(root.as_ptr()) };
     matches!(kind, DRIVE_REMOVABLE | DRIVE_REMOTE)
+}
+
+/// Eject the card or drive mounted at `volume`, so it can be taken out: macOS's `diskutil
+/// eject`; on Windows, what *Eject* in Explorer does (lock, dismount, then eject the medium);
+/// elsewhere `gio mount --eject`. The error says why not, e.g. a file on it still open.
+pub fn eject(volume: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        windows_eject::eject(volume)
+    }
+    #[cfg(not(windows))]
+    {
+        let mut cmd = if cfg!(target_os = "macos") { std::process::Command::new("diskutil") } else { std::process::Command::new("gio") };
+        if cfg!(target_os = "macos") {
+            cmd.arg("eject");
+        } else {
+            cmd.args(["mount", "--eject"]);
+        }
+        let out = cmd.arg(volume).output().map_err(|e| e.to_string())?;
+        if out.status.success() {
+            return Ok(());
+        }
+        let said = String::from_utf8_lossy(if out.stderr.is_empty() { &out.stdout } else { &out.stderr }).trim().to_string();
+        Err(why_not_ejected(&said))
+    }
+}
+
+/// diskutil's answer, in a line: "Unmount of disk10 failed: at least one volume could not be
+/// unmounted\nUnmount was dissented by PID 20475 (/bin/sleep)…" says who holds it.
+#[cfg(not(windows))]
+fn why_not_ejected(said: &str) -> String {
+    let holder = said.split_once("dissented by PID").and_then(|(_, rest)| rest.split_once('(')).and_then(|(_, rest)| rest.split_once(')')).map(|(path, _)| path);
+    if let Some(name) = holder.and_then(|p| Path::new(p).file_name()) {
+        return format!("{} is using it; close what it has open there and eject again", name.to_string_lossy());
+    }
+    said.lines().next().filter(|l| !l.is_empty()).unwrap_or("the system said no").to_string()
+}
+
+#[cfg(windows)]
+mod windows_eject {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME, IOCTL_STORAGE_EJECT_MEDIA, IOCTL_STORAGE_MEDIA_REMOVAL, PREVENT_MEDIA_REMOVAL};
+
+    /// The steps of Microsoft's "how to eject removable media" (KB165721).
+    pub fn eject(volume: &Path) -> Result<(), String> {
+        let letter = volume.to_string_lossy().chars().next().filter(char::is_ascii_alphabetic).ok_or("not a drive letter")?;
+        let device: Vec<u16> = std::ffi::OsStr::new(&format!("\\\\.\\{letter}:")).encode_wide().chain([0]).collect();
+        // SAFETY: `device` is NUL-terminated; no security attributes or template.
+        let h = unsafe { CreateFileW(device.as_ptr(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, std::ptr::null(), OPEN_EXISTING, 0, std::ptr::null_mut()) };
+        if h == INVALID_HANDLE_VALUE {
+            return Err(format!("couldn't open drive {letter}: ({})", std::io::Error::last_os_error()));
+        }
+        let steps = || {
+            // A file still open on it (a player, Explorer's preview) keeps the lock away for a
+            // moment: try for about two seconds.
+            let mut locked = false;
+            for _ in 0..20 {
+                if control(h, FSCTL_LOCK_VOLUME, None) {
+                    locked = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            if !locked {
+                return Err("a file on it is still open somewhere; close it and eject again".to_string());
+            }
+            if !control(h, FSCTL_DISMOUNT_VOLUME, None) {
+                return Err(format!("couldn't dismount it ({})", std::io::Error::last_os_error()));
+            }
+            let allow = PREVENT_MEDIA_REMOVAL { PreventMediaRemoval: false };
+            control(h, IOCTL_STORAGE_MEDIA_REMOVAL, Some(&allow));
+            // Some card readers can't eject the card itself; dismounted, it's safe to take out.
+            control(h, IOCTL_STORAGE_EJECT_MEDIA, None);
+            Ok(())
+        };
+        let done = steps();
+        // SAFETY: `h` was opened above and is closed once.
+        unsafe { CloseHandle(h) };
+        done
+    }
+
+    fn control(h: HANDLE, code: u32, input: Option<&PREVENT_MEDIA_REMOVAL>) -> bool {
+        let mut returned = 0u32;
+        let (ptr, len) = match input {
+            Some(i) => ((i as *const PREVENT_MEDIA_REMOVAL).cast(), size_of::<PREVENT_MEDIA_REMOVAL>() as u32),
+            None => (std::ptr::null(), 0),
+        };
+        // SAFETY: `h` is an open volume; the input, if any, is `len` bytes that outlive the call;
+        // no output buffer; synchronous (no OVERLAPPED).
+        unsafe { DeviceIoControl(h, code, ptr, len, std::ptr::null_mut(), 0, &mut returned, std::ptr::null_mut()) != 0 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// `PAUSETAPE_EJECT=<mount point> cargo test -- --ignored ejects`: ejects that drive (try a
+    /// disk image: `hdiutil create -size 20m -fs MS-DOS -volname PTEST t.dmg; hdiutil attach t.dmg`).
+    #[test]
+    #[ignore]
+    fn ejects() {
+        let Ok(v) = std::env::var("PAUSETAPE_EJECT") else { return };
+        let v = std::path::PathBuf::from(v);
+        assert!(v.exists());
+        super::eject(&v).unwrap();
+        assert!(!v.exists(), "gone once ejected");
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn says_who_keeps_a_card_from_ejecting() {
+        let said = "Unmount of disk10 failed: at least one volume could not be unmounted\nUnmount was dissented by PID 20475 (/Applications/Music.app/Contents/MacOS/Music)\nDissenter parent PPID 1 (launchd)";
+        assert_eq!(super::why_not_ejected(said), "Music is using it; close what it has open there and eject again");
+        assert_eq!(super::why_not_ejected("Error unmounting: target is busy\nmore"), "Error unmounting: target is busy");
+        assert_eq!(super::why_not_ejected(""), "the system said no");
+    }
 }

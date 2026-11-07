@@ -204,6 +204,15 @@ impl Shooter {
                 app.select_write(0);
                 self.watch = true;
             }
+            // PAUSETAPE_SHOT_DONE=<a mounted scratch volume>: as if a Sync to it had just finished,
+            // its notice offering to eject it (nothing is written there, nor ejected).
+            if let Some(vol) = std::env::var_os("PAUSETAPE_SHOT_DONE").map(PathBuf::from) {
+                app.write_mut().dest = Some(vol);
+                app.volumes = crate::card::volumes();
+                app.notice("Done · “Echo Mini”: 412 copied · 0 unchanged · 0 removed · 3 left out · 0 retagged · 12 mac files cleaned");
+                let id = app.write().id.clone();
+                app.offer_eject(&id);
+            }
             app.preview_write();
         }
         let (n, half) = (self.step / 2, self.step % 2);

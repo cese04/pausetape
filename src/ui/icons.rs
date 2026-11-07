@@ -36,6 +36,8 @@ pub enum Icon {
     Check,
     /// A picture: covers.
     Image,
+    /// A triangle over a bar: eject the card.
+    Eject,
     // The artist panel
     /// A shopping bag: where to buy.
     Buy,
@@ -173,6 +175,10 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
         }
         Icon::Down => {
             p.add(line(&[(0.22, 0.36), (0.5, 0.66), (0.78, 0.36)]));
+        }
+        Icon::Eject => {
+            p.add(closed(&[(0.2, 0.6), (0.5, 0.24), (0.8, 0.6)]));
+            p.add(line(&[(0.2, 0.78), (0.8, 0.78)]));
         }
         Icon::Copy => {
             p.add(closed(&[(0.3, 0.3), (0.88, 0.3), (0.88, 0.88), (0.3, 0.88)]));
