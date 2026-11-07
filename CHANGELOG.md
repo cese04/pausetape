@@ -1141,3 +1141,28 @@ never bouncing (`ui/motion.rs`).
   row), and the cassette's reels stand still, in the player and in place of spinners.
 - Not done: the details panel doesn't slide in, as it's always there when the window has room
   for it; "Done · Eject" after a Sync needs ejecting the card, a feature of its own.
+
+### 96. Tags written into MP3s with two tags, or zeros before their audio (2026-11-06)
+Writing corrected tags failed on 401 of this library's MP3s with "failed to write to file:
+failed to parse file: no format could be determined from the provided file". Lofty tells a
+file's kind from its extension when reading, but from its contents only when writing: past one
+ID3v2 tag, it looks for the audio within 1 KB. Two shapes of file keep it from finding it.
+- **Two ID3v2 tags, one after the other** (83 files: Cocteau Twins, Epitaph, Haken's
+  *Aquarius*): a v2.3 tag, then a v2.4 one that some tagger added in place of replacing it.
+  Letting lofty look further wouldn't do: it writes over the first and leaves the second, the one
+  read afterwards, so the old tags come back. The file is now rewritten with one tag before its
+  audio, holding both tags' frames as they were read (the later tag's winning, as players read
+  them).
+- **1044 zero bytes between the tag and the audio** (318 files: Rush, Dead Can Dance, Gojira, The
+  Mars Volta, Guthrie Govan…): the zeros go too.
+- The rewrite goes into a copy beside the file (`.<name>.pausetape`), which takes its place only
+  once written, so a failure leaves the file as it was. Anything else lofty can't place now says
+  "the audio isn't where its tags say it starts, so the tags weren't written".
+- **More files called damaged** (`Track::damaged`): the ones that start blank but read (12
+  Megadeth and Doors MP3s, a few seconds of audio after up to 835 KB of zeros), and the ones that
+  end inside their own tag (*Spanish Caravan*: a 76 KB tag in a 36 KB file). With the 57 known
+  before (R8), 70 in this library, all from a restored backup. They're left off the card, as
+  before, and found with `damaged:yes`. The library database's version went up (7), so every file
+  is read once more at the next start.
+- Checked against the whole library: of the 471 files that failed, the 401 written into copies
+  read back with their new tags, artist, album and length kept; the other 70 are the damaged ones.
