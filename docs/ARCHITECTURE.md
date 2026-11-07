@@ -227,6 +227,6 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 ## Conventions
 
 - Comments explain *why*, not what.
-- Long lines (~160 characters); see PROGRESS §6 about `rustfmt.toml` before running `cargo fmt`.
+- Long lines (~160 characters), formatted by hand; `rustfmt.toml` keeps rustfmt (`cargo fmt`, editors) from rewriting them.
 - UI copy uses plain words ("Write to the card", "songs") and avoids file-system jargon where
   possible.

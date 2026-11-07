@@ -278,8 +278,9 @@ Smaller items, ordered by value.
 - **Version control.** A git repository exists (`target/` and `dist/` ignored) with nothing
   committed yet; the first commit and a GitHub remote are the next steps. Once pushed, the CI
   workflow gives the first Windows/Linux build results.
-- **Formatting.** The code uses lines up to ~160 characters; plain `cargo fmt` would rewrap every
-  file. Adding a `rustfmt.toml` (`max_width = 160`) first keeps diffs readable.
+- **Formatting.** Done (2026-11-06): the code is formatted by hand, with lines up to ~160
+  characters, and `rustfmt.toml` turns rustfmt off (`disable_all_formatting`), so `cargo fmt`, an
+  editor's format-on-save or Trunk's own rustfmt leave it as it is.
 - **Continuous integration**: `ci.yml` exists; watch its first runs on Windows and Linux.
 - **A tag-writing test** on a real FLAC and MP3 (see *Not verified yet*).
 - **Upgrade path for saved settings.** Saved state is versioned implicitly through serde

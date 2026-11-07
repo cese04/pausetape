@@ -1166,3 +1166,9 @@ ID3v2 tag, it looks for the audio within 1 KB. Two shapes of file keep it from f
   is read once more at the next start.
 - Checked against the whole library: of the 471 files that failed, the 401 written into copies
   read back with their new tags, artist, album and length kept; the other 70 are the damaged ones.
+
+### 97. rustfmt leaves the code alone (2026-11-06)
+- An editor extension (Trunk) ran its own rustfmt, version 1.65, over the files changed since
+  the last push, and rewrapped 24 of them: lines cut at 100 characters, `let … else` spread over
+  three lines, imports in the old order. `rustfmt.toml` now says `disable_all_formatting`, which
+  every rustfmt reads, old and new, run by `cargo fmt`, rust-analyzer or Trunk.
