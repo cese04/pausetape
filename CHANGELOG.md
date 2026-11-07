@@ -1231,3 +1231,12 @@ so, and offers the next step.
   macOS, which program still has something open there, from diskutil's answer.
 - Checked on macOS with a FAT32 disk image: ejected, and refused while a program kept a file on
   it open. Windows and Linux not tried yet ([TESTING](docs/TESTING.md) step 18c).
+
+### 102. The website’s screenshots in the new look (2026-11-06)
+- The top of the page and the tour's five steps show the app after the UI/UX redesign: ET Book,
+  Courier Prime and Kalam, the sidebar, the welcome dialog with its two steps, the card's view
+  with its table, the job in the status bar.
+- Every mark of the tour moved to fit (they still pointed at the old tabs), checked in the page
+  itself, in both themes. The bottom ones stay inside the frame, which clips the ring.
+- Step 4's note and the line above the tour say "choose" rather than "tick", as albums are sent
+  to the card from the library now; two screenshots' `alt` texts say what they show today.
