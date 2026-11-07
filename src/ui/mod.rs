@@ -293,6 +293,11 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     if app.notice_offers_undo() && widgets::icon_link(ui, Icon::Back, format!("Undo ({})", ui.ctx().format_shortcut(&keys::UNDO))).clicked() {
         app.undo_last();
     }
+    if let Some(card) = app.notice_offers_eject()
+        && widgets::icon_link(ui, Icon::Eject, "Eject").on_hover_text("Ready the card to be taken out, as the system's Eject does").clicked()
+    {
+        app.eject(card);
+    }
     widgets::fitted(ui, RichText::new(text).size(font::UI).color(ink.text), ui.available_width() - ICON - S2, egui::Sense::hover()).on_hover_text(text);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
     icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);

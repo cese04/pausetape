@@ -180,6 +180,8 @@ enum Msg {
     TestCardWritten(Vec<(card::Sample, Result<(), String>)>),
     /// The test card's files taken off the card, or why not.
     TestCardRemoved(Result<(), String>),
+    /// The card by name ejected, or why not.
+    Ejected(String, Result<(), String>),
 }
 
 pub struct Busy {
@@ -324,6 +326,9 @@ pub struct App {
     pub undo_stack: Vec<Undo>,
     /// The notice about the latest of them, which offers "undo" while it's showing.
     pub undo_notice: Option<String>,
+    /// The notice of a finished Sync, which offers to eject the card it wrote to while it's the
+    /// latest: (notice, the card's mount point).
+    pub eject_notice: Option<(String, PathBuf)>,
     /// A dialog asking before a change that can't be undone.
     pub confirm: Option<Confirm>,
     /// A folder dropped on the window while other work ran: checked once it's done.
@@ -485,6 +490,7 @@ impl App {
             notices: Vec::new(),
             undo_stack: Vec::new(),
             undo_notice: None,
+            eject_notice: None,
             confirm: None,
             pending_add: None,
             focus_search: false,

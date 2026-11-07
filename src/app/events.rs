@@ -118,7 +118,7 @@ impl App {
                         ));
                     } else {
                         self.notice(format!(
-                            "“{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
+                            "Done · “{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
                             out.copied,
                             out.unchanged,
                             if out.renamed > 0 { format!(" · {} renamed", out.renamed) } else { String::new() },
@@ -137,6 +137,19 @@ impl App {
                     self.write_preview = None;
                     self.volumes = card::volumes();
                     self.refresh_on_card();
+                    self.refresh_label();
+                    if !out.stopped {
+                        self.offer_eject(&id);
+                    }
+                }
+                Msg::Ejected(name, r) => {
+                    self.busy = None;
+                    self.eject_notice = None;
+                    match r {
+                        Ok(()) => self.notice(format!("“{name}” ejected: the card can come out")),
+                        Err(e) => self.notice(format!("“{name}” wasn't ejected: {e}")),
+                    }
+                    self.volumes = card::volumes();
                     self.refresh_label();
                 }
                 Msg::Surveyed(id, s) => {

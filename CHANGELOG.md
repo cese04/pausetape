@@ -1216,3 +1216,18 @@ ID3v2 tag, it looks for the audio within 1 KB. Two shapes of file keep it from f
   started blank showed no badge, or one about its format.
 - On this library: Kendrick Lamar's *GNX* in M4A (all 12 songs) and most of John Petrucci's
   *Suspended Animation* (cut off, ffmpeg agrees) are damaged; no sound MP3 or M4A was flagged.
+
+### 101. Done · Eject (2026-11-06)
+The last piece of UI/UX phase 4 (§4.7 and §6.2 of the design notes): a Sync that finishes says
+so, and offers the next step.
+- The notice of a finished Sync starts with **Done**, and offers **Eject** beside it, as a
+  change that can be undone offers *Undo*, for as long as it's the latest notice and the card is
+  still there. Not after a stopped Sync, nor when the music folder is on the card's drive (that
+  would take the library away too).
+- Ejecting runs in the background (`platform::eject`): macOS `diskutil eject`; Windows what
+  Explorer's *Eject* does (lock the volume, dismount it, allow and ask for the medium's
+  removal), trying the lock for two seconds while a file on it closes; Linux `gio mount
+  --eject`. The notice then says "“ECHO MINI” ejected: the card can come out", or why not: on
+  macOS, which program still has something open there, from diskutil's answer.
+- Checked on macOS with a FAT32 disk image: ejected, and refused while a program kept a file on
+  it open. Windows and Linux not tried yet ([TESTING](docs/TESTING.md) step 18c).

@@ -68,7 +68,7 @@ uses, so call sites read `crate::card::build_plan`, `crate::library::Track`, `cr
 src/
 ├── main.rs            start-up, --version, --plan; APP_NAME / APP_ID
 ├── platform.rs        app data folder; open a folder in Finder/Explorer/file manager; the Trash;
-│                      console programs without a console window (Windows)
+│                      console programs without a console window (Windows); ejecting a card
 ├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive);
 │                      an artist's entry: genres, years, links sorted into buy / listen / discover
 ├── lyrics.rs        lyrics: LRC lines with their times; a song's own (.lrc, tags), else LRCLIB's
@@ -202,7 +202,8 @@ App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
 letters, label, filesystem and free space through `windows-sys` on Windows; mount points),
 `card/label.rs` (the label's hidden attribute on Windows), `platform.rs` (data folder;
 `open`/`explorer`/`xdg-open`; no Trash on Windows removable drives; ffmpeg without a console
-window on Windows),
+window on Windows; ejecting with `diskutil`, Windows' lock-dismount-eject `DeviceIoControl`
+calls, or `gio`),
 `ui/theme.rs` (fallback font paths), `audio/decode.rs` (ffmpeg locations, `ffmpeg.exe`),
 `ui/navigator.rs` (drive shortcuts). The gaps are listed in
 [TESTING §3](TESTING.md#3-known-gaps-found-by-reading-the-code-not-yet-seen-on-a-real-machine).

@@ -1,5 +1,5 @@
 //! Noticing cards: every few seconds the mounted drives are listed, and a card plugged in with a
-//! label (`card::label`) brings up the card setup it belongs to.
+//! label (`card::label`) brings up the card setup it belongs to. Ejecting one after a Sync.
 
 use std::path::Path;
 
@@ -9,6 +9,34 @@ use crate::card::Label;
 const WATCH_EVERY: Duration = Duration::from_secs(3);
 
 impl App {
+    /// After setup `id`'s Sync, let its notice offer to eject the card: when the card is a drive
+    /// of its own, and not the one the music folder is on (that would take the library away too).
+    pub fn offer_eject(&mut self, id: &str) {
+        let Some(dest) = self.saved.writes.iter().find(|w| w.id == id).and_then(|w| w.dest.clone()) else { return };
+        let Some(v) = self.volumes.iter().filter(|v| dest.starts_with(&v.path)).max_by_key(|v| v.path.as_os_str().len()) else { return };
+        if self.saved.source.as_ref().is_some_and(|s| s.starts_with(&v.path)) {
+            return;
+        }
+        self.eject_notice = self.notices.last().map(|n| (n.clone(), v.path.clone()));
+    }
+
+    /// The card the latest notice offers to eject, while it's still there.
+    pub fn notice_offers_eject(&self) -> Option<PathBuf> {
+        let (notice, path) = self.eject_notice.as_ref()?;
+        (self.notices.last() == Some(notice) && self.volumes.iter().any(|v| &v.path == path)).then(|| path.clone())
+    }
+
+    pub fn eject(&mut self, path: PathBuf) {
+        if self.busy.is_some() {
+            return;
+        }
+        let name = self.volumes.iter().find(|v| v.path == path).map(|v| v.name.clone()).unwrap_or_else(|| path.display().to_string());
+        self.busy = Some(Busy::new(format!("ejecting “{name}”"), 0));
+        self.spawn(move |tx| {
+            let _ = tx.send(Msg::Ejected(name, crate::platform::eject(&path)));
+        });
+    }
+
     pub fn watch_cards(&mut self) {
         #[cfg(debug_assertions)]
         if self.shooter.as_ref().is_some_and(|s| !s.watch) {

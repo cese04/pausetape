@@ -194,7 +194,8 @@ Smaller items, ordered by value.
   names before writing. *M*
 - **Progress with time left, and Cancel**, during long writes (a 30 GB first write takes a
   while). *S*
-- **Eject the card** after a successful write (`diskutil eject`). *S*
+- ~~**Eject the card** after a successful write.~~ *Done 2026-11-06:* the notice of a finished
+  Sync offers *Eject* (CHANGELOG §101).
 - **"On the card" marks in the library**: a quiet dot on albums the active write has put on
   the card, so the library and the card tab tell the same story. *S*
 - **Prefer the best copy.** When the same album exists twice (FLAC and MP3, or Atmos and
