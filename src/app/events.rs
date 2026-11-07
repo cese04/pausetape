@@ -311,6 +311,7 @@ impl App {
                         self.envelope = Some((id, env));
                     }
                 }
+                Msg::Damaged(path, why) => self.found_damaged(&path, why),
             }
         }
         while let Ok(reply) = self.mb_rx.try_recv() {

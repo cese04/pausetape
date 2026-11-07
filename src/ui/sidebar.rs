@@ -245,7 +245,7 @@ fn review(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
     let duplicates = app.index.superseded().len() + app.index.artists.iter().flat_map(|a| &a.albums).filter(|al| !al.repeats.is_empty()).count();
     rows.push((Icon::Copy, "Duplicates".into(), duplicates, Go::Duplicates, app.tab == Tab::Library && app.duplicates_only));
     rows.push((Icon::Artists, "Artists that look alike".into(), app.index.suggestions.len(), Go::LookAlikes, app.tab == Tab::Library && app.look_alikes_only));
-    let damaged = app.tracks.iter().filter(|t| t.damaged).count();
+    let damaged = app.tracks.iter().filter(|t| t.harmed()).count();
     rows.push((Icon::Remove, "Damaged files".into(), damaged, Go::Search("damaged:yes".into()), searching("damaged:yes")));
     let edited = app.dirty_count();
     rows.push((Icon::Rename, "Corrected, not in the files".into(), edited, Go::Search("edited:yes".into()), searching("edited:yes")));

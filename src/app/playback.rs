@@ -47,7 +47,7 @@ impl App {
     fn show_current(&mut self) {
         let Some(i) = self.current() else { return };
         let t = &self.tracks[i];
-        let (path, id) = (t.path.clone(), t.id());
+        let (path, id, expected) = (t.path.clone(), t.id(), t.duration);
         let span = t.cue.as_ref().map(|c| (c.start_time(), c.end_time()));
         if self.cover.as_ref().is_none_or(|(p, _, _)| *p != path) {
             self.load_cover(path.clone());
@@ -55,11 +55,31 @@ impl App {
         if self.envelope.as_ref().is_none_or(|(p, _)| *p != id) {
             self.envelope = None;
             self.spawn(move |tx| {
-                if let Some(env) = audio::envelope(&path, span) {
-                    let _ = tx.send(Msg::Envelope(id, env));
+                match audio::envelope(&path, span, expected) {
+                    Some(audio::Envelope::Loudness(env)) => _ = tx.send(Msg::Envelope(id, env)),
+                    Some(audio::Envelope::Damaged(why)) => _ = tx.send(Msg::Damaged(path, why)),
+                    None => {}
                 }
             });
         }
+    }
+    /// Playing a file found its audio broken: it's listed with the damaged files, with what's
+    /// wrong, until the file changes; a notice says so once. It still plays and goes on the card.
+    /// card, and remembered as damaged until the file changes; a notice says so once.
+    pub(super) fn found_damaged(&mut self, path: &std::path::Path, why: String) {
+        let mut name = None;
+        for t in self.tracks.iter_mut().filter(|t| t.path == path && !t.harmed()) {
+            name.get_or_insert_with(|| t.display_title());
+            t.damage = Some(why.clone());
+        }
+        let Some(name) = name else { return };
+        if let Some(db) = &mut self.db
+            && let Err(e) = db.mark_damaged(path, &why)
+        {
+            self.notices.push(format!("couldn't note the damage in the library database (it's found again when played): {e:#}"));
+        }
+        self.refresh_on_card();
+        self.notice(format!("“{name}” is damaged: {why}. It's under Review › Damaged files"));
     }
 
     /// Look up the cover for a track path in the background (`Msg::Cover`): one waiting to be

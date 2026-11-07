@@ -153,6 +153,17 @@ impl Db {
         Ok(())
     }
 
+    /// A file found damaged when played: its row says so, and why, until the file changes and
+    /// is read again (a fresh copy is sound until found otherwise).
+    pub fn mark_damaged(&mut self, path: &Path, why: &str) -> Result<()> {
+        let key = path.to_string_lossy();
+        let data: String = self.conn.query_row("SELECT data FROM tracks WHERE path = ?1", params![key], |r| r.get(0))?;
+        let mut t: Track = serde_json::from_str(&data)?;
+        t.damage = Some(why.to_string());
+        self.conn.execute("UPDATE tracks SET data = ?2 WHERE path = ?1", params![key, serde_json::to_string(&t)?])?;
+        Ok(())
+    }
+
     /// When `root` was last read through, if it was (with this layout of the database).
     pub fn scanned(&self, root: &Path) -> Result<Option<u64>> {
         let at = self.conn.query_row("SELECT scanned FROM folders WHERE root = ?1", params![root.to_string_lossy()], |r| r.get::<_, i64>(0));
@@ -327,6 +338,34 @@ mod tests {
         assert!(inside >= low && inside < high);
         assert!(!(sibling >= low && sibling < high));
         assert!(!(sibling2 >= low && sibling2 < high));
+    }
+
+    #[test]
+    fn damage_found_in_play_lasts_until_the_file_changes() {
+        use crate::library::scan;
+        let root = std::env::temp_dir().join(format!("pausetape-test-db-damage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let song = root.join("music/GNX/04 - man at the garden.mp3");
+        std::fs::create_dir_all(song.parent().unwrap()).unwrap();
+        std::fs::write(&song, b"some audio").unwrap();
+        let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
+        let music = root.join("music");
+        // Marked by the path the scan gave it, as the app does.
+        let found = scan(&music, Some(&mut db), false, |_| {}).0.remove(0).path;
+        db.mark_damaged(&found, "its audio stops making sense at 0:03").unwrap();
+        // A rescan keeps it; so does a correction saved since.
+        let mut edited = scan(&music, Some(&mut db), false, |_| {}).0.remove(0);
+        assert!(edited.harmed() && !edited.damaged && edited.damage.as_deref() == Some("its audio stops making sense at 0:03"), "noted, still copied");
+        (edited.title, edited.dirty, edited.damage) = (Some("man at the garden".into()), true, None);
+        db.save_edits([&edited]).unwrap();
+        let t = scan(&music, Some(&mut db), false, |_| {}).0.remove(0);
+        assert!(t.dirty && t.harmed() && t.damage_note().unwrap().contains("0:03"));
+
+        // A fresh copy is read again, and is sound until found otherwise.
+        std::fs::write(&song, b"a fresh copy of the audio").unwrap();
+        let t = scan(&music, Some(&mut db), false, |_| {}).0.remove(0);
+        assert!(!t.harmed());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

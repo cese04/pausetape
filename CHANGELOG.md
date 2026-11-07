@@ -1199,3 +1199,20 @@ ID3v2 tag, it looks for the audio within 1 KB. Two shapes of file keep it from f
 - The top bar's search box gets shorter so *Filters* (and *Save*) stay whole with large text.
 - Where the sidebar would need scrolling (a window 760 high), its items sit a little closer, so
   the card's section at the foot stays in view.
+
+### 100. Songs whose audio breaks off are found, and say so (2026-11-07)
+- An AAC song made Symphonia panic ("index out of bounds" in its AAC decoder): its audio had
+  stretches of zeros where a copy, or a download, didn't finish. The song stopped short, its
+  waveform never came, and the reason went only to a terminal. The decoder is now caught where it
+  panics, while playing and while reading the waveform.
+- Reading the waveform, which goes through the whole song as it starts, also tells when its audio
+  is broken: the decoder gave up part way, or far less audio came out than its tags say it lasts
+  (under half; none at all, in two of the songs above). The song then joins *Review › Damaged
+  files*, with what's wrong ("its audio stops making sense at 0:01") on hover, and a notice says
+  so. It's still played and copied to the card as it is: other players skip a bad stretch where
+  Symphonia stops (one song here plays whole in ffmpeg, but only 16 s here). The library database
+  keeps the note until the file changes, so a fresh copy is sound until found otherwise.
+- Damaged songs show a *damaged* badge in the library, the player and playlists. Before, one that
+  started blank showed no badge, or one about its format.
+- On this library: Kendrick Lamar's *GNX* in M4A (all 12 songs) and most of John Petrucci's
+  *Suspended Animation* (cut off, ffmpeg agrees) are damaged; no sound MP3 or M4A was flagged.

@@ -182,7 +182,8 @@ fn finish(root: &Path, raw: Vec<Track>, sheets: &[(PathBuf, Vec<u8>)], edits: &H
                     stats.edits += 1;
                     // What the file holds now, under the corrections.
                     // A correction from before genres were read leaves the file's genres alone.
-                    Track { dirty: true, embedded_cover: t.embedded_cover, genres: e.track.genres.clone().or(t.genres.clone()), ..e.track.clone() }
+                    // Damage is the file's, and may have been found after the correction.
+                    Track { dirty: true, embedded_cover: t.embedded_cover, genres: e.track.genres.clone().or(t.genres.clone()), damaged: t.damaged, damage: t.damage.clone(), ..e.track.clone() }
                 }
                 Some(_) => {
                     // The file changed since the correction was made; trust the file.

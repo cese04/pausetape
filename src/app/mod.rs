@@ -164,6 +164,8 @@ enum Msg {
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
     /// Loudness of a track, by track id.
     Envelope(PathBuf, Vec<f32>),
+    /// A file whose audio turned out broken while it played (by path), and how.
+    Damaged(PathBuf, String),
     /// Cover for a track path, and the image file it came from if it isn't embedded.
     Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
     /// Cover of the album the details panel shows, by its first song's path.
