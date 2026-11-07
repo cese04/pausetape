@@ -62,8 +62,10 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 - **A real write to the Echo Mini's card.** The write logic is tested on temporary folders, and
   the *Write to the card* button runs that same code, but nobody has pressed it against a FAT/exFAT
   card and then browsed the result on the player.
-- **Writing tags into real audio files** (*write corrected tags*, *write … to source files*).
-  The code uses `lofty`, but no test writes to a real FLAC/MP3 and reads it back.
+- **Writing tags into real FLAC files.** Real MP3s were checked on 2026-11-06: tags written
+  into copies of the 401 that had failed (two ID3v2 tags, or zeros before the audio; CHANGELOG
+  §96) read back corrected, artist, album and length kept. FLAC, M4A and the rest are covered
+  only by tests on generated files.
 - **Click-through of the dialogs.** The screenshots open them programmatically.
 - **Windows: first run on Windows 11 (2026-11-01).** It built and passed its tests unchanged;
   drives, free space, a FAT32 write and rewrite, unticking an album, ffmpeg conversion and the
@@ -283,7 +285,7 @@ Smaller items, ordered by value.
   characters, and `rustfmt.toml` turns rustfmt off (`disable_all_formatting`), so `cargo fmt`, an
   editor's format-on-save or Trunk's own rustfmt leave it as it is.
 - **Continuous integration**: `ci.yml` exists; watch its first runs on Windows and Linux.
-- **A tag-writing test** on a real FLAC and MP3 (see *Not verified yet*).
+- **A tag-writing test** on a real FLAC (MP3s done; see *Not verified yet*).
 - **Upgrade path for saved settings.** Saved state is versioned implicitly through serde
   defaults; a breaking change to `Saved` would need an explicit version.
 
