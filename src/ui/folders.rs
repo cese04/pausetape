@@ -376,7 +376,7 @@ pub fn plan_list(ui: &mut Ui, plan: &[crate::card::PlanItem], max_height: f32) {
             let (dir, file) = rel.rsplit_once(std::path::MAIN_SEPARATOR).unwrap_or(("", &rel));
             row(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                ui.label(RichText::new(format!("{dir}/")).color(ink.muted).size(font::UI));
+                ui.label(RichText::new(format!("{dir}{}", std::path::MAIN_SEPARATOR)).color(ink.muted).size(font::UI));
                 ui.label(RichText::new(file).size(font::UI).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
                 if let Some(why) = p.skip {
                     ui.label(RichText::new(format!("   {why}")).size(font::META).color(ink.warn));

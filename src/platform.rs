@@ -57,6 +57,39 @@ pub fn reduce_motion() -> bool {
     }
 }
 
+/// Clear a file's lock, for good: macOS's "locked" flag (a FAT/exFAT file's read-only attribute
+/// shows as it), Windows' read-only attribute. False if it wasn't locked or couldn't be unlocked.
+#[cfg(target_os = "macos")]
+pub fn unlock(path: &Path) -> bool {
+    use std::os::macos::fs::MetadataExt;
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(flags) = std::fs::symlink_metadata(path).map(|m| m.st_flags()) else { return false };
+    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
+    if flags & libc::UF_IMMUTABLE == 0 {
+        return false;
+    }
+    // SAFETY: `c` is a valid NUL-terminated path; the call only reads it.
+    unsafe { libc::chflags(c.as_ptr(), (flags & !libc::UF_IMMUTABLE) as _) == 0 }
+}
+
+#[cfg(windows)]
+pub fn unlock(path: &Path) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else { return false };
+    let mut perms = meta.permissions();
+    if !perms.readonly() {
+        return false;
+    }
+    // On Windows this clears the read-only attribute and nothing else.
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    std::fs::set_permissions(path, perms).is_ok()
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub fn unlock(_: &Path) -> bool {
+    false
+}
+
 /// How to install ffmpeg here, for messages that ask for it.
 pub const FFMPEG_INSTALL: &str = if cfg!(target_os = "macos") {
     "brew install ffmpeg"

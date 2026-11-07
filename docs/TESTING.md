@@ -344,7 +344,8 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     the audio; Cocteau Twins and Rush here) and *Write corrected tags*: it's written, with no
     "no format could be determined", and reads back corrected after a rescan; it still plays,
     its length the same. No `.<name>.pausetape` file is left beside it. Files that start blank
-    are listed as damaged.
+    are listed as damaged. On Windows, a song marked read-only (Properties › Read-only) is
+    written too, and is no longer read-only afterwards; so is the song that's playing.
 21n. A fresh start (empty data folder): a welcome asks for the music folder, then the card
     (which can wait); *Start* closes it. Music already on the card is explained after it.
 
@@ -352,6 +353,12 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 22. HiDPI / scaled display (125%, 150%): crisp text, nothing cut off.
 23. Names with accents (Beyoncé) and, if you have any, Chinese/Japanese/Korean titles.
 24. Quit and reopen: the music folder, card, writes and playlists are remembered.
+25. Narrow windows and long names: nothing is drawn over anything else. At about 760 × 560 with
+    Settings › Text size at 170%, the one-line player leaves out what doesn't fit, the album table
+    leaves out columns, and *Filters* stays whole beside a shorter search box. A genre with a long
+    name (several in one tag): its page's title wraps beside *Collapse all*, its chip in the
+    details panel ends in "…", and the albums stay clear of the panel. At 760 high, the whole
+    sidebar shows, the card's section included.
 
 ---
 

@@ -77,11 +77,36 @@ fn compact_row(app: &mut App, ui: &mut Ui, ti: usize, st: &Status, len: Duration
             super::widgets::fitted(ui, RichText::new(meta.join(" · ")).size(font::UI).color(ink.muted), words_w, Sense::hover());
         });
         buttons(app, ui, st, S3, S4);
+        // What's left goes, by what matters most, to the time, the queue and the volume; the
+        // sparkline takes the rest, unless that's too little to scrub. What doesn't fit is left
+        // out rather than drawn over the buttons.
+        let gap = ui.spacing().item_spacing.x;
+        let time = format!("{} / {}", text::duration(st.pos), text::duration(len));
+        let time_w = ui.painter().layout_no_wrap(time.clone(), super::widgets::data(), ink.muted).size().x;
+        let queue_w = super::widgets::text_width(ui, &format!("{} of {}", app.qpos + 1, app.queue.len()), egui::TextStyle::Body.resolve(ui.style()).size) + S1;
+        let mut room = ui.available_width();
+        let mut fits = |w: f32| {
+            let yes = room >= w;
+            if yes {
+                room -= w + gap;
+            }
+            yes
+        };
+        let (with_time, with_queue, with_volume) = (fits(time_w), fits(queue_w), fits(12.0 * S1));
+        let with_scrubber = room >= S6;
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            volume_control(app, ui, false);
-            queue_button(app, ui, st, len, true);
-            ui.label(RichText::new(format!("{} / {}", text::duration(st.pos), text::duration(len))).font(super::widgets::data()).color(ink.muted));
-            scrubber(app, ui, ti, st, len);
+            if with_volume {
+                volume_control(app, ui, false);
+            }
+            if with_queue {
+                queue_button(app, ui, st, len, true);
+            }
+            if with_time {
+                ui.label(RichText::new(time).font(super::widgets::data()).color(ink.muted));
+            }
+            if with_scrubber {
+                scrubber(app, ui, ti, st, len);
+            }
         });
     });
 }
@@ -312,9 +337,10 @@ fn up_next(app: &mut App, ui: &mut Ui) {
                     words = format!("{words}  ·  {a}");
                 }
                 let controls_w = if now { 0.0 } else { 3.0 * ROW };
-                let g = super::widgets::truncated(ui, words, FontId::proportional(font::UI), color, rect.width() - S4 - S5 - controls_w);
+                // The words end a gap short of the duration, however wide the text size makes it.
+                let time = p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), super::widgets::data(), ink.muted);
+                let g = super::widgets::truncated(ui, words, FontId::proportional(font::UI), color, time.left() - S2 - (rect.left() + S4));
                 p.galley(pos2(rect.left() + S4, y - g.size().y / 2.0), g, color);
-                p.text(pos2(rect.right() - controls_w - S1, y), Align2::RIGHT_CENTER, text::duration(track.duration), super::widgets::data(), ink.muted);
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ListItem, true, track.display_title()));
                 if resp.double_clicked() {
                     todo = Some(Do::Jump(pos));

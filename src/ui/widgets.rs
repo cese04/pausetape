@@ -89,7 +89,7 @@ pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
     let ink = ink(ui);
     let text = text.into();
     let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER);
-    let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1, ROW), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(icon_link_width(ui, &text), ROW), Sense::click());
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, 4.0);
     let t = heat(ui, &resp);
@@ -101,6 +101,11 @@ pub fn icon_link(ui: &mut Ui, icon: Icon, text: impl Into<String>) -> Response {
     icon_at(ui, rect.left() + S1, y, 1.5, icon, color);
     words_at(ui, rect.left() + S1 + ICON + S1, y, galley, color);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// The width `icon_link` takes for these words.
+pub fn icon_link_width(ui: &Ui, text: &str) -> f32 {
+    S1 + ICON + S1 + text_width(ui, text, font::UI) + S1
 }
 
 /// An icon on its own, not a control, in a row beside words.
@@ -128,8 +133,12 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
 pub fn chip(ui: &mut Ui, icon: Icon, text: impl Into<String>, color: Color32) -> Response {
     let ink = ink(ui);
     let text = text.into();
-    let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER);
-    let (rect, resp) = ui.allocate_exact_size(vec2(S1 + ICON + S1 + galley.size().x + S1 + S1, ROW), Sense::click());
+    // Never wider than its column (a long genre ends in "…"): anything wider would push the
+    // column, and what's beside it, out of place.
+    let pad = S1 + ICON + S1 + S1 + S1;
+    let galley = truncated(ui, text.clone(), FontId::proportional(font::UI), Color32::PLACEHOLDER, ui.max_rect().width() - pad);
+    let (rect, resp) = ui.allocate_exact_size(vec2(pad + galley.size().x, ROW), Sense::click());
+    let resp = if galley.elided { resp.on_hover_text(&text) } else { resp };
     name(ui, &resp, Role::Button, &text);
     focus_ring(ui, &resp, rect, rect.height() / 2.0);
     let t = heat(ui, &resp);

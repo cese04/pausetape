@@ -34,7 +34,7 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
             if widgets::icon_link(ui, Icon::Close, "Clear").on_hover_text("or press Esc").clicked() {
                 actions.push(Action::ClearSelection);
             }
-            help(ui, "Click a song to select it alone, ⌘-click to add or remove one, shift-click for a run; double-click plays.");
+            help(ui, format!("Click a song to select it alone, {} to add or remove one, shift-click for a run; double-click plays.", super::keys::COMMAND_CLICK));
         });
     });
     ui.add_space(S1);
@@ -96,7 +96,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         ui.add_space(S2);
         row(ui, |ui| {
             let can = edit.problem().is_none();
-            if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text("or ⌘-Return").clicked() {
+            if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text(format!("or {}", super::keys::COMMAND_RETURN)).clicked() {
                 save = true;
             }
             if widgets::button(ui, "Cancel").on_hover_text("or Esc").clicked() {

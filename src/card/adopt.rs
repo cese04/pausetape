@@ -332,32 +332,13 @@ pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: boo
 }
 
 /// Run a file operation, and if it's refused because the file is locked, unlock it and try once
-/// more. macOS shows a FAT/exFAT file's read-only attribute as the "locked" flag, and then
-/// refuses to rename or delete it; the Echo Mini doesn't care either way.
+/// more. A FAT/exFAT file's read-only attribute (macOS shows it as the "locked" flag) keeps it
+/// from being deleted, and on macOS from being renamed; the Echo Mini doesn't care either way.
 fn unlocked<T>(path: &Path, op: impl Fn() -> std::io::Result<T>) -> std::io::Result<T> {
     match op() {
-        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && unlock(path) => op(),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && crate::platform::unlock(path) => op(),
         r => r,
     }
-}
-
-/// Clear a file's "locked" flag. False if it wasn't locked or couldn't be unlocked.
-#[cfg(target_os = "macos")]
-fn unlock(path: &Path) -> bool {
-    use std::os::macos::fs::MetadataExt;
-    use std::os::unix::ffi::OsStrExt;
-    let Ok(flags) = fs::symlink_metadata(path).map(|m| m.st_flags()) else { return false };
-    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
-    if flags & libc::UF_IMMUTABLE == 0 {
-        return false;
-    }
-    // SAFETY: `c` is a valid NUL-terminated path; the call only reads it.
-    unsafe { libc::chflags(c.as_ptr(), (flags & !libc::UF_IMMUTABLE) as _) == 0 }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn unlock(_: &Path) -> bool {
-    false
 }
 
 /// An I/O error in words a person can act on.

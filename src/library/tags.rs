@@ -16,8 +16,10 @@ use super::track::Track;
 
 /// Write the in-app metadata of `t` into the file at `path` (which may be a copy of `t.path`):
 /// every field, an emptied one removed, into each tag the file has (an MP3's ID3v1 beside its
-/// ID3v2, an APE tag beside another), so players reading any of them see the same.
+/// ID3v2, an APE tag beside another), so players reading any of them see the same. A locked or
+/// read-only file is unlocked first, and stays so: writing its tags was asked for.
 pub fn write_tags(t: &Track, path: &Path) -> Result<()> {
+    crate::platform::unlock(path);
     let mut file = lofty::read_from_path(path).with_context(|| format!("reading {}", path.display()))?;
     let audio = if file.file_type() == FileType::Mpeg { untidy_mp3_head(path).with_context(|| format!("reading {}", path.display()))? } else { None };
     if file.primary_tag().is_none() {
@@ -314,6 +316,33 @@ mod tests {
         let e = write_tags(&t, &path).unwrap_err();
         assert!(format!("{e:#}").contains("the audio isn't where its tags say it starts"), "{e:#}");
         assert_eq!(std::fs::read(&path).unwrap(), junk);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Windows: a read-only song is written all the same, and stays writable; one the player has
+    /// open is written too (the untidy one is rewritten beside it and put in its place).
+    #[cfg(windows)]
+    #[test]
+    fn read_only_songs_are_unlocked_and_written() {
+        let dir = std::env::temp_dir().join(format!("pausetape-test-readonly-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let t = Track { title: Some("Lightbulb Sun".into()), ..Default::default() };
+        let tidy = [id3(3, &[("TIT2", "Old")]), frames()].concat();
+        let zeros = [id3(3, &[("TIT2", "Old")]), vec![0; 1044], frames()].concat();
+        for (name, bytes) in [("tidy.mp3", tidy), ("zeros.mp3", zeros)] {
+            let path = dir.join(name);
+            std::fs::write(&path, bytes).unwrap();
+            let mut perms = std::fs::metadata(&path).unwrap().permissions();
+            perms.set_readonly(true);
+            std::fs::set_permissions(&path, perms).unwrap();
+            let playing = std::fs::File::open(&path).unwrap();
+            write_tags(&t, &path).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            drop(playing);
+            assert!(!std::fs::metadata(&path).unwrap().permissions().readonly(), "{name}");
+            let file = lofty::read_from_path(&path).unwrap();
+            assert_eq!(file.primary_tag().unwrap().title().as_deref(), Some("Lightbulb Sun"), "{name}");
+            assert!(!beside(&path).exists(), "{name}: no copy left behind");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
