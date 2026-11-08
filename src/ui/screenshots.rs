@@ -191,7 +191,7 @@ impl Shooter {
                 let _ = std::fs::create_dir_all(card.join("Hand Copied"));
                 let _ = std::fs::write(card.join("Hand Copied/01 - Song.mp3"), b"not really a song");
                 app.write_mut().dest = Some(card);
-                app.room_while_writing = Some((gb * 1e9) as u64);
+                app.room_while_writing = Some((app.write().id.clone(), (gb * 1e9) as u64));
             }
             // PAUSETAPE_SHOT_WATCH=<a mounted scratch volume>: label it for a second setup,
             // "Road trip", that shares the first one's destination, then look for cards: the

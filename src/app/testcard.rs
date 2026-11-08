@@ -6,7 +6,7 @@ use crate::card::testcard;
 impl App {
     /// Write the test folder to the active write's card, in the background.
     pub fn write_test_card(&mut self) {
-        let Some(dest) = self.write().dest.clone().filter(|d| d.is_dir()) else {
+        let Some(dest) = self.write().dest.clone().filter(|d| card::connected(d)) else {
             self.notice("choose the card first, and put it in");
             return;
         };
@@ -21,11 +21,6 @@ impl App {
             });
             let _ = tx.send(Msg::TestCardWritten(made));
         });
-    }
-
-    /// The test folder is on the active write's card.
-    pub fn test_card_on_card(&self) -> bool {
-        self.write().dest.as_ref().is_some_and(|d| d.join(testcard::TEST_FOLDER).is_dir() || d.join(testcard::TEST_PLAYLIST).is_file())
     }
 
     pub fn remove_test_card(&mut self) {

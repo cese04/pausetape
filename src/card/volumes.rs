@@ -1,8 +1,54 @@
 //! Mounted drives that could be the player's card, and their free space and filesystem.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 #[cfg(not(windows))]
-use std::{fs, path::Path};
+use std::fs;
+
+/// Drives being ejected, or ejected and still in a reader that can't push the card out: the
+/// mount point, and the medium's change count once ejected. On Windows any read mounts such a
+/// drive again, so nothing here reads it until that medium has left.
+static EJECTED: Mutex<Vec<(PathBuf, Option<u32>)>> = Mutex::new(Vec::new());
+
+fn ejected_drives() -> MutexGuard<'static, Vec<(PathBuf, Option<u32>)>> {
+    EJECTED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// An Eject of `volume` starts: from now on nothing should read it.
+pub fn ejecting(volume: &Path) {
+    ejected_drives().push((volume.to_path_buf(), None));
+}
+
+/// The Eject ended. A drive still holding its medium after a good one stays out of sight.
+pub fn eject_ended(volume: &Path, worked: bool) {
+    let medium = if worked { crate::platform::medium(volume) } else { None };
+    let mut drives = ejected_drives();
+    drives.retain(|(v, _)| v != volume);
+    if let Some(m) = medium {
+        drives.push((volume.to_path_buf(), Some(m)));
+    }
+}
+
+/// Whether `path` is on a drive that shouldn't be read for now.
+pub fn held(path: &Path) -> bool {
+    ejected_drives().iter().any(|(v, _)| path.starts_with(v))
+}
+
+/// Whether the folder `path` can be reached. Reads the drive, unless it's just been ejected.
+pub fn connected(path: &Path) -> bool {
+    !held(path) && path.is_dir()
+}
+
+/// See which ejected drives have lost their medium (taken out, or another put in), and go back
+/// to reading those. Asks the drive, not what's on it.
+pub fn let_go_of_ejected() {
+    let drives = ejected_drives().clone();
+    for (volume, medium) in drives {
+        if medium.is_some() && crate::platform::medium(&volume) != medium {
+            ejected_drives().retain(|(v, _)| *v != volume);
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Volume {
@@ -154,6 +200,9 @@ mod windows {
         let mut out = Vec::new();
         for root in buf[..n.min(buf.len())].split(|&c| c == 0).filter(|r| !r.is_empty()) {
             let path = PathBuf::from(OsString::from_wide(root));
+            if super::held(&path) {
+                continue;
+            }
             let letter = path.to_string_lossy().trim_end_matches('\\').to_uppercase();
             // SAFETY: a NUL-terminated root such as "E:\".
             let kind = unsafe { GetDriveTypeW(wide(&path).as_ptr()) };
@@ -178,6 +227,45 @@ mod windows {
     /// in-app folder browser.
     pub fn drives() -> Vec<Volume> {
         mounted(&[DRIVE_REMOVABLE, DRIVE_FIXED, DRIVE_REMOTE]).into_iter().map(|(v, _)| v).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drive_being_ejected_is_left_alone() {
+        // A folder that exists, so only being held can make it unreachable.
+        let volume = std::env::temp_dir().join(format!("pausetape-test-ejecting-{}", std::process::id()));
+        std::fs::create_dir_all(volume.join("Music")).unwrap();
+        assert!(connected(&volume.join("Music")));
+        ejecting(&volume);
+        assert!(held(&volume.join("Music")) && !connected(&volume.join("Music")));
+        // Refused: it's there as before.
+        eject_ended(&volume, false);
+        assert!(!held(&volume) && connected(&volume.join("Music")));
+        let _ = std::fs::remove_dir_all(&volume);
+        // Done, with no medium left to wait for (no such drive): let go at once.
+        let gone = Path::new("0-no-such-drive");
+        ejecting(gone);
+        eject_ended(gone, true);
+        assert!(!held(gone));
+    }
+
+    #[test]
+    fn an_ejected_drive_is_let_go_of_when_its_medium_changes() {
+        // A count no drive here has, as when the card in it has changed.
+        let volume = std::env::temp_dir().join(format!("pausetape-test-ejected-{}", std::process::id()));
+        ejected_drives().push((volume.clone(), Some(0xDEAD_BEEF)));
+        assert!(held(&volume));
+        let_go_of_ejected();
+        assert!(!held(&volume));
+        // While the Eject runs there's nothing to compare yet.
+        ejecting(&volume);
+        let_go_of_ejected();
+        assert!(held(&volume));
+        eject_ended(&volume, false);
     }
 }
 

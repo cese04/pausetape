@@ -1283,3 +1283,24 @@ From [docs/CARD_STATES.md](docs/CARD_STATES.md).
   this setup* and Compare all look for the card first, and say so if it isn't there. A take-over
   refused by the card's label no longer loses the check it was based on.
 - *Use it for this setup* waits for other work: it could rewrite the label in the middle of a Sync.
+
+### 106. Each card has its own id (2026-11-08)
+- The app knew a card only by where it was. Another one in the same drive letter, or chosen with
+  *Change card*, counted as the same card: the next Sync replaced the first card's record, and its
+  files were strangers when it came back.
+- The label now holds the card's own id, made the first time it's labelled and kept whichever setup
+  labels it again, and a setup remembers which card its record describes. A different card is
+  treated as new, as a notice says: nothing on it is the setup's own until it has written there.
+- Only a clear answer counts: a label that can't be read changes nothing. Cards and setups from
+  before ids go by whose label it is, so an upgrade loses no record.
+
+### 107. The window no longer waits for the card (2026-11-08)
+- The card was read while drawing: whether it was there and its free space on every frame, its
+  label and the list of drives every 3 seconds. A sleeping or failing drive froze the window. A
+  thread of its own now does the looking, and the window draws from its last answer. What's about
+  to act on the card still looks first.
+- A card reader can't push the card out after an Eject: it stays in, dismounted, and those reads
+  mounted it again while the notice said it could come out. An ejected drive is now left alone
+  until its card has been taken out or changed.
+- The capacity bar showed a running Sync's room on whichever setup was open. It now shows it only
+  on the setup that's writing.

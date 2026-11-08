@@ -182,6 +182,8 @@ enum Msg {
     TestCardRemoved(Result<(), String>),
     /// The card by name ejected, or why not.
     Ejected(String, Result<(), String>),
+    /// What the card watcher's thread saw.
+    Looked(Box<cards::Look>),
 }
 
 pub struct Busy {
@@ -376,9 +378,9 @@ pub struct App {
     /// The library songs that check found copied onto the card by hand, by setup id and card
     /// folder. Kept while the selection changes (the survey isn't), for the card tab's marks.
     pub card_found: Option<(String, PathBuf, HashSet<usize>)>,
-    /// The room a running write started with: its new files fill the card before the manifest
-    /// counts them, so the live figure would shrink as it goes.
-    pub room_while_writing: Option<u64>,
+    /// The room a running write started with, and the setup writing: its new files fill the card
+    /// before the manifest counts them, so the live figure would shrink as it goes.
+    pub room_while_writing: Option<(String, u64)>,
     /// Gather what a take-over doesn't use into one folder on the card.
     pub gather_on_take_over: bool,
     /// Delete clutter (iTunes data, system files, rip logs) when taking over a card.
@@ -393,6 +395,15 @@ pub struct App {
     /// Drives mounted at the last look (`None` before the first), and when that was (`cards`).
     mounted: Option<HashSet<PathBuf>>,
     last_watch: Option<Instant>,
+    /// The thread that does the looking, so a slow drive can't hold up the window, and whether
+    /// it hasn't answered yet.
+    watcher: Sender<cards::Ask>,
+    looking: bool,
+    /// The active setup's card as of the last look; every frame draws from this, not the card.
+    card_look: Option<cards::CardLook>,
+    /// Which setups' destinations could be reached, and the music folder, at the last look.
+    reachable: HashSet<PathBuf>,
+    source_look: Option<cards::SourceLook>,
     /// The label on the active setup's card, as of the last look.
     pub dest_label: Option<card::Label>,
     pub card_filter: String,
@@ -452,6 +463,11 @@ impl App {
         let audio = Audio::spawn(move || wake.request_repaint());
         audio.volume(saved.volume);
         let (tx, rx) = unbounded();
+        let (watcher, asks) = unbounded();
+        {
+            let (tx, ctx) = (tx.clone(), ctx.clone());
+            thread::spawn(move || cards::watcher(asks, tx, ctx));
+        }
         let (mb_tx, mb_rx) = unbounded();
         let mut saved = saved;
         if saved.writes.is_empty() {
@@ -529,9 +545,14 @@ impl App {
             problems: None,
             picker: None,
             jump_to: None,
-            volumes: card::volumes(),
+            volumes: Vec::new(),
             mounted: None,
             last_watch: None,
+            watcher,
+            looking: false,
+            card_look: None,
+            reachable: HashSet::new(),
+            source_look: None,
             dest_label: None,
             card_filter: String::new(),
             card_changes_only: false,

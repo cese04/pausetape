@@ -9,23 +9,28 @@ yet.
 
 ## 1. What the app knows about a card
 
-A card has no identity of its own. The app knows a *path*, and what it finds there.
+The app knows a *path*, and what it finds there. A card is told from another by the id in its label.
 
 | What | Where it lives | Kept between runs | Set by |
 |---|---|---|---|
 | `dest`, where the setup writes | `WriteProfile` | yes | the card picker; `card_arrived` |
 | `manifest`, the files this setup put there | `WriteProfile` | yes | end of a Sync; take-over and its undo |
 | `last_written` | `WriteProfile` | yes | end of a Sync that wasn't stopped |
-| `.pausetape`, the label: which setup last wrote the card | on the card | on the card | Sync; take-over; *Use it for this setup* |
-| `volumes`, the drives listed now | `App` | no | `watch_cards`, and after Sync and Eject |
-| `mounted`, the drives seen last time | `App` | no | `watch_cards` |
-| `dest_label`, the label as last read | `App` | no | `refresh_label` |
+| `.pausetape`, the label: which setup last wrote the card, and the card's own id | on the card | on the card | Sync; take-over; *Use it for this setup* |
+| `card_id`, the card the manifest describes | `WriteProfile` | yes | the same three, once the label is written; cleared for a new card |
+| `volumes`, the drives listed now | `App` | no | the watcher; after Sync and Eject |
+| `mounted`, the drives seen last time | `App` | no | `saw_cards` |
+| `card_look`, the active setup's card as last seen: there or not, space, label, test folder | `App` | no | the watcher; `refresh_label` |
+| `reachable`, which setups' destinations could be reached | `App` | no | the same |
+| `dest_label`, the label as last read | `App` | no | the same |
+| `EJECTED`, drives not to be read for now | `card::volumes` | no | `App::eject`; the watcher lets go |
 | `write_preview`, the last comparison | `App` | no | Compare (`Msg::Previewed`) |
 | `card_survey`, what's on the card besides this setup's files | `App` | no | Check (`Msg::Surveyed`) |
 | `busy`, the job running | `App` | no | each job |
 | `eject_notice`, the notice offering Eject, and the drive | `App` | no | `offer_eject`; `Msg::Ejected` |
 
-A label names a *setup*, not a physical card. Two cards synced by one setup look the same.
+The card's id is made the first time it's labelled and kept whichever setup labels it again. A
+setup follows one card: for a second card, *Duplicate* makes it its own setup.
 
 `card::volumes` lists drives: `/Volumes` on macOS, `/media` and `/run/media` on Linux, and on
 Windows removable and fixed drives other than Windows' own.
@@ -52,7 +57,7 @@ stateDiagram-v2
 | State | Test in the code | What's allowed |
 |---|---|---|
 | NoDestination | `dest` is `None` | choose a card |
-| Absent | `dest` set, `dest.exists()` false | choose a card; Sync and Compare are hidden |
+| Absent | `dest` set, and not there at the last look (`card_connected`) | choose a card; Sync and Compare are hidden |
 | Blank | present, no label | everything |
 | Own | label's id is this setup's | everything |
 | OtherSetup | label names another setup on this computer (`refused_by_label`) | switch to it; relabel; Compare. No Sync, check or take-over |
@@ -61,10 +66,19 @@ stateDiagram-v2
 `dest` is never cleared, only replaced. Which of these states applies is worked out when it's
 needed; nothing stores it.
 
-**Noticing a card.** Every 3 seconds `watch_cards` lists the drives. While a job runs, it goes no
-further: arrivals wait, so a setup's `dest` doesn't change under running work. Once the slot is
-free, a drive not in `mounted` whose top folder holds a label counts as arrived. That covers every
-start, when opening the library holds the slot:
+**Who looks at the card.** A thread of its own (`cards::watcher`), one look at a time, every 3
+seconds or as soon as `look_soon` asks. A slow or failing drive delays the next look and nothing
+else: the window draws from the last answer. Only what's about to act on the card, or has just
+changed it, looks for itself on the interface thread (`card_missing`, `refresh_label`): what it
+acts on must be what's there now.
+
+An answer about another setup or card than the one asked about is dropped and asked for again.
+That's what stops a look read before a Sync, on a blank card, from clearing the record the Sync
+has just made.
+
+**Noticing a card.** While a job runs, the drives are listed and arrivals wait, so a setup's `dest`
+doesn't change under running work. Once the slot is free, a drive not in `mounted` whose top folder
+holds a label counts as arrived. That covers every start, when opening the library holds the slot:
 
 | Arrival | Result |
 |---|---|
@@ -73,7 +87,7 @@ start, when opening the library holds the slot:
 | No label | nothing; the card is chosen in the picker |
 
 **A card going away** has no event of its own. `volumes` loses it, `mounted` follows and the
-views that test `dest.exists()` change. At the next look (`forget_a_card_gone`), the comparison
+views change with the look. At that look, once no job runs (`forget_a_card_gone`), the comparison
 and the check of its music are dropped, and the dialog going through them closes and says why.
 Two things stay on purpose: the test folder's results, as the card comes out to try them on the
 player, and the marks in the library, worked out from the manifest.
@@ -115,6 +129,9 @@ The manifest is a claim about the card. This machine is about how far it can be 
 ```mermaid
 stateDiagram-v2
     [*] --> NeverWritten
+    InStep --> NeverWritten: a different card
+    Pending --> NeverWritten: a different card
+    PartlyWritten --> NeverWritten: a different card
     NeverWritten --> InStep: Sync finishes
     NeverWritten --> PartlyWritten: Sync stopped
     InStep --> Pending: the choice or the library changes
@@ -127,6 +144,11 @@ stateDiagram-v2
     Pending --> Pending: nothing could be written
 ```
 
+- **A different card at `dest`** (`refresh_label`, while idle, so also just before a Sync): its
+  label's card id isn't the record's, or it has no label where this setup put one. The manifest,
+  `last_written`, the card id and the take-over offer are cleared and a notice says so. Only a
+  clear answer counts: a label that can't be read changes nothing, and labels or setups from
+  before cards had ids go by whose label it is (`label::same_card`).
 - **The order of a Sync** (`card::write`): label; rename what only changed name; remove what's no
   longer wanted; copy; playlists; remove what's left over; clean macOS files.
 - **Stopped**: the song being copied finishes. The manifest is what was copied plus earlier
@@ -168,6 +190,15 @@ stateDiagram-v2
 | Greyed while a job runs, saying until when | `ui::notice` |
 | A refusal keeps the offer, on the notice that says why | `Msg::Ejected` |
 
+**After an Eject.** On Windows, reading a dismounted drive mounts it again, and a card reader can't
+push the card out: it stays in, dismounted. So from the moment Eject starts, nothing in the app
+reads that drive (`card::held`): it isn't listed, and counts as absent. A refusal ends that at once.
+After a good Eject, it ends when the medium does: the watcher asks the drive for its media change
+count, which doesn't read the card, and goes back to reading the drive once the answer differs or
+there's no medium. A card taken out and put back is therefore a new arrival. Left in the reader,
+it stays out of sight until the app is restarted. Other programs, Explorer among them, can still
+mount it. On macOS and Linux an ejected drive stays unmounted by itself.
+
 ## 6. What each operation checks
 
 | Operation | Slot free | Card connected | Label allows | Library ready |
@@ -198,7 +229,7 @@ the function behind it doesn't.
 | 4 | Nothing outside the card follows from a record | Yes: `prune` and `relocate` check every path component |
 | 5 | No half-written file under a song's name | Yes |
 | 6 | A card that's another setup's here isn't synced or taken over | Yes, for what the label says |
-| 7 | The manifest describes what's on the card | Yes, as far as the card can be seen. A different card at the same path is [P6](#7-paths-not-handled-yet) |
+| 7 | The manifest describes what's on the card, and that card only | Yes, as far as the card can be seen |
 | 8 | `dest` changes only while idle | Yes |
 | 9 | A song already on the card stays there if its replacement fails | Yes |
 | 10 | An undo record is used up only when everything is back; what couldn't move can be tried again | Yes |
@@ -208,18 +239,23 @@ the function behind it doesn't.
 ## 7. Paths not handled yet
 
 Most serious first. "Tested" means reproduced; "read" means found in the code and not run.
-P1 to P5, P7, P8 and P9 are fixed ([CHANGELOG](../CHANGELOG.md) §104 and §105); the numbers stay as
+P1 to P9 and P11 to P13 are fixed ([CHANGELOG](../CHANGELOG.md) §104 to §107); the numbers stay as
 they were.
 
 | | Path | What happens | Evidence | Direction |
 |---|---|---|---|---|
-| **P6** | A different card appears at the same path (swapped between polls, or chosen with *Change card*) | Anything without another setup's label counts as this setup's. The manifest, `last_written` and the take-over offer aren't reset. A Sync replaces the first card's record, whose files become foreign when it returns. `prune`'s size check keeps this from deleting unrelated files. More likely with Windows drive letters than with macOS volume names | Read: `sync`, `pickers` | A question of design: give each card its own id in the label, and tie the manifest to it |
 | **P10** | A setup whose destination is a folder on the card | The label is in that folder, and arrival only reads the top of the drive, so plugging it in brings nothing up. If that folder doesn't exist, the first Sync reports "labelling the card" as a problem and goes on | Tested: the missing folder. Read: the arrival | Search from the setups' own `dest` too; create the folder first |
-| **P11** | Card readers that can't eject the medium | Eject reports success once dismounted, on purpose. Then `dest.exists()` (each frame, in four places) and the label read may mount it again while the notice says it can come out | Read. A USB stick stayed gone for 15 s; no reader tried | Try one; stop looking at that drive after an Eject |
-| **P12** | Reading the card on the interface thread | `exists()` and `space` each frame, the label every 3 s. A sleeping or failing drive stalls the window | Read | Move it to the watcher's own thread |
-| **P13** | Switching setups during a Sync | The capacity bar shows the Sync's room on the setup now open. Display only | Read: `card_room` | Keep it with the setup id |
 
 Not faults, but easy to miss:
+
+- A click that acts on the card (Sync, Check, Take over and so on) still reads it on the interface
+  thread first, and so does the end of a job and switching setups. A failing drive can stall the
+  window then, once per action, rather than all the time.
+
+- One setup alternating between two cards treats each as new every time, and neither is then
+  its own until the next Sync. *Duplicate* gives the second card a setup of its own.
+- A take-over's undo goes by setup, not by card: on a different card it moves nothing, says why,
+  and stays available for the card it belongs to.
 
 - Eject is only offered after a Sync. The test folder's notice says to eject the card, with no button.
 - USB hard disks count as fixed on Windows, so they get no Eject.
@@ -243,7 +279,17 @@ The same day, on Windows: a card found at the start is dealt with once the libra
 closing the window during a write asks first. A Sync with the card missing, a failed replacement
 and an undo that can't happen are covered by tests on temporary folders. A destination folder
 removed under the running app refused every operation and dropped what had been seen of it.
-Pulling a card out mid-Sync hasn't been done by hand.
+A setup moved to another folder was treated as new, kept its record through the watcher and through
+an unreadable label, and treated a label with another card's id as new. Pulling a card out mid-Sync
+hasn't been done by hand.
 
 The button itself was called from a test script rather than clicked. Not run: a card reader, an
 Explorer window left open on the card, a Sync stopped and Eject checked after it, Linux.
+
+The watcher, on Windows, with a drive letter made by `subst`: a labelled drive arrived and brought
+its setup up; leaving a drive alone during an Eject took it out of every listing, and a refusal
+brought it back with no second arrival; a different label under the same letter was treated as new;
+the drive's removal was seen. With the watcher held up for 5 s, no frame took more than about 30
+ms, and a look read before a pretend Sync didn't touch the record the Sync had made. The media
+change count was read on the fixed drives only. What a reader's dismounted card does when asked
+for it is written from Microsoft's documentation and hasn't been tried.

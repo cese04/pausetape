@@ -290,6 +290,15 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     card belongs to the first and offers **switch to** and **use it for this setup**; Sync is gone.
     Eject the card, switch back to the second setup, plug the card in: within a few seconds the
     app switches to the first setup and says so.
+20e. **Sync** to a card, take it out and put a different one in the same drive letter (or choose it
+    with **Change card…**): a notice says it's treated as a new card, and the card's view counts
+    nothing on it as this setup's. If it holds music, *Music already on the card* explains it. Put
+    the first card back: it's treated as new again; **Duplicate** the setup to keep one for each.
+    Upgrading: a card and setup written before this keep their record.
+20f. Windows, a card in a USB **card reader**: **Sync**, then **Eject** from the notice. The notice
+    says it can come out, the card shows as not connected and the drive doesn't come back while
+    the card stays in (check for about a minute). Take it out and put it back: it's announced as
+    plugged in. A stick: Eject and it goes, as before.
 20d. The card (sidebar) › **Names on the card**: type `{albumartist} - {album} [({year})]/{track} {title}`.
     The example under it and the folder names in the list follow as you type; a broken pattern
     (`{album}/[{year}`) says what's wrong and changes nothing. The sync line says how many songs

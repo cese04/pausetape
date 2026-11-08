@@ -238,6 +238,8 @@ pub struct Outcome {
     /// macOS "._" and ".DS_Store" files deleted afterwards.
     pub cleaned: usize,
     pub errors: Vec<String>,
+    /// The card's id, once it's labelled for the setup that took it over.
+    pub card_id: Option<String>,
 }
 
 /// Carry out a survey: optionally delete clutter, then optionally move spare copies and other

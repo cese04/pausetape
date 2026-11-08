@@ -74,7 +74,7 @@ pub fn global(app: &mut App, ui: &Ui) {
         app.focus_search = true;
     }
     if pressed(ui, &SYNC) {
-        let connected = app.write().dest.as_deref().is_some_and(|d| d.exists());
+        let connected = app.card_connected();
         if let Some(b) = &app.busy {
             app.notice(format!("Sync waits until {} is done", b.label));
         } else if !connected {

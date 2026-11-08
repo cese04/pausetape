@@ -159,11 +159,11 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                     None => folder_name(d),
                 };
                 ui.label(RichText::new(title).size(font::HEADING).strong());
-                match crate::card::space(d) {
-                    _ if !d.exists() => {
+                match app.card_seen().filter(|l| l.there).map(|l| l.space) {
+                    None => {
                         ui.label(RichText::new("Not connected right now. Insert the card to write to it.").color(ink.warn));
                     }
-                    Some(info) => {
+                    Some(Some(info)) => {
                         space_bar(ui, &info, 320.0);
                         let fs = info.fs_name().map(|f| format!(" · {f}")).unwrap_or_default();
                         muted(ui, format!("{} free of {}{fs}", text::bytes(info.free), text::bytes(info.total)));
@@ -172,7 +172,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     // Connected, but this OS doesn't report space yet (Windows, for now).
-                    None => {
+                    Some(None) => {
                         muted(ui, "Connected. Free space isn't shown on this system yet.");
                     }
                 }
@@ -181,7 +181,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
         let label = if dest.is_some() { "Change card…" } else { "Choose card…" };
         if button_with(ui, Icon::Card, label).clicked() {
-            app.volumes = crate::card::volumes();
+            app.look_soon();
             app.picker = Some(Picker::Card { browse: None, show_all: false });
         }
     });
@@ -304,7 +304,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         close = true;
     }
     if refresh {
-        app.volumes = crate::card::volumes();
+        app.look_soon();
     }
     if let Some(dir) = chosen_source {
         app.set_source(dir);
@@ -406,8 +406,7 @@ pub fn add_dialog(app: &mut App, ui: &mut Ui) {
     let mut versions_on = a.versions;
     let (mut add, mut close) = (false, false);
     let bytes = app.adding_bytes();
-    let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
-    let fits = room.is_none_or(|free| free > bytes + 1_000_000_000);
+    let fits = app.source_free().is_none_or(|free| free > bytes + 1_000_000_000);
     let frame = super::theme::dialog_frame(ui);
     let modal = egui::Modal::new(egui::Id::unique("add music")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
