@@ -1240,3 +1240,18 @@ so, and offers the next step.
   itself, in both themes. The bottom ones stay inside the frame, which clips the ring.
 - Step 4's note and the line above the tour say "choose" rather than "tick", as albums are sent
   to the card from the library now; two screenshots' `alt` texts say what they show today.
+
+### 103. Eject, tried on Windows (2026-11-08)
+- Tried on a real USB stick, without administrator rights: two Syncs, then Eject, refused while a
+  file was open and done in under a second once it wasn't; the drive stayed gone with the app
+  watching for cards.
+- A refused Eject said "eject again" and took the button away. It stays now, on the notice that
+  says why.
+- On Windows, Eject is offered only for removable drives (`platform::ejectable`): it was offered
+  for internal ones too, when a card setup wrote to a folder there. USB hard disks count as fixed,
+  as a rule, so they don't get it either.
+- While other work runs the button is greyed, and its hover says until when; a click did nothing
+  and said nothing.
+- Two messages said "not on this Mac" on every system: "not on this computer".
+- [docs/CARD_STATES.md](docs/CARD_STATES.md): the card as state machines, what each operation
+  checks first, and the paths the code doesn't handle yet.

@@ -293,10 +293,14 @@ fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     if app.notice_offers_undo() && widgets::icon_link(ui, Icon::Back, format!("Undo ({})", ui.ctx().format_shortcut(&keys::UNDO))).clicked() {
         app.undo_last();
     }
-    if let Some(card) = app.notice_offers_eject()
-        && widgets::icon_link(ui, Icon::Eject, "Eject").on_hover_text("Ready the card to be taken out, as the system's Eject does").clicked()
-    {
-        app.eject(card);
+    if let Some(card) = app.notice_offers_eject() {
+        // Greyed while other work runs (the card may be part of it), and says until when.
+        let waiting = app.busy.as_ref().map(|b| format!("once {} is done", b.label)).unwrap_or_default();
+        let free = app.busy.is_none();
+        let eject = ui.add_enabled_ui(free, |ui| widgets::icon_link(ui, Icon::Eject, "Eject").on_hover_text("Ready the card to be taken out, as the system's Eject does").on_disabled_hover_text(waiting)).inner;
+        if eject.clicked() {
+            app.eject(card);
+        }
     }
     widgets::fitted(ui, RichText::new(text).size(font::UI).color(ink.text), ui.available_width() - ICON - S2, egui::Sense::hover()).on_hover_text(text);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());

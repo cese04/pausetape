@@ -131,14 +131,36 @@ pub fn trash(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn without_recycle_bin(path: &Path) -> bool {
+const DRIVE_REMOVABLE: u32 = 2;
+
+/// The kind of drive `path` is on, as `GetDriveTypeW` names them.
+#[cfg(windows)]
+fn drive_type(path: &Path) -> u32 {
     use std::os::windows::ffi::OsStrExt;
-    const DRIVE_REMOVABLE: u32 = 2;
-    const DRIVE_REMOTE: u32 = 4;
     let root: Vec<u16> = path.ancestors().last().unwrap_or(path).as_os_str().encode_wide().chain([0]).collect();
     // SAFETY: `root` is a NUL-terminated drive root such as "E:\".
-    let kind = unsafe { windows_sys::Win32::Storage::FileSystem::GetDriveTypeW(root.as_ptr()) };
-    matches!(kind, DRIVE_REMOVABLE | DRIVE_REMOTE)
+    unsafe { windows_sys::Win32::Storage::FileSystem::GetDriveTypeW(root.as_ptr()) }
+}
+
+#[cfg(windows)]
+fn without_recycle_bin(path: &Path) -> bool {
+    const DRIVE_REMOTE: u32 = 4;
+    matches!(drive_type(path), DRIVE_REMOVABLE | DRIVE_REMOTE)
+}
+
+/// Whether the drive mounted at `volume` is one to offer ejecting. On Windows, sticks and cards
+/// only: internal drives count as fixed (and so, as a rule, do USB hard disks). Elsewhere what's
+/// listed as a volume is already external.
+pub fn ejectable(volume: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        drive_type(volume) == DRIVE_REMOVABLE
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = volume;
+        true
+    }
 }
 
 /// Eject the card or drive mounted at `volume`, so it can be taken out: macOS's `diskutil
@@ -249,6 +271,13 @@ mod tests {
         assert!(v.exists());
         super::eject(&v).unwrap();
         assert!(!v.exists(), "gone once ejected");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn the_system_drive_is_not_offered_for_ejecting() {
+        let system = std::env::var("SystemDrive").unwrap();
+        assert!(!super::ejectable(std::path::Path::new(&format!("{system}\\"))));
     }
 
     #[test]

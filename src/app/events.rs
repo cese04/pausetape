@@ -144,10 +144,14 @@ impl App {
                 }
                 Msg::Ejected(name, r) => {
                     self.busy = None;
-                    self.eject_notice = None;
+                    let card = self.eject_notice.take().map(|(_, path)| path);
                     match r {
                         Ok(()) => self.notice(format!("“{name}” ejected: the card can come out")),
-                        Err(e) => self.notice(format!("“{name}” wasn't ejected: {e}")),
+                        Err(e) => {
+                            self.notice(format!("“{name}” wasn't ejected: {e}"));
+                            // It says to close what's open and eject again: it offers to.
+                            self.eject_notice = card.and_then(|path| Some((self.notices.last()?.clone(), path)));
+                        }
                     }
                     self.volumes = card::volumes();
                     self.refresh_label();
