@@ -37,6 +37,15 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             );
             ("Forget the stored tags?".to_string(), body, "Forget them", Icon::Trash)
         }
+        Confirm::Quit => {
+            // Finished while asking: nothing left to warn about.
+            let Some(b) = &app.busy else {
+                app.confirm = None;
+                return;
+            };
+            let body = format!("Still {}. Quitting now cuts it off partway, and what it has done so far may not be recorded. Wait for it, or press Stop if it offers one.", b.label);
+            ("Quit while it's working?".to_string(), body, "Quit anyway", Icon::Close)
+        }
     };
     let ink = ink(ui);
     let mut answer = None;
@@ -68,6 +77,10 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                         let _ = db.clear();
                     }
                     app.notice("forgot the stored tags · the next rescan reads every file");
+                }
+                Confirm::Quit => {
+                    app.quit_anyway = true;
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }
         }

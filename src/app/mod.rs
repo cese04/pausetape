@@ -182,6 +182,8 @@ enum Msg {
     TestCardRemoved(Result<(), String>),
     /// The card by name ejected, or why not.
     Ejected(String, Result<(), String>),
+    /// What the card watcher's thread saw.
+    Looked(Box<cards::Look>),
 }
 
 pub struct Busy {
@@ -198,6 +200,11 @@ pub struct Busy {
 impl Busy {
     pub fn new(label: impl Into<String>, total: usize) -> Busy {
         Busy { label: label.into(), done: 0, total, since: None, stop: None }
+    }
+
+    /// Work on files that cutting off halfway would leave half done (not reading or looking up).
+    pub fn changes_files(&self) -> bool {
+        ["writing", "taking", "putting", "copying", "adding", "tidying", "moving"].iter().any(|w| self.label.starts_with(w))
     }
 
     /// The same, with a flag the work checks between files.
@@ -268,6 +275,8 @@ pub enum Confirm {
     DeleteWrite(String),
     /// Forgetting the tags the library database keeps, so every file is read again.
     ForgetTags,
+    /// Closing the window while work on files is running.
+    Quit,
 }
 
 /// Files a card operation couldn't handle, and where the full list was saved.
@@ -329,6 +338,8 @@ pub struct App {
     /// The notice of a finished Sync, which offers to eject the card it wrote to while it's the
     /// latest: (notice, the card's mount point).
     pub eject_notice: Option<(String, PathBuf)>,
+    /// Told to quit though work is running: the window closes without asking again.
+    pub quit_anyway: bool,
     /// A dialog asking before a change that can't be undone.
     pub confirm: Option<Confirm>,
     /// A folder dropped on the window while other work ran: checked once it's done.
@@ -367,9 +378,9 @@ pub struct App {
     /// The library songs that check found copied onto the card by hand, by setup id and card
     /// folder. Kept while the selection changes (the survey isn't), for the card tab's marks.
     pub card_found: Option<(String, PathBuf, HashSet<usize>)>,
-    /// The room a running write started with: its new files fill the card before the manifest
-    /// counts them, so the live figure would shrink as it goes.
-    pub room_while_writing: Option<u64>,
+    /// The room a running write started with, and the setup writing: its new files fill the card
+    /// before the manifest counts them, so the live figure would shrink as it goes.
+    pub room_while_writing: Option<(String, u64)>,
     /// Gather what a take-over doesn't use into one folder on the card.
     pub gather_on_take_over: bool,
     /// Delete clutter (iTunes data, system files, rip logs) when taking over a card.
@@ -381,9 +392,18 @@ pub struct App {
     /// Library A–Z rail: jump to the first artist under this letter on the next frame.
     pub jump_to: Option<char>,
     pub volumes: Vec<Volume>,
-    /// Drives mounted at the last look, and when that was (`cards`).
-    mounted: HashSet<PathBuf>,
+    /// Drives mounted at the last look (`None` before the first), and when that was (`cards`).
+    mounted: Option<HashSet<PathBuf>>,
     last_watch: Option<Instant>,
+    /// The thread that does the looking, so a slow drive can't hold up the window, and whether
+    /// it hasn't answered yet.
+    watcher: Sender<cards::Ask>,
+    looking: bool,
+    /// The active setup's card as of the last look; every frame draws from this, not the card.
+    card_look: Option<cards::CardLook>,
+    /// Which setups' destinations could be reached, and the music folder, at the last look.
+    reachable: HashSet<PathBuf>,
+    source_look: Option<cards::SourceLook>,
     /// The label on the active setup's card, as of the last look.
     pub dest_label: Option<card::Label>,
     pub card_filter: String,
@@ -443,6 +463,11 @@ impl App {
         let audio = Audio::spawn(move || wake.request_repaint());
         audio.volume(saved.volume);
         let (tx, rx) = unbounded();
+        let (watcher, asks) = unbounded();
+        {
+            let (tx, ctx) = (tx.clone(), ctx.clone());
+            thread::spawn(move || cards::watcher(asks, tx, ctx));
+        }
         let (mb_tx, mb_rx) = unbounded();
         let mut saved = saved;
         if saved.writes.is_empty() {
@@ -491,6 +516,7 @@ impl App {
             undo_stack: Vec::new(),
             undo_notice: None,
             eject_notice: None,
+            quit_anyway: false,
             confirm: None,
             pending_add: None,
             focus_search: false,
@@ -519,9 +545,14 @@ impl App {
             problems: None,
             picker: None,
             jump_to: None,
-            volumes: card::volumes(),
-            mounted: HashSet::new(),
+            volumes: Vec::new(),
+            mounted: None,
             last_watch: None,
+            watcher,
+            looking: false,
+            card_look: None,
+            reachable: HashSet::new(),
+            source_look: None,
             dest_label: None,
             card_filter: String::new(),
             card_changes_only: false,
@@ -593,6 +624,16 @@ impl App {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn closing_asks_only_about_work_on_files() {
+        for label in ["writing “Echo Mini”", "writing tags", "taking over the card", "putting the card back", "copying music from the card", "adding music to “Added”", "tidying source", "moving to the Trash"] {
+            assert!(Busy::new(label, 0).changes_files(), "{label}");
+        }
+        for label in ["reading tags", "opening the library", "comparing with the card", "checking the card's music", "ejecting “CARD”", "finding covers for 3 albums"] {
+            assert!(!Busy::new(label, 0).changes_files(), "{label}");
+        }
+    }
     #[test]
     fn time_left_waits_for_a_pace_then_extrapolates() {
         let mut b = Busy::new("writing", 1000);
@@ -611,9 +652,24 @@ fn plural_files(n: usize) -> String {
     if n == 1 { "1 file".into() } else { format!("{n} files") }
 }
 
+impl App {
+    /// The window asked to close while work on files runs: ask first.
+    fn ask_before_closing(&mut self, ctx: &egui::Context) {
+        #[cfg(debug_assertions)]
+        if self.shooter.is_some() {
+            return;
+        }
+        if !self.quit_anyway && ctx.input(|i| i.viewport().close_requested()) && self.busy.as_ref().is_some_and(Busy::changes_files) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.confirm = Some(Confirm::Quit);
+        }
+    }
+}
+
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll();
+        self.ask_before_closing(ui.ctx());
         self.watch_cards();
         // The text size as ⌘+ and ⌘− left it, kept for the next start.
         self.saved.text_size = ui.ctx().zoom_factor();

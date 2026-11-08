@@ -1255,3 +1255,52 @@ so, and offers the next step.
 - Two messages said "not on this Mac" on every system: "not on this computer".
 - [docs/CARD_STATES.md](docs/CARD_STATES.md): the card as state machines, what each operation
   checks first, and the paths the code doesn't handle yet.
+
+### 104. A card that goes away, and other paths the state machine found (2026-11-08)
+From [docs/CARD_STATES.md](docs/CARD_STATES.md).
+- A Sync whose card was pulled out, or absent, ended as "Done" and replaced the record of what's
+  on the card with what it had just written (nothing, if the card was gone from the start). It now
+  checks before every file and ends there, keeps the record, makes no folder where the card was,
+  stops converting songs for it, and says so. If nothing could be written (a write-protected
+  card), it says that, with no *Done* and no Eject.
+- A song whose new copy failed lost its old copy to the last clean-up, off the card until the next
+  Sync. A song still wanted stays, and the record says what's really there.
+- *Undo taking over* with the card absent or changed put nothing back and spent the undo anyway. It
+  checks the card and its label first, and what couldn't move can be tried again.
+- *Change card* during other work is refused: the work would record the old card against the new.
+- A card that arrives during other work, as at every start while the library opens, wasn't looked
+  at again: the setup kept its old drive letter and said the card wasn't connected. It's now
+  looked at once the work is done.
+- Closing the window during work on files asks first. A take-over's undo record is saved as it
+  goes, every 25 moves, rather than only at the end.
+- A card plugged in on Windows was announced with no name (“” plugged in).
+
+### 105. Every operation on the card looks for it first (2026-11-08)
+- When the card goes away, the last comparison and check of its music are forgotten, and the
+  dialog going through them closes and says why. What was written of the test folder stays: the
+  card comes out to try it on the player.
+- Checking the card's music, taking it over, copying from it, removing the test folder, *Use it for
+  this setup* and Compare all look for the card first, and say so if it isn't there. A take-over
+  refused by the card's label no longer loses the check it was based on.
+- *Use it for this setup* waits for other work: it could rewrite the label in the middle of a Sync.
+
+### 106. Each card has its own id (2026-11-08)
+- The app knew a card only by where it was. Another one in the same drive letter, or chosen with
+  *Change card*, counted as the same card: the next Sync replaced the first card's record, and its
+  files were strangers when it came back.
+- The label now holds the card's own id, made the first time it's labelled and kept whichever setup
+  labels it again, and a setup remembers which card its record describes. A different card is
+  treated as new, as a notice says: nothing on it is the setup's own until it has written there.
+- Only a clear answer counts: a label that can't be read changes nothing. Cards and setups from
+  before ids go by whose label it is, so an upgrade loses no record.
+
+### 107. The window no longer waits for the card (2026-11-08)
+- The card was read while drawing: whether it was there and its free space on every frame, its
+  label and the list of drives every 3 seconds. A sleeping or failing drive froze the window. A
+  thread of its own now does the looking, and the window draws from its last answer. What's about
+  to act on the card still looks first.
+- A card reader can't push the card out after an Eject: it stays in, dismounted, and those reads
+  mounted it again while the notice said it could come out. An ejected drive is now left alone
+  until its card has been taken out or changed.
+- The capacity bar showed a running Sync's room on whichever setup was open. It now shows it only
+  on the setup that's writing.

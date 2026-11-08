@@ -188,6 +188,21 @@ pub fn eject(volume: &Path) -> Result<(), String> {
     }
 }
 
+/// A count that changes when the medium in the drive at `volume` does, got without reading what's
+/// on it. `None` when there's no medium, or nothing to ask: elsewhere than on Windows an ejected
+/// drive stays unmounted by itself.
+pub fn medium(volume: &Path) -> Option<u32> {
+    #[cfg(windows)]
+    {
+        windows_eject::medium(volume)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = volume;
+        None
+    }
+}
+
 /// diskutil's answer, in a line: "Unmount of disk10 failed: at least one volume could not be
 /// unmounted\nUnmount was dissented by PID 20475 (/bin/sleep)…" says who holds it.
 #[cfg(not(windows))]
@@ -205,14 +220,36 @@ mod windows_eject {
     use std::path::Path;
 
     use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
+    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
     use windows_sys::Win32::System::IO::DeviceIoControl;
-    use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME, IOCTL_STORAGE_EJECT_MEDIA, IOCTL_STORAGE_MEDIA_REMOVAL, PREVENT_MEDIA_REMOVAL};
+    use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME, IOCTL_STORAGE_CHECK_VERIFY2, IOCTL_STORAGE_EJECT_MEDIA, IOCTL_STORAGE_MEDIA_REMOVAL, PREVENT_MEDIA_REMOVAL};
+
+    /// The drive's letter, and its device path for `CreateFileW`.
+    fn device(volume: &Path) -> Option<(char, Vec<u16>)> {
+        let letter = volume.to_string_lossy().chars().next().filter(char::is_ascii_alphabetic)?;
+        Some((letter, std::ffi::OsStr::new(&format!("\\\\.\\{letter}:")).encode_wide().chain([0]).collect()))
+    }
+
+    /// Opened for its attributes only, so the volume isn't mounted again to answer.
+    pub fn medium(volume: &Path) -> Option<u32> {
+        let (_, device) = device(volume)?;
+        // SAFETY: `device` is NUL-terminated; no security attributes or template.
+        let h = unsafe { CreateFileW(device.as_ptr(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, std::ptr::null(), OPEN_EXISTING, 0, std::ptr::null_mut()) };
+        if h == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let (mut count, mut returned) = (0u32, 0u32);
+        // SAFETY: `h` is open; the output is `count`, as long as said, and outlives the call;
+        // synchronous (no OVERLAPPED).
+        let ok = unsafe { DeviceIoControl(h, IOCTL_STORAGE_CHECK_VERIFY2, std::ptr::null(), 0, (&raw mut count).cast(), size_of::<u32>() as u32, &mut returned, std::ptr::null_mut()) != 0 };
+        // SAFETY: `h` was opened above and is closed once.
+        unsafe { CloseHandle(h) };
+        ok.then_some(count)
+    }
 
     /// The steps of Microsoft's "how to eject removable media" (KB165721).
     pub fn eject(volume: &Path) -> Result<(), String> {
-        let letter = volume.to_string_lossy().chars().next().filter(char::is_ascii_alphabetic).ok_or("not a drive letter")?;
-        let device: Vec<u16> = std::ffi::OsStr::new(&format!("\\\\.\\{letter}:")).encode_wide().chain([0]).collect();
+        let (letter, device) = device(volume).ok_or("not a drive letter")?;
         // SAFETY: `device` is NUL-terminated; no security attributes or template.
         let h = unsafe { CreateFileW(device.as_ptr(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, std::ptr::null(), OPEN_EXISTING, 0, std::ptr::null_mut()) };
         if h == INVALID_HANDLE_VALUE {

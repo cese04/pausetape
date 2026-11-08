@@ -183,13 +183,13 @@ fn space_bar(app: &App, ui: &mut Ui, need: u64, room: u64, width: f32) {
 fn sync_row(app: &mut App, ui: &mut Ui) {
     let w = app.write();
     let ready = w.dest.is_some() && app.saved.source.is_some();
-    let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+    let connected = app.card_connected();
     let state = match pending_text(app) {
         Some(t) => format!("At the next Sync: {t}"),
         None if w.last_written.is_none() && w.manifest.is_empty() => "nothing written to the card yet".into(),
         None => "the card has what you chose".into(),
     };
-    let unavailable = ready.then(|| app.library_unavailable()).flatten();
+    let unavailable = ready.then(|| app.library_unavailable_as_seen()).flatten();
     row(ui, |ui| {
         if !ready {
             muted(ui, "choose a destination below to sync");
@@ -227,10 +227,10 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     }
     let ink = ink(ui);
     let name = w.name.clone();
-    let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+    let connected = app.card_connected();
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
-    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable().is_none();
+    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable_as_seen().is_none();
     let frame = super::theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
     frame.show(ui, |ui| {
         row(ui, |ui| {
@@ -373,7 +373,7 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         let button_w = widgets::text_width(ui, "Change card…", font::UI) + ICON + S1 + 2.0 * S2 + S1;
         widgets::fitted(ui, RichText::new(&shown), ui.available_width() - button_w, Sense::hover()).on_hover_text(&shown);
         if widgets::button_with(ui, Icon::Card, if has_dest { "Change card…" } else { "Choose card…" }).clicked() {
-            app.volumes = crate::card::volumes();
+            app.look_soon();
             app.picker = Some(crate::ui::folders::Picker::Card { browse: None, show_all: false });
         }
     });
@@ -453,7 +453,8 @@ fn label_note(app: &mut App, ui: &mut Ui) {
                 if widgets::icon_link(ui, Icon::Card, format!("Switch to “{}”", l.name)).clicked() {
                     app.select_write(i);
                 }
-                if widgets::icon_link(ui, Icon::Check, "Use it for this setup")
+                if app.busy.is_none()
+                    && widgets::icon_link(ui, Icon::Check, "Use it for this setup")
                     .on_hover_text(format!("relabels the card for “{this}”; “{}” won't sync to it any more, and the files it put there stay", l.name))
                     .clicked()
                 {
@@ -840,8 +841,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                     ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
                         .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder first.");
                     // Room on the music folder's drive, so the copy can't fill it up.
-                    let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
-                    let fits = room.is_none_or(|free| free > unknown_bytes + 1_000_000_000);
+                    let fits = app.source_free().is_none_or(|free| free > unknown_bytes + 1_000_000_000);
                     if app.busy.is_none() && fits {
                         let hint = format!(
                             "Copies them, with their covers, into “{}” in your music folder, keeping the card's folder names; the card isn't changed. Then the library is rescanned, and checking the card again lets a take-over move them into place too.",

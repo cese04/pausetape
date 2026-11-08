@@ -262,6 +262,18 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     the next Sync does (● on the card, ○ added, struck red ring taken off, its title struck
     through); each artist counts them. **what the next Sync changes** lists only those albums,
     opened; once Sync is done it goes back to **everything**.
+19g. Pull the card out during a Sync (use a spare card and a small choice): the Sync ends within a
+    file or two and says the card isn't connected; no *Done*, no *Eject*. Put it back and **Sync**:
+    it carries on, and files of albums taken off earlier are still removed. With the card's
+    write-protect switch on: "Nothing was written", no *Done*.
+19h. While a Sync runs: **Change card…** refuses with a notice; closing the window asks first
+    (*Quit anyway* / *Cancel*). Quit with the card plugged in on another letter, or with the setup
+    pointing elsewhere: at the next start, once the library has opened, the setup follows its card.
+19i. Take over a card, take the card out, and press **Undo taking over**: it says the card isn't
+    connected. Put it back: the undo still works.
+19j. With *Music already on the card* open, take the card out: within a few seconds the dialog
+    closes and says why, and *Compare's* figures are gone from the card's view. With the test folder
+    written, take the card out: what was written stays listed, to tick against the player.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 20a. The card (sidebar) › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
     converted (AAC, APE, WMA and Ogg go as they are), and the library's badges and the card
@@ -278,6 +290,15 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     card belongs to the first and offers **switch to** and **use it for this setup**; Sync is gone.
     Eject the card, switch back to the second setup, plug the card in: within a few seconds the
     app switches to the first setup and says so.
+20e. **Sync** to a card, take it out and put a different one in the same drive letter (or choose it
+    with **Change card…**): a notice says it's treated as a new card, and the card's view counts
+    nothing on it as this setup's. If it holds music, *Music already on the card* explains it. Put
+    the first card back: it's treated as new again; **Duplicate** the setup to keep one for each.
+    Upgrading: a card and setup written before this keep their record.
+20f. Windows, a card in a USB **card reader**: **Sync**, then **Eject** from the notice. The notice
+    says it can come out, the card shows as not connected and the drive doesn't come back while
+    the card stays in (check for about a minute). Take it out and put it back: it's announced as
+    plugged in. A stick: Eject and it goes, as before.
 20d. The card (sidebar) › **Names on the card**: type `{albumartist} - {album} [({year})]/{track} {title}`.
     The example under it and the folder names in the list follow as you type; a broken pattern
     (`{album}/[{year}`) says what's wrong and changes nothing. The sync line says how many songs

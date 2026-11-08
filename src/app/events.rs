@@ -111,11 +111,18 @@ impl App {
                     self.room_while_writing = None;
                     let name = self.saved.writes.iter().find(|w| w.id == id).map(|w| w.name.clone()).unwrap_or_default();
                     let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
-                    if out.stopped {
+                    // Something went wrong and nothing on the card changed (write-protected, say).
+                    let failed = !out.errors.is_empty() && out.copied + out.removed + out.renamed + out.tagged == 0;
+                    let finished = !out.stopped && !out.card_gone && !failed;
+                    if out.card_gone {
+                        self.notice(format!("“{name}”: the card isn't connected, so the Sync ended after {} copied{errors}. What's on the card stays recorded; Sync carries on once it's back.", out.copied));
+                    } else if out.stopped {
                         self.notice(format!(
                             "“{name}” stopped: {} copied · {} unchanged · {} removed{errors}. What's on the card is recorded; Sync carries on from there.",
                             out.copied, out.unchanged, out.removed,
                         ));
+                    } else if failed {
+                        self.notice(format!("Nothing was written to “{name}”{errors}"));
                     } else {
                         self.notice(format!(
                             "Done · “{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
@@ -130,7 +137,10 @@ impl App {
                     }
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
                         w.manifest = out.manifest;
-                        if !out.stopped {
+                        if out.card_id.is_some() {
+                            w.card_id = out.card_id;
+                        }
+                        if finished {
                             w.last_written = Some(card::now());
                         }
                     }
@@ -138,7 +148,7 @@ impl App {
                     self.volumes = card::volumes();
                     self.refresh_on_card();
                     self.refresh_label();
-                    if !out.stopped {
+                    if finished {
                         self.offer_eject(&id);
                     }
                 }
@@ -156,6 +166,7 @@ impl App {
                     self.volumes = card::volumes();
                     self.refresh_label();
                 }
+                Msg::Looked(look) => self.saw_cards(*look),
                 Msg::Surveyed(id, s) => {
                     self.busy = None;
                     if self.write().id == id {
@@ -170,6 +181,9 @@ impl App {
                     self.busy = None;
                     self.take_over_open = false;
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
+                        if out.card_id.is_some() {
+                            w.card_id = out.card_id.take();
+                        }
                         // The moved files are now this write's, as if it had copied them.
                         let mut have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
                         for wr in out.written {
@@ -252,6 +266,7 @@ impl App {
                     self.notice(format!("test folder written to the card: {ok} of {} samples · eject the card and try them on the player", made.len()));
                     self.test_card = Some(made);
                     self.write_preview = None;
+                    self.refresh_label();
                 }
                 Msg::TestCardRemoved(r) => {
                     self.busy = None;
@@ -262,6 +277,7 @@ impl App {
                         }
                         Err(e) => self.notice(format!("couldn't take the test folder off the card: {e}")),
                     }
+                    self.refresh_label();
                 }
                 Msg::Trashed(moved, what, errors) => {
                     self.busy = None;

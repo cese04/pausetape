@@ -310,7 +310,7 @@ fn card(app: &mut App, ui: &mut Ui, narrow: bool, go: &mut Option<Go>) {
         let active = app.tab == Tab::Card && app.saved.active_write == i;
         let count = (i == app.saved.active_write && pending > 0).then(|| format!("{} to sync", text::count(pending)));
         let r = named(ui, Icon::Card, &w.name, count, active, narrow);
-        let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+        let connected = app.dest_reachable(w);
         let r = r.on_hover_text(if connected { "connected" } else { "not connected" });
         if r.clicked() {
             *go = Some(Go::Card(i));

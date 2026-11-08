@@ -41,7 +41,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             });
         } else {
             row_wrapped(ui, |ui| {
-                let on_card = app.test_card_on_card();
+                let on_card = app.test_folder_seen();
                 if app.write().dest.is_none() {
                     ui.label(RichText::new("Choose the card first (destination, in the card tab).").color(ink.warn));
                 } else if widgets::primary_with(ui, Icon::Card, if on_card { "Write the test folder again" } else { "Write the test folder to the card" }).clicked() {

@@ -18,6 +18,7 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    scan thread ───┤  library::scan  + db (SQLite cache)
    MusicBrainz ───┤  one worker, ≤ 1 request/second
    writes ────────┤  card::write / card::execute
+   card watcher ──┤  drives, the card's label and space, every 3 s; the UI draws its last answer
    audio thread ──┘  rodio player and the play queue; status shared via Arc<Mutex<Status>>
    helpers: waveform + cover loading per track; ffmpeg conversions (serialised)
 ```
