@@ -73,7 +73,10 @@ start, when opening the library holds the slot:
 | No label | nothing; the card is chosen in the picker |
 
 **A card going away** has no event of its own. `volumes` loses it, `mounted` follows and the
-views that test `dest.exists()` change. Nothing else is cleared ([P7](#7-paths-not-handled-yet)).
+views that test `dest.exists()` change. At the next look (`forget_a_card_gone`), the comparison
+and the check of its music are dropped, and the dialog going through them closes and says why.
+Two things stay on purpose: the test folder's results, as the card comes out to try them on the
+player, and the marks in the library, worked out from the manifest.
 
 ## 3. Machine B: the job slot
 
@@ -170,15 +173,15 @@ stateDiagram-v2
 | Operation | Slot free | Card connected | Label allows | Library ready |
 |---|---|---|---|---|
 | Sync | ✓ | ✓ | ✓ | ✓ |
-| Compare | interface only | interface only | not needed | not needed |
-| Compare after the welcome's *Start* | no | no | not needed | not needed |
-| Check the card's music | ✓ | **no** | ✓ | ✓ |
-| Take over | ✓ | **no** | ✓ | ✓ |
+| Compare | interface only | ✓ | not needed | not needed |
+| Compare after the welcome's *Start* | no | ✓ | not needed | not needed |
+| Check the card's music | ✓ | ✓ | ✓ | ✓ |
+| Take over | ✓ | ✓ | ✓ | ✓ |
 | Undo taking over | ✓ | ✓ | ✓ | not needed |
-| Copy into the music folder | ✓ | **no** | not needed | ✓ |
+| Copy into the music folder | ✓ | ✓ | not needed | ✓ |
 | Write the test folder | ✓ | ✓ | no (it only adds its own folder) | not needed |
-| Remove the test folder | ✓ | no | no | not needed |
-| *Use it for this setup* | **no** | no | it's the answer to it | not needed |
+| Remove the test folder | ✓ | ✓ | no (it only removes its own folder) | not needed |
+| *Use it for this setup* | ✓ | ✓ | it's the answer to it | not needed |
 | Eject | ✓ | ✓ | not needed | not needed |
 | Change card | ✓ | not needed | read afterwards | not needed |
 
@@ -200,17 +203,17 @@ the function behind it doesn't.
 | 9 | A song already on the card stays there if its replacement fails | Yes |
 | 10 | An undo record is used up only when everything is back; what couldn't move can be tried again | Yes |
 | 11 | The music folder isn't inside the card folder, or the reverse | Yes (the picker). The same drive is allowed; it only loses the Eject offer |
+| 12 | Whatever touches the card checks first that it's there, and a refusal loses nothing | Yes |
 
 ## 7. Paths not handled yet
 
 Most serious first. "Tested" means reproduced; "read" means found in the code and not run.
-P1 to P5 and P8 are fixed ([CHANGELOG](../CHANGELOG.md) §104); the numbers stay as they were.
+P1 to P5, P7, P8 and P9 are fixed ([CHANGELOG](../CHANGELOG.md) §104 and §105); the numbers stay as
+they were.
 
 | | Path | What happens | Evidence | Direction |
 |---|---|---|---|---|
 | **P6** | A different card appears at the same path (swapped between polls, or chosen with *Change card*) | Anything without another setup's label counts as this setup's. The manifest, `last_written` and the take-over offer aren't reset. A Sync replaces the first card's record, whose files become foreign when it returns. `prune`'s size check keeps this from deleting unrelated files. More likely with Windows drive letters than with macOS volume names | Read: `sync`, `pickers` | A question of design: give each card its own id in the label, and tie the manifest to it |
-| **P7** | The card goes away with a comparison or check on screen | `write_preview`, `card_survey` and `test_card` stay, with no notice. *Go through them* remains usable (*Undo* now says the card isn't connected). Take-over reports errors, and uses up the check. Refused by a label, it also loses the check, where Import puts it back | Read | Clear them when the drive leaves; check the card in each operation |
-| **P9** | *Use it for this setup* during a job | Rewrites the label with no check, even mid-Sync | Read: `claim_card` | Take it only while idle |
 | **P10** | A setup whose destination is a folder on the card | The label is in that folder, and arrival only reads the top of the drive, so plugging it in brings nothing up. If that folder doesn't exist, the first Sync reports "labelling the card" as a problem and goes on | Tested: the missing folder. Read: the arrival | Search from the setups' own `dest` too; create the folder first |
 | **P11** | Card readers that can't eject the medium | Eject reports success once dismounted, on purpose. Then `dest.exists()` (each frame, in four places) and the label read may mount it again while the notice says it can come out | Read. A USB stick stayed gone for 15 s; no reader tried | Try one; stop looking at that drive after an Eject |
 | **P12** | Reading the card on the interface thread | `exists()` and `space` each frame, the label every 3 s. A sleeping or failing drive stalls the window | Read | Move it to the watcher's own thread |
@@ -238,8 +241,9 @@ image, ejected and refused.
 
 The same day, on Windows: a card found at the start is dealt with once the library has opened, and
 closing the window during a write asks first. A Sync with the card missing, a failed replacement
-and an undo that can't happen are covered by tests on temporary folders; pulling a card out
-mid-Sync hasn't been done by hand.
+and an undo that can't happen are covered by tests on temporary folders. A destination folder
+removed under the running app refused every operation and dropped what had been seen of it.
+Pulling a card out mid-Sync hasn't been done by hand.
 
 The button itself was called from a test script rather than clicked. Not run: a card reader, an
 Explorer window left open on the card, a Sync stopped and Eject checked after it, Linux.

@@ -271,6 +271,9 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     pointing elsewhere: at the next start, once the library has opened, the setup follows its card.
 19i. Take over a card, take the card out, and press **Undo taking over**: it says the card isn't
     connected. Put it back: the undo still works.
+19j. With *Music already on the card* open, take the card out: within a few seconds the dialog
+    closes and says why, and *Compare's* figures are gone from the card's view. With the test folder
+    written, take the card out: what was written stays listed, to tick against the player.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 20a. The card (sidebar) › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
     converted (AAC, APE, WMA and Ogg go as they are), and the library's badges and the card

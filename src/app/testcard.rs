@@ -30,7 +30,7 @@ impl App {
 
     pub fn remove_test_card(&mut self) {
         let Some(dest) = self.write().dest.clone() else { return };
-        if self.busy.is_some() {
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         self.busy = Some(Busy::new("taking the test folder off the card", 0));

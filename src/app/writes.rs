@@ -148,7 +148,8 @@ impl App {
 
     pub fn preview_write(&mut self) {
         let w = self.write().clone();
-        let Some(dest) = w.dest.clone() else { return };
+        // No card, nothing to compare with: everything would look as if it had to be copied.
+        let Some(dest) = w.dest.clone().filter(|d| d.is_dir()) else { return };
         let tracks = self.tracks.clone();
         let prefs = self.saved.prefs.clone();
         let playlists = self.saved.playlists.clone();
@@ -166,7 +167,7 @@ impl App {
     pub fn survey_card(&mut self) {
         let w = self.write().clone();
         let Some(dest) = w.dest.clone() else { return };
-        if self.busy.is_some() {
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.
@@ -192,10 +193,9 @@ impl App {
 
     /// Move the card's copies of library songs into this write's layout (see `card::adopt`).
     pub fn take_over_card(&mut self) {
-        let Some((id, survey)) = self.card_survey.take() else { return };
+        let Some(id) = self.card_survey.as_ref().map(|(id, _)| id.clone()) else { return };
         let Some(dest) = self.write().dest.clone().filter(|_| self.write().id == id) else { return };
-        if self.busy.is_some() {
-            self.card_survey = Some((id, survey));
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.
@@ -204,6 +204,8 @@ impl App {
             self.notice(why);
             return;
         }
+        // Taken only now: a refusal leaves the check as it was.
+        let Some((id, survey)) = self.card_survey.take() else { return };
         let label = card::Label::of(self.write());
         let (gather, clean, clean_mac) = (self.gather_on_take_over, self.delete_clutter_on_take_over, self.write().options.clean_mac_files);
         let ctx = self.ctx.clone();
@@ -227,20 +229,19 @@ impl App {
     /// Copy the card's music that isn't in the library into the music folder (see
     /// `card::adopt::import`), then rescan so it joins the library.
     pub fn import_from_card(&mut self) {
-        let Some((id, survey)) = self.card_survey.take() else { return };
-        let (Some(dest), Some(music)) = (self.write().dest.clone(), self.saved.source.clone()) else {
-            self.card_survey = Some((id, survey));
+        if self.card_survey.is_none() {
             return;
-        };
-        if self.busy.is_some() {
-            self.card_survey = Some((id, survey));
+        }
+        let (Some(dest), Some(music)) = (self.write().dest.clone(), self.saved.source.clone()) else { return };
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         if let Some(why) = self.library_unavailable() {
             self.notice(why);
-            self.card_survey = Some((id, survey));
             return;
         }
+        // Taken only now: a refusal leaves the check as it was.
+        let Some((_, survey)) = self.card_survey.take() else { return };
         let ctx = self.ctx.clone();
         let (busy, stop) = Busy::stoppable("copying music from the card", 0);
         self.busy = Some(busy);
@@ -262,8 +263,7 @@ impl App {
         if self.busy.is_some() {
             return;
         }
-        if !dest.is_dir() {
-            self.notice("the card isn't connected: plug it in to put it back");
+        if self.card_missing(&dest) {
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.
@@ -307,8 +307,7 @@ impl App {
         if self.busy.is_some() {
             return;
         }
-        if !dest.is_dir() {
-            self.notice(format!("the card for “{}” isn't connected", w.name));
+        if self.card_missing(&dest) {
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.

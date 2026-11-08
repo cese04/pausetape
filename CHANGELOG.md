@@ -1274,3 +1274,12 @@ From [docs/CARD_STATES.md](docs/CARD_STATES.md).
 - Closing the window during work on files asks first. A take-over's undo record is saved as it
   goes, every 25 moves, rather than only at the end.
 - A card plugged in on Windows was announced with no name (“” plugged in).
+
+### 105. Every operation on the card looks for it first (2026-11-08)
+- When the card goes away, the last comparison and check of its music are forgotten, and the
+  dialog going through them closes and says why. What was written of the test folder stays: the
+  card comes out to try it on the player.
+- Checking the card's music, taking it over, copying from it, removing the test folder, *Use it for
+  this setup* and Compare all look for the card first, and say so if it isn't there. A take-over
+  refused by the card's label no longer loses the check it was based on.
+- *Use it for this setup* waits for other work: it could rewrite the label in the middle of a Sync.

@@ -65,10 +65,34 @@ impl App {
             }
         }
         self.refresh_label();
+        self.forget_a_card_gone();
         // The music folder's drive is back.
         if self.source_missing && self.busy.is_none() && self.saved.source.as_deref().is_some_and(Path::is_dir) {
             self.scan();
         }
+    }
+
+    /// The active setup's card has gone: what was seen on it no longer stands, and its dialog
+    /// closes. The results of the test folder stay: it's taken out to try them on the player.
+    fn forget_a_card_gone(&mut self) {
+        if self.write().dest.as_deref().is_some_and(Path::is_dir) {
+            return;
+        }
+        let looking = self.take_over_open && (self.write_preview.is_some() || self.card_survey.is_some());
+        self.write_preview = None;
+        self.card_survey = None;
+        if looking {
+            self.notice("the card was taken out, so its music can't be gone through now");
+        }
+    }
+
+    /// Says so if the active setup's card isn't plugged in.
+    pub(super) fn card_missing(&mut self, dest: &Path) -> bool {
+        let missing = !dest.is_dir();
+        if missing {
+            self.notice(format!("the card for “{}” isn't connected", self.write().name));
+        }
+        missing
     }
 
     /// Point the card's setup at where it's mounted, and say so. At startup (`first`), a card
@@ -116,6 +140,9 @@ impl App {
     /// Relabel the card for the active setup: the user chose to use another setup's card for it.
     pub fn claim_card(&mut self) {
         let Some(dest) = self.write().dest.clone() else { return };
+        if self.busy.is_some() || self.card_missing(&dest) {
+            return;
+        }
         match Label::of(self.write()).save(&dest) {
             Ok(()) => self.notice(format!("the card is now “{}”'s", self.write().name)),
             Err(e) => self.notice(format!("{e:#}")),

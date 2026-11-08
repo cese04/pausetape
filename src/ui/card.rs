@@ -453,7 +453,8 @@ fn label_note(app: &mut App, ui: &mut Ui) {
                 if widgets::icon_link(ui, Icon::Card, format!("Switch to “{}”", l.name)).clicked() {
                     app.select_write(i);
                 }
-                if widgets::icon_link(ui, Icon::Check, "Use it for this setup")
+                if app.busy.is_none()
+                    && widgets::icon_link(ui, Icon::Check, "Use it for this setup")
                     .on_hover_text(format!("relabels the card for “{this}”; “{}” won't sync to it any more, and the files it put there stay", l.name))
                     .clicked()
                 {
