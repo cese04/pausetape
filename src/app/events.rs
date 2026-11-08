@@ -111,11 +111,18 @@ impl App {
                     self.room_while_writing = None;
                     let name = self.saved.writes.iter().find(|w| w.id == id).map(|w| w.name.clone()).unwrap_or_default();
                     let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
-                    if out.stopped {
+                    // Something went wrong and nothing on the card changed (write-protected, say).
+                    let failed = !out.errors.is_empty() && out.copied + out.removed + out.renamed + out.tagged == 0;
+                    let finished = !out.stopped && !out.card_gone && !failed;
+                    if out.card_gone {
+                        self.notice(format!("“{name}”: the card isn't connected, so the Sync ended after {} copied{errors}. What's on the card stays recorded; Sync carries on once it's back.", out.copied));
+                    } else if out.stopped {
                         self.notice(format!(
                             "“{name}” stopped: {} copied · {} unchanged · {} removed{errors}. What's on the card is recorded; Sync carries on from there.",
                             out.copied, out.unchanged, out.removed,
                         ));
+                    } else if failed {
+                        self.notice(format!("Nothing was written to “{name}”{errors}"));
                     } else {
                         self.notice(format!(
                             "Done · “{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
@@ -130,7 +137,7 @@ impl App {
                     }
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
                         w.manifest = out.manifest;
-                        if !out.stopped {
+                        if finished {
                             w.last_written = Some(card::now());
                         }
                     }
@@ -138,7 +145,7 @@ impl App {
                     self.volumes = card::volumes();
                     self.refresh_on_card();
                     self.refresh_label();
-                    if !out.stopped {
+                    if finished {
                         self.offer_eject(&id);
                     }
                 }

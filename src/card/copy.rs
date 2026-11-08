@@ -45,6 +45,8 @@ pub struct Report {
     pub written: Vec<Written>,
     /// Asked to stop, it stopped before the end of the plan.
     pub stopped: bool,
+    /// The card went away during the copy: what was left of the plan wasn't tried.
+    pub card_gone: bool,
 }
 
 /// One file a write put on the card, relative to the card root. Recorded so later writes can
@@ -280,6 +282,11 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
                 r.stopped = true;
                 break;
             }
+            // Pulled out: nothing more can go on it, and no folder should be made where it was.
+            if !dest.is_dir() {
+                r.card_gone = true;
+                break;
+            }
             // A finished song first (its work file goes once it's on the card), else a plain copy,
             // else wait for ffmpeg.
             let (n, res) = match rx.try_recv() {
@@ -469,6 +476,7 @@ mod tests {
             fs::create_dir_all(p.parent().unwrap()).unwrap();
             fs::write(p, b"not really audio").unwrap();
         }
+        fs::create_dir_all(root.join("dst")).unwrap();
         root
     }
 

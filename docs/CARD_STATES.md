@@ -61,13 +61,14 @@ stateDiagram-v2
 `dest` is never cleared, only replaced. Which of these states applies is worked out when it's
 needed; nothing stores it.
 
-**Noticing a card.** Every 3 seconds `watch_cards` lists the drives. A drive not in `mounted`
-whose top folder holds a label counts as arrived:
+**Noticing a card.** Every 3 seconds `watch_cards` lists the drives. While a job runs, it goes no
+further: arrivals wait, so a setup's `dest` doesn't change under running work. Once the slot is
+free, a drive not in `mounted` whose top folder holds a label counts as arrived. That covers every
+start, when opening the library holds the slot:
 
 | Arrival | Result |
 |---|---|
-| Label's setup is here, app idle | `dest` follows the card; the setup comes up unless the active setup's own card arrived too; a notice says so |
-| Label's setup is here, a job running | a notice only ([P4](#7-paths-not-handled-yet)) |
+| Label's setup is here | `dest` follows the card; the setup comes up unless the active setup's own card arrived too; a notice says so, except for a card found at the start where it was expected |
 | Label's setup isn't here | a notice only |
 | No label | nothing; the card is chosen in the picker |
 
@@ -117,17 +118,25 @@ stateDiagram-v2
     Pending --> InStep: Sync finishes
     Pending --> PartlyWritten: Sync stopped
     PartlyWritten --> InStep: Sync finishes
-    InStep --> Lost: Sync fails throughout (P1)
-    Pending --> Lost: Sync fails throughout (P1)
-    Lost --> InStep: Sync finishes, with leftovers
+    NeverWritten --> PartlyWritten: card goes away
+    Pending --> PartlyWritten: card goes away
+    InStep --> InStep: nothing could be written
+    Pending --> Pending: nothing could be written
 ```
 
 - **The order of a Sync** (`card::write`): label; rename what only changed name; remove what's no
   longer wanted; copy; playlists; remove what's left over; clean macOS files.
 - **Stopped**: the song being copied finishes. The manifest is what was copied plus earlier
   entries still on the card, so the next Sync carries on and can still remove its own files.
-- **Finished**: the manifest is what was written this time. `last_written` is set and, if the
-  drive qualifies, Eject is offered.
+- **The card goes away** (checked before each file, and at the start): the Sync ends there. The
+  manifest keeps every earlier entry, as nothing can be checked, plus what was copied. No folder
+  is made where the card was.
+- **Nothing could be written** (errors, and nothing on the card changed; write-protected, say):
+  the notice says so, and neither `last_written` nor the Eject offer follow.
+- **Finished**: the manifest is what was written this time, plus earlier files still on the card
+  at their recorded size that it neither replaced nor could remove. `last_written` is set and, if
+  the drive qualifies, Eject is offered.
+- **A song the plan still wants is never removed**, even if its new copy failed.
 - **Half a copy** can't sit under a song's name: `plain_copy` and `encode` write to `.partial`, then
   rename. If the copy fails, the partial file is removed.
 
@@ -148,7 +157,7 @@ stateDiagram-v2
 
 | Rule | Where |
 |---|---|
-| Only after a Sync that wasn't stopped | `Msg::Written` |
+| Only after a Sync that finished: not stopped, the card still there, something written | `Msg::Written` |
 | The drive holding `dest` must be listed | `offer_eject` |
 | It must be ejectable: removable on Windows; any listed volume elsewhere | `platform::ejectable` |
 | It can't hold the music folder | `offer_eject` |
@@ -160,52 +169,47 @@ stateDiagram-v2
 
 | Operation | Slot free | Card connected | Label allows | Library ready |
 |---|---|---|---|---|
-| Sync | ✓ | interface only | ✓ | ✓ |
+| Sync | ✓ | ✓ | ✓ | ✓ |
 | Compare | interface only | interface only | not needed | not needed |
 | Compare after the welcome's *Start* | no | no | not needed | not needed |
 | Check the card's music | ✓ | **no** | ✓ | ✓ |
 | Take over | ✓ | **no** | ✓ | ✓ |
-| Undo taking over | ✓ | **no** | **no** | not needed |
+| Undo taking over | ✓ | ✓ | ✓ | not needed |
 | Copy into the music folder | ✓ | **no** | not needed | ✓ |
 | Write the test folder | ✓ | ✓ | no (it only adds its own folder) | not needed |
 | Remove the test folder | ✓ | no | no | not needed |
 | *Use it for this setup* | **no** | no | it's the answer to it | not needed |
 | Eject | ✓ | ✓ | not needed | not needed |
-| Change card | **no** | not needed | read afterwards | not needed |
+| Change card | ✓ | not needed | read afterwards | not needed |
 
 ✓ is checked in the operation itself. "Interface only" means the button or shortcut checks, and
-the function behind it doesn't. Sync's confirmation dialog goes straight to the function.
+the function behind it doesn't.
 
 ### What should always be true
 
 | | Rule | Holds? |
 |---|---|---|
 | 1 | One job on the card at a time | Yes. Compare from *Start* can run beside a library job; it only reads |
-| 2 | A reply changes only the setup it names | Yes, but a setup's `dest` can change meanwhile ([P3](#7-paths-not-handled-yet)) |
+| 2 | A reply changes only the setup it names | Yes |
 | 3 | Only files this setup recorded are removed, and only at the recorded size | Yes (`prune`) |
 | 4 | Nothing outside the card follows from a record | Yes: `prune` and `relocate` check every path component |
 | 5 | No half-written file under a song's name | Yes |
 | 6 | A card that's another setup's here isn't synced or taken over | Yes, for what the label says |
-| 7 | The manifest describes what's on the card | **No** ([P1](#7-paths-not-handled-yet)) |
-| 8 | `dest` changes only while idle | **No**: `card_arrived` waits, the picker doesn't ([P3](#7-paths-not-handled-yet)) |
-| 9 | A song already on the card stays there if its replacement fails | **No** ([P8](#7-paths-not-handled-yet)) |
-| 10 | An undo record is used up only when it put things back | **No** ([P2](#7-paths-not-handled-yet)) |
+| 7 | The manifest describes what's on the card | Yes, as far as the card can be seen. A different card at the same path is [P6](#7-paths-not-handled-yet) |
+| 8 | `dest` changes only while idle | Yes |
+| 9 | A song already on the card stays there if its replacement fails | Yes |
+| 10 | An undo record is used up only when everything is back; what couldn't move can be tried again | Yes |
 | 11 | The music folder isn't inside the card folder, or the reverse | Yes (the picker). The same drive is allowed; it only loses the Eject offer |
 
 ## 7. Paths not handled yet
 
 Most serious first. "Tested" means reproduced; "read" means found in the code and not run.
+P1 to P5 and P8 are fixed ([CHANGELOG](../CHANGELOG.md) §104); the numbers stay as they were.
 
 | | Path | What happens | Evidence | Direction |
 |---|---|---|---|---|
-| **P1** | Every write of a Sync fails: the card is pulled out, absent when the dialog is confirmed, or write-protected | It ends as if finished. The manifest is replaced by what was written (2 entries became 0), `last_written` is set, and the notice starts with "Done". Files from earlier Syncs stop being this setup's, and those no longer chosen are never removed. Songs still to convert are converted for nothing | Tested: a drive that isn't there. On macOS and Linux, whether `create_dir_all` could recreate a vanished mount path on the internal disk is not checked | Detect the missing card in the copy loop and end like a stop: keep entries still on the card, no `last_written`, no "Done" |
-| **P2** | *Undo taking over* with the card absent or a different one in its place | Every move fails, and the record is still renamed `.undone`: the undo is spent having put nothing back. The link stays reachable through an old comparison | Read: `adopt::undo_latest` | Check the card first; mark it undone only if nothing failed |
-| **P3** | *Change card* while a job runs | The picker isn't blocked. When a Sync ends, the old card's manifest lands on a setup pointing at the new card. A check that ends late leaves the old card's list ready to be applied to the new one | Read: `folders::pickers`, `Msg::Written`, `Msg::Surveyed` | Block the picker while busy, or have replies carry the `dest` they used |
-| **P4** | A card arrives while a job runs, **which includes every launch with a library** (opening it takes the slot on the first frame) | `dest` isn't updated and the drive is recorded as seen, so it's never looked at again. At launch the notice wrongly says "plugged in". If the letter changed, the card reads as not connected while it's in. The "already where it's expected" case in `card_arrived` is rarely reached | Read: `watch_cards`, `card_arrived`, `App::load` | Don't record arrivals as seen until the slot is free |
-| **P5** | The window is closed during a job | Nothing asks. The manifest isn't updated, a `.partial` can stay, and most of it mends at the next Sync. A take-over writes its undo record only at the end, so moves already made can't be undone | Read: no close handling; `adopt::take_over` | Ask before closing during a job; write the record as it goes |
 | **P6** | A different card appears at the same path (swapped between polls, or chosen with *Change card*) | Anything without another setup's label counts as this setup's. The manifest, `last_written` and the take-over offer aren't reset. A Sync replaces the first card's record, whose files become foreign when it returns. `prune`'s size check keeps this from deleting unrelated files. More likely with Windows drive letters than with macOS volume names | Read: `sync`, `pickers` | A question of design: give each card its own id in the label, and tie the manifest to it |
-| **P7** | The card goes away with a comparison or check on screen | `write_preview`, `card_survey` and `test_card` stay, with no notice. *Go through them* and *Undo* remain usable. Take-over reports errors, and uses up the check. Refused by a label, it also loses the check, where Import puts it back | Read | Clear them when the drive leaves; check the card in each operation |
-| **P8** | A song that had to be replaced fails, for example if the music folder's drive goes during a Sync | The new copy fails; the old one, recorded at its size and not in the new list, is removed by the last clean-up. The song is off the card until the next Sync. `card::write` documents removing "songs that failed", but a working old copy goes with them | Read: `card::write`, `prune` | Keep the old entry when its replacement failed |
+| **P7** | The card goes away with a comparison or check on screen | `write_preview`, `card_survey` and `test_card` stay, with no notice. *Go through them* remains usable (*Undo* now says the card isn't connected). Take-over reports errors, and uses up the check. Refused by a label, it also loses the check, where Import puts it back | Read | Clear them when the drive leaves; check the card in each operation |
 | **P9** | *Use it for this setup* during a job | Rewrites the label with no check, even mid-Sync | Read: `claim_card` | Take it only while idle |
 | **P10** | A setup whose destination is a folder on the card | The label is in that folder, and arrival only reads the top of the drive, so plugging it in brings nothing up. If that folder doesn't exist, the first Sync reports "labelling the card" as a problem and goes on | Tested: the missing folder. Read: the arrival | Search from the setups' own `dest` too; create the folder first |
 | **P11** | Card readers that can't eject the medium | Eject reports success once dismounted, on purpose. Then `dest.exists()` (each frame, in four places) and the label read may mount it again while the notice says it can come out | Read. A USB stick stayed gone for 15 s; no reader tried | Try one; stop looking at that drive after an Eject |
@@ -217,6 +221,12 @@ Not faults, but easy to miss:
 - Eject is only offered after a Sync. The test folder's notice says to eject the card, with no button.
 - USB hard disks count as fixed on Windows, so they get no Eject.
 - A Stranger card is relabelled by a Sync with only a line of text beforehand.
+- A card plugged in during a Sync is announced once the Sync ends, which can take the place of
+  its notice, and so of the Eject offer.
+- *Quit anyway*, or a crash, still cuts work off. A Sync mends at the next one; a take-over's undo
+  record is saved every 25 moves, so the last few can be missing from it.
+- On macOS and Linux, a mount point that vanishes between the check and the copy could in theory
+  be recreated by `create_dir_all`. The check runs before every file, so the window is small.
 
 ## 8. What has been run on real hardware
 
@@ -225,6 +235,11 @@ unchanged, read back in full); Eject refused with a file open, in about 2 s, wit
 offered; Eject done in under a second; the drive stayed gone for 15 s with the watcher on; no
 offer for an internal drive or the music folder's drive; greyed during a job. macOS: a FAT32 disk
 image, ejected and refused.
+
+The same day, on Windows: a card found at the start is dealt with once the library has opened, and
+closing the window during a write asks first. A Sync with the card missing, a failed replacement
+and an undo that can't happen are covered by tests on temporary folders; pulling a card out
+mid-Sync hasn't been done by hand.
 
 The button itself was called from a test script rather than clicked. Not run: a card reader, an
 Explorer window left open on the card, a Sync stopped and Eject checked after it, Linux.

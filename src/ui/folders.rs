@@ -315,7 +315,11 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         close = true;
     }
     if let Some(dir) = chosen_dest {
-        if app.saved.source.as_ref().is_some_and(|s| dir.starts_with(s) || s.starts_with(&dir)) {
+        // Work running now would record what it did on the card against the new one.
+        if let Some(b) = &app.busy {
+            app.notice(format!("the card can be changed once {} is done", b.label));
+            close = true;
+        } else if app.saved.source.as_ref().is_some_and(|s| dir.starts_with(s) || s.starts_with(&dir)) {
             app.notice("the card folder can't be inside your music folder (or the other way round)");
         } else {
             app.write_mut().dest = Some(dir);

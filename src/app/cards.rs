@@ -43,7 +43,6 @@ impl App {
         if self.shooter.as_ref().is_some_and(|s| !s.watch) {
             return;
         }
-        let first = self.last_watch.is_none();
         if let Some(t) = self.last_watch
             && t.elapsed() < WATCH_EVERY
         {
@@ -53,12 +52,17 @@ impl App {
         self.last_watch = Some(Instant::now());
         self.ctx.request_repaint_after(WATCH_EVERY);
         self.volumes = card::volumes();
-        let arrived: Vec<(PathBuf, Label)> =
-            self.volumes.iter().filter(|v| !self.mounted.contains(&v.path)).filter_map(|v| Some((v.path.clone(), Label::read(&v.path)?))).collect();
-        self.mounted = self.volumes.iter().map(|v| v.path.clone()).collect();
-        let bring_up = if self.busy.is_some() { None } else { bring_up(&self.saved.writes, self.saved.active_write, &arrived) };
-        for (path, label) in arrived {
-            self.card_arrived(path, label, bring_up, first);
+        // Cards that arrive during other work (as at every start, while the library opens) are
+        // looked at once it's done: a setup's destination doesn't change under running work.
+        if self.busy.is_none() {
+            let first = self.mounted.is_none();
+            let seen = self.mounted.take().unwrap_or_default();
+            let arrived: Vec<(PathBuf, Label)> = self.volumes.iter().filter(|v| !seen.contains(&v.path)).filter_map(|v| Some((v.path.clone(), Label::read(&v.path)?))).collect();
+            self.mounted = Some(self.volumes.iter().map(|v| v.path.clone()).collect());
+            let bring_up = bring_up(&self.saved.writes, self.saved.active_write, &arrived);
+            for (path, label) in arrived {
+                self.card_arrived(path, label, bring_up, first);
+            }
         }
         self.refresh_label();
         // The music folder's drive is back.
@@ -70,16 +74,13 @@ impl App {
     /// Point the card's setup at where it's mounted, and say so. At startup (`first`), a card
     /// already where its setup expects it goes unremarked.
     fn card_arrived(&mut self, path: PathBuf, label: Label, bring_up: Option<usize>, first: bool) {
-        let shown = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        // By the name it's listed under: a drive letter's path has no last part to call it by.
+        let shown = self.volumes.iter().find(|v| v.path == path).map(|v| v.name.clone()).unwrap_or_else(|| path.display().to_string());
         let Some(i) = self.saved.writes.iter().position(|w| w.id == label.id) else {
             self.notice(format!("“{shown}” plugged in: written by Pausetape for “{}”, a card setup not on this computer", label.name));
             return;
         };
         let name = self.saved.writes[i].name.clone();
-        if self.busy.is_some() {
-            self.notice(format!("“{shown}” plugged in: it's the card for “{name}”, which you can switch to once this is done"));
-            return;
-        }
         let moved = self.saved.writes[i].dest.as_ref() != Some(&path);
         self.saved.writes[i].dest = Some(path);
         let switched = bring_up == Some(i);

@@ -262,6 +262,16 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        if !dest.is_dir() {
+            self.notice("the card isn't connected: plug it in to put it back");
+            return;
+        }
+        // The label as it is now: the card may have been swapped since the last look.
+        self.refresh_label();
+        if let Some(why) = self.refused_by_label() {
+            self.notice(why);
+            return;
+        }
         self.busy = Some(Busy::new("putting the card back", 0));
         self.problems = None;
         self.spawn(move |tx| {
@@ -295,6 +305,10 @@ impl App {
         let w = self.write().clone();
         let (Some(dest), Some(source)) = (w.dest.clone(), self.saved.source.clone()) else { return };
         if self.busy.is_some() {
+            return;
+        }
+        if !dest.is_dir() {
+            self.notice(format!("the card for “{}” isn't connected", w.name));
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.

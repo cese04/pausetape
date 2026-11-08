@@ -1255,3 +1255,22 @@ so, and offers the next step.
 - Two messages said "not on this Mac" on every system: "not on this computer".
 - [docs/CARD_STATES.md](docs/CARD_STATES.md): the card as state machines, what each operation
   checks first, and the paths the code doesn't handle yet.
+
+### 104. A card that goes away, and other paths the state machine found (2026-11-08)
+From [docs/CARD_STATES.md](docs/CARD_STATES.md).
+- A Sync whose card was pulled out, or absent, ended as "Done" and replaced the record of what's
+  on the card with what it had just written (nothing, if the card was gone from the start). It now
+  checks before every file and ends there, keeps the record, makes no folder where the card was,
+  stops converting songs for it, and says so. If nothing could be written (a write-protected
+  card), it says that, with no *Done* and no Eject.
+- A song whose new copy failed lost its old copy to the last clean-up, off the card until the next
+  Sync. A song still wanted stays, and the record says what's really there.
+- *Undo taking over* with the card absent or changed put nothing back and spent the undo anyway. It
+  checks the card and its label first, and what couldn't move can be tried again.
+- *Change card* during other work is refused: the work would record the old card against the new.
+- A card that arrives during other work, as at every start while the library opens, wasn't looked
+  at again: the setup kept its old drive letter and said the card wasn't connected. It's now
+  looked at once the work is done.
+- Closing the window during work on files asks first. A take-over's undo record is saved as it
+  goes, every 25 moves, rather than only at the end.
+- A card plugged in on Windows was announced with no name (“” plugged in).

@@ -262,6 +262,15 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     the next Sync does (● on the card, ○ added, struck red ring taken off, its title struck
     through); each artist counts them. **what the next Sync changes** lists only those albums,
     opened; once Sync is done it goes back to **everything**.
+19g. Pull the card out during a Sync (use a spare card and a small choice): the Sync ends within a
+    file or two and says the card isn't connected; no *Done*, no *Eject*. Put it back and **Sync**:
+    it carries on, and files of albums taken off earlier are still removed. With the card's
+    write-protect switch on: "Nothing was written", no *Done*.
+19h. While a Sync runs: **Change card…** refuses with a notice; closing the window asks first
+    (*Quit anyway* / *Cancel*). Quit with the card plugged in on another letter, or with the setup
+    pointing elsewhere: at the next start, once the library has opened, the setup follows its card.
+19i. Take over a card, take the card out, and press **Undo taking over**: it says the card isn't
+    connected. Put it back: the undo still works.
 20. If you have the Echo Mini: put the card in and browse. Folders sort as intended.
 20a. The card (sidebar) › **player** › *Echo Mini · stock firmware*: **Compare** again. Fewer songs are
     converted (AAC, APE, WMA and Ogg go as they are), and the library's badges and the card
