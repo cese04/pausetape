@@ -10,11 +10,12 @@ const WATCH_EVERY: Duration = Duration::from_secs(3);
 
 impl App {
     /// After setup `id`'s Sync, let its notice offer to eject the card: when the card is a drive
-    /// of its own, and not the one the music folder is on (that would take the library away too).
+    /// that comes out, and not the one the music folder is on (that would take the library away
+    /// too).
     pub fn offer_eject(&mut self, id: &str) {
         let Some(dest) = self.saved.writes.iter().find(|w| w.id == id).and_then(|w| w.dest.clone()) else { return };
         let Some(v) = self.volumes.iter().filter(|v| dest.starts_with(&v.path)).max_by_key(|v| v.path.as_os_str().len()) else { return };
-        if self.saved.source.as_ref().is_some_and(|s| s.starts_with(&v.path)) {
+        if !crate::platform::ejectable(&v.path) || self.saved.source.as_ref().is_some_and(|s| s.starts_with(&v.path)) {
             return;
         }
         self.eject_notice = self.notices.last().map(|n| (n.clone(), v.path.clone()));
@@ -71,7 +72,7 @@ impl App {
     fn card_arrived(&mut self, path: PathBuf, label: Label, bring_up: Option<usize>, first: bool) {
         let shown = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let Some(i) = self.saved.writes.iter().position(|w| w.id == label.id) else {
-            self.notice(format!("“{shown}” plugged in: written by Pausetape for “{}”, a card setup not on this Mac", label.name));
+            self.notice(format!("“{shown}” plugged in: written by Pausetape for “{}”, a card setup not on this computer", label.name));
             return;
         };
         let name = self.saved.writes[i].name.clone();

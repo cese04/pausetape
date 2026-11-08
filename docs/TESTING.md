@@ -209,8 +209,10 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
 18c. After a Sync that finishes, the status bar says **Done · …** and offers **Eject**: a click
     ejects the card (Windows: as Explorer's *Eject*, the drive letter goes; Linux: through
     `gio`), and the notice says it can come out. With a file on the card open elsewhere (an
-    Explorer window on it, a song playing from it), it says so instead and the card stays. No
-    Eject when the music folder is on the same drive, or after a stopped Sync.
+    Explorer window on it, a song playing from it), it says so instead, the card stays, and
+    **Eject** is still there to try again. It's greyed while other work runs, and its hover says
+    until when. No Eject when the music folder is on the same drive, or after a stopped Sync, or
+    on Windows for a drive that isn't removable (internal disks; USB hard disks too, as a rule).
 18a. With a CUE album and ffmpeg: each song is its own FLAC on the stick, with the right
     length; writing again cuts nothing. Without ffmpeg, those songs are left out with
     "needs ffmpeg to cut the album file into songs".

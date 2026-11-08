@@ -1,6 +1,7 @@
 # Architecture
 
-How Pausetape's code fits together. For status and plans see [PROGRESS](PROGRESS.md); for
+How Pausetape's code fits together. For status and plans see [PROGRESS](PROGRESS.md); for the
+card as a state machine, [CARD_STATES](CARD_STATES.md); for
 building and releases see [DISTRIBUTION](DISTRIBUTION.md) and [TESTING](TESTING.md).
 
 ## Shape of the app
