@@ -786,7 +786,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && widgets::primary_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
                     app.survey_card();
                 }
-                if widgets::button(ui, "Not now").on_hover_text("the card tab offers it again").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card's view offers it again").clicked() {
                     app.take_over_open = false;
                 }
             });
@@ -878,7 +878,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && used + spare + versions + unknown + other > 0 && take_over(ui).on_hover_text("only moves files on the card; undo puts everything back").clicked() {
                     app.take_over_card();
                 }
-                if widgets::button(ui, "Not now").on_hover_text("the card tab offers it again").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card's view offers it again").clicked() {
                     app.card_survey = None;
                     app.take_over_open = false;
                 }
@@ -1051,7 +1051,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
 fn playlists(app: &mut App, ui: &mut Ui) {
     widgets::section(ui, Icon::Playlists, "Playlists on this card");
     if app.saved.playlists.is_empty() {
-        widgets::help(ui, "None yet; make some in the playlists tab.");
+        widgets::help(ui, "None yet; New playlist, in the sidebar, makes one.");
         return;
     }
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
