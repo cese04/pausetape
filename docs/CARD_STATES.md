@@ -148,7 +148,9 @@ stateDiagram-v2
   label's card id isn't the record's, or it has no label where this setup put one. The manifest,
   `last_written`, the card id and the take-over offer are cleared and a notice says so. Only a
   clear answer counts: a label that can't be read changes nothing, and labels or setups from
-  before cards had ids go by whose label it is (`label::same_card`).
+  before cards had ids go by whose label it is (`label::same_card`). No label is believed only
+  when read twice, 250 ms apart: on macOS a card's mount point outlasts it by 20 to 30 ms, empty
+  (`look_at`).
 - **The order of a Sync** (`card::write`): label; rename what only changed name; remove what's no
   longer wanted; copy; playlists; remove what's left over; clean macOS files.
 - **Stopped**: the song being copied finishes. The manifest is what was copied plus earlier
