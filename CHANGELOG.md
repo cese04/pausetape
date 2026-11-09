@@ -1,9 +1,9 @@
 # Changelog
 
-Everything built so far, in the order it happened. All of it is unreleased work towards
-**0.1.0**, developed on 2026-10-27 on macOS. Status and next steps: [docs/PROGRESS.md](docs/PROGRESS.md).
+Everything built so far, version by version, in the order it happened. Status and next steps:
+[docs/PROGRESS.md](docs/PROGRESS.md).
 
-## [Unreleased]: 0.1.0
+## 0.1.0 (2026-11-02)
 
 ### 1. First version
 - Rust + egui app chosen over Tauri (one language, one process, small binary).
@@ -778,6 +778,8 @@ Calibre's device view, for music: the library is where you choose what goes on t
   (ci.yml), no longer also the Mac program on its own, which only opens in Terminal and would
   confuse someone choosing what to download.
 
+## 0.2.0 (2026-11-08)
+
 ### 65. Keyboard focus you can see; controls screen readers can name (2026-11-05)
 - Tab moves through the app's own controls (links, commands, buttons, tabs, chips, song and
   album rows, column headings, the A–Z rail, the folder browser), and the one with the focus
@@ -1324,3 +1326,22 @@ twenty times, landing between songs and in the middle of one.
   plugged in again, and the next Sync finished the job. Where the card went between the check and
   making a folder, macOS refused to make it (`/Volumes` is the system's), so nothing lands on the
   computer's own drive.
+
+### 109. What 0.1.0's settings become (2026-11-08)
+- Settings hold everything, defaults too, so someone updating from 0.1.0 kept its brick accent,
+  the colour of warnings now, and the list by artist. Once, on updating, brick becomes teal and
+  the album table comes first; any other accent stays, and what's chosen afterwards is kept.
+
+### 110. A card pulled out isn't taken for another card (2026-11-08)
+- On macOS, a card's mount point outlasts it by 20 to 30 ms, empty. A look at that moment found
+  no label and set the setup's record aside, as for a different card. A missing label is now
+  read twice, 250 ms apart. With images detached by force and the look run without a pause: 2,631
+  wrong answers before, none after.
+
+### 111. Licences in Settings, on every system (2026-11-08)
+- Settings › *About* gives the version and the licence texts of the app and its three fonts. The
+  Windows and Linux programs are one file each, with nowhere else to carry them.
+
+### 112. Ready for 0.2.0 (2026-11-08)
+- The website says lyrics come from LRCLIB, and what's sent there; what the app does now, in the
+  README and on the site. Hints no longer point to tabs that became the sidebar.
