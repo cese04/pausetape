@@ -264,8 +264,11 @@ Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS
     opened; once Sync is done it goes back to **everything**.
 19g. Pull the card out during a Sync (use a spare card and a small choice): the Sync ends within a
     file or two and says the card isn't connected; no *Done*, no *Eject*. Put it back and **Sync**:
-    it carries on, and files of albums taken off earlier are still removed. With the card's
-    write-protect switch on: "Nothing was written", no *Done*.
+    it carries on, and files of albums taken off earlier are still removed. If the problems list a
+    song, it says "the card went away while copying it", not "No such file" or "Permission
+    denied". Untick that song's album before the second Sync: no hidden
+    `.….pausetape-partial` file is left on the card (on Windows, show hidden files). With the
+    card's write-protect switch on: "Nothing was written", no *Done*.
 19h. While a Sync runs: **Change card…** refuses with a notice; closing the window asks first
     (*Quit anyway* / *Cancel*). Quit with the card plugged in on another letter, or with the setup
     pointing elsewhere: at the next start, once the library has opened, the setup follows its card.

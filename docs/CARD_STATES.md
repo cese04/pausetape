@@ -153,17 +153,22 @@ stateDiagram-v2
   longer wanted; copy; playlists; remove what's left over; clean macOS files.
 - **Stopped**: the song being copied finishes. The manifest is what was copied plus earlier
   entries still on the card, so the next Sync carries on and can still remove its own files.
-- **The card goes away** (checked before each file, and at the start): the Sync ends there. The
-  manifest keeps every earlier entry, as nothing can be checked, plus what was copied. No folder
-  is made where the card was.
+- **The card goes away** (checked before each file, at the start, and when a copy fails): the
+  Sync ends there. The manifest keeps every earlier entry, as nothing can be checked, plus what
+  was copied. No folder is made where the card was. A copy that fails as the card goes says "the
+  card went away while copying it", not the system's answer. "There" means the folder is still on
+  the drive it was on when the Sync started (`copy::card_there`): on macOS a card's mount point
+  outlasts it for about a third of a second, empty and on the computer's own drive.
 - **Nothing could be written** (errors, and nothing on the card changed; write-protected, say):
   the notice says so, and neither `last_written` nor the Eject offer follow.
 - **Finished**: the manifest is what was written this time, plus earlier files still on the card
   at their recorded size that it neither replaced nor could remove. `last_written` is set and, if
   the drive qualifies, Eject is offered.
 - **A song the plan still wants is never removed**, even if its new copy failed.
-- **Half a copy** can't sit under a song's name: `plain_copy` and `encode` write to `.partial`, then
-  rename. If the copy fails, the partial file is removed.
+- **Half a copy** can't sit under a song's name: `plain_copy` and `encode` write to a hidden
+  `.<name>.pausetape-partial` beside it, then rename. If the copy fails, the half is removed; if
+  the card went with it, the half stays there, and the next Sync removes it (`remove_partials`),
+  whatever it's choosing then. Only files with that name are touched.
 
 ## 5. Machine D: the Eject offer
 
@@ -264,8 +269,10 @@ Not faults, but easy to miss:
   its notice, and so of the Eject offer.
 - *Quit anyway*, or a crash, still cuts work off. A Sync mends at the next one; a take-over's undo
   record is saved every 25 moves, so the last few can be missing from it.
-- On macOS and Linux, a mount point that vanishes between the check and the copy could in theory
-  be recreated by `create_dir_all`. The check runs before every file, so the window is small.
+- A mount point that vanishes between the check and the copy can't be recreated on macOS:
+  `/Volumes` is the system's, and making a folder there is refused (seen, 2026-11-08). On Linux,
+  `/media/<user>` belongs to the user, so `create_dir_all` could in theory make one; the check runs
+  before every file, so the window is small.
 
 ## 8. What has been run on real hardware
 
@@ -282,6 +289,14 @@ removed under the running app refused every operation and dropped what had been 
 A setup moved to another folder was treated as new, kept its record through the watcher and through
 an unreadable label, and treated a label with another card's id as new. Pulling a card out mid-Sync
 hasn't been done by hand.
+
+macOS, 2026-11-08, FAT32 disk images: detached by force during a Sync of 48 MB songs, about twenty
+times. Each time the Sync ended there, made no folder in `/Volumes`, and kept a record that matched
+the card; plugged in again it was the same card, and the next Sync finished. A song cut in half
+left its half, removed by the next Sync even with that song no longer chosen (CHANGELOG §108). A
+second blank image at the same mount point was a new card, and the first one was its own again
+after. Read-only: "Nothing was written". Eject: refused with a file open (the retry kept), done,
+and the image seen again once attached.
 
 The button itself was called from a test script rather than clicked. Not run: a card reader, an
 Explorer window left open on the card, a Sync stopped and Eject checked after it, Linux.

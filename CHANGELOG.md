@@ -1304,3 +1304,23 @@ From [docs/CARD_STATES.md](docs/CARD_STATES.md).
   until its card has been taken out or changed.
 - The capacity bar showed a running Sync's room on whichever setup was open. It now shows it only
   on the setup that's writing.
+
+### 108. A card pulled out mid-copy, as it happens on macOS (2026-11-08)
+Tried on macOS with a FAT32 disk image detached by force during a Sync of 48 MB songs, about
+twenty times, landing between songs and in the middle of one.
+- A song being copied as the card went left its half behind (`05 - Song.partial`, up to 50 MB),
+  as removing it failed with the card gone. The next Sync wrote over it only if it copied that
+  song again; with the song no longer chosen, it stayed on the card for good. Halves are now made
+  under a name that's Pausetape's own (`.05 - Song.mp3.pausetape-partial`, hidden), and every Sync
+  removes any it finds, with the folders that held only them, whatever it's choosing.
+- The problems then gave the system's answer for that song, naming the file in the music folder:
+  "No such file or directory", "Device not configured", or "creating /Volumes/…: Permission
+  denied". It read as if the song were missing from the library. It now says "the card went away
+  while copying it"; playlists cut short say so in one line too.
+- Why the check missed it: on macOS the folder a card was mounted on outlasts it by about a third
+  of a second, empty, unreadable and on the computer's own drive. The Sync now notes which drive the
+  card is on when it starts, and looks for that drive rather than for the folder.
+- Also seen: the card's record matched what was really on it every time, it was the same card once
+  plugged in again, and the next Sync finished the job. Where the card went between the check and
+  making a folder, macOS refused to make it (`/Volumes` is the system's), so nothing lands on the
+  computer's own drive.
