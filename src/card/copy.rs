@@ -113,7 +113,7 @@ pub fn materialise(t: &Track, target: Target, dst: &Path) -> Result<()> {
 fn encode(t: &Track, target: Target, dst: &Path) -> Result<()> {
     let ff = crate::audio::ffmpeg().context("ffmpeg is needed to convert or cut songs")?;
     let secs = |f: u64| format!("{}.{:06}", f / FRAMES_PER_SEC, f % FRAMES_PER_SEC * 1_000_000 / FRAMES_PER_SEC);
-    let tmp = dst.with_extension("partial");
+    let tmp = partial_path(dst);
     let mut cmd = crate::platform::quiet_command(ff);
     cmd.args(["-nostdin", "-v", "error", "-y"]);
     if let Some(c) = t.cue.as_ref().filter(|c| c.start > 0) {
@@ -217,6 +217,7 @@ pub fn execute(
 #[allow(clippy::too_many_arguments)]
 fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, previous: &HashMap<String, &Written>, stop: &AtomicBool, progress: &mut impl FnMut(Progress), r: &mut Report) {
     use std::sync::{Mutex, mpsc};
+    let drive = drive_of(dest);
     let total = plan.len();
     let mut done = 0;
     let mut written: Vec<(usize, Written)> = Vec::new();
@@ -283,7 +284,7 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
                 break;
             }
             // Pulled out: nothing more can go on it, and no folder should be made where it was.
-            if !dest.is_dir() {
+            if !card_there(dest, drive) {
                 r.card_gone = true;
                 break;
             }
@@ -330,6 +331,14 @@ fn copy_to(tracks: &[Track], plan: &[PlanItem], dest: &Path, opts: &Options, pre
                     let size = fs::metadata(&dst).map(|m| m.len()).unwrap_or(t.size);
                     written.push((n, Written { rel: item.rel.clone(), size, source: source_key(t, item.target) }));
                 }
+                // Pulled out during the copy: the system's answer ("No such file or directory", or
+                // "Permission denied" for the folder where the card was) would read as if the song
+                // were missing from the library.
+                Err(_) if !card_there(dest, drive) => {
+                    r.errors.push(format!("{}: the card went away while copying it", t.path.display()));
+                    r.card_gone = true;
+                    break;
+                }
                 Err(e) => r.errors.push(format!("{}: {e:#}", t.path.display())),
             }
             done += 1;
@@ -374,7 +383,7 @@ fn move_into_place(t: &Track, dst: &Path, opts: &Options, r: &mut Report) -> Res
 /// Byte-for-byte copy. `std::fs::copy` on macOS also copies extended attributes, which on a
 /// FAT/exFAT card materialise as "._name" AppleDouble files that clutter the player's browser.
 pub fn plain_copy(src: &Path, dst: &Path) -> Result<()> {
-    let tmp = dst.with_extension("partial");
+    let tmp = partial_path(dst);
     let copy = || -> Result<()> {
         let mut reader = BufReader::with_capacity(1 << 20, File::open(src)?);
         let mut writer = BufWriter::with_capacity(1 << 20, File::create(&tmp)?);
@@ -389,6 +398,72 @@ pub fn plain_copy(src: &Path, dst: &Path) -> Result<()> {
     }
     fs::rename(&tmp, dst)?;
     Ok(())
+}
+
+/// The drive the folder `dest` is on, to tell later whether it's still the card (`card_there`).
+pub(super) fn drive_of(dest: &Path) -> Option<u64> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(dest).ok().map(|m| m.dev())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dest;
+        None
+    }
+}
+
+/// Whether the card at `dest` is still there. On macOS the folder a card was mounted on outlasts
+/// it for a moment (about a third of a second, pulled out by force): empty, unreadable, and on the
+/// computer's own drive. So it's the drive `dest` was on at the start (`drive_of`) that's looked for.
+/// Elsewhere a drive that goes takes its folder with it.
+pub(super) fn card_there(dest: &Path, drive: Option<u64>) -> bool {
+    dest.is_dir() && (drive.is_none() || drive_of(dest) == drive)
+}
+
+/// The end of the name of a file still being made (see `partial_path`).
+const PARTIAL: &str = ".pausetape-partial";
+
+/// Where a file for `dst` is made before it takes its name: hidden, beside it. A copy cut short
+/// removes its half, but not on a card that has just been pulled out; the name says the half is
+/// Pausetape's, so the next Sync can remove it (`remove_partials`) whatever it's choosing then.
+pub(super) fn partial_path(dst: &Path) -> PathBuf {
+    let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    dst.with_file_name(format!(".{name}{PARTIAL}"))
+}
+
+/// Remove the halves of files left on the card by a write cut short (the card pulled out
+/// mid-copy, a crash), and the folders that held only them. Only files named as `partial_path`
+/// names them; hidden folders, such as the system's own, aren't looked in. Returns how many.
+pub fn remove_partials(root: &Path) -> usize {
+    let halves: Vec<PathBuf> = WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !e.file_type().is_dir() || !e.file_name().to_string_lossy().starts_with('.'))
+        .flatten()
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            let n = e.file_name().to_string_lossy();
+            n.starts_with('.') && n.ends_with(PARTIAL)
+        })
+        .map(|e| e.into_path())
+        .collect();
+    let mut removed = 0;
+    for half in halves {
+        if fs::remove_file(&half).is_err() {
+            continue;
+        }
+        removed += 1;
+        let _ = fs::remove_file(half.with_file_name(format!("._{}", half.file_name().unwrap_or_default().to_string_lossy())));
+        let mut dir = half.parent();
+        while let Some(d) = dir.filter(|d| *d != root && d.starts_with(root)) {
+            if fs::remove_dir(d).is_err() {
+                break;
+            }
+            dir = d.parent();
+        }
+    }
+    removed
 }
 
 /// Delete files an earlier write recorded that are not in `keep` (lowercased rel paths: the card
@@ -478,6 +553,40 @@ mod tests {
         }
         fs::create_dir_all(root.join("dst")).unwrap();
         root
+    }
+
+    #[test]
+    fn a_card_is_there_while_its_folder_is_on_its_drive() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-card-there-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        assert!(card_there(&root, drive_of(&root)));
+        // The folder a card was mounted on, left behind on another drive.
+        #[cfg(unix)]
+        assert!(!card_there(&root, drive_of(&root).map(|d| d.wrapping_add(1))));
+        fs::remove_dir_all(&root).unwrap();
+        assert!(!card_there(&root, None));
+    }
+
+    #[test]
+    fn only_pausetapes_own_halves_are_removed() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-partials-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let ours = partial_path(&root.join("Band/Album/01 - Song.mp3"));
+        let kept = ["Band/Album/02 - Song.mp3", "Band/Album/notes.partial", "Other/.hidden.partial", ".Spotlight-V100/.x.mp3.pausetape-partial"];
+        for f in kept.iter().map(|f| root.join(f)).chain([ours.clone(), root.join("Gone/Away/.01 - Song.flac.pausetape-partial")]) {
+            fs::create_dir_all(f.parent().unwrap()).unwrap();
+            fs::write(f, b"x").unwrap();
+        }
+        assert_eq!(ours.file_name().unwrap(), ".01 - Song.mp3.pausetape-partial");
+        assert_eq!(remove_partials(&root), 2);
+        assert!(!ours.exists() && root.join("Band/Album").is_dir(), "the half goes, its folder stays while it holds songs");
+        assert!(!root.join("Gone").exists(), "folders that held only a half go");
+        assert!(kept.iter().all(|f| root.join(f).exists()), "anything else stays, and hidden folders aren't looked in");
+        // A plain copy leaves no half behind, and takes its name.
+        plain_copy(&root.join("Band/Album/02 - Song.mp3"), &root.join("Band/Album/03 - Song.mp3")).unwrap();
+        assert_eq!(remove_partials(&root), 0);
+        assert!(root.join("Band/Album/03 - Song.mp3").exists());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

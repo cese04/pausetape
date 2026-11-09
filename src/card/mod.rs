@@ -14,7 +14,7 @@ mod volumes;
 mod write;
 
 pub use device::{Device, Player, Results, Sample, Tested};
-pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, up_to_date};
+pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, remove_partials, up_to_date};
 pub use label::Label;
 pub use journal::{latest_journal, save_problems, undo_latest};
 pub use plan::{AlbumOrder, Chosen, Custom, Options, PlanItem, REPEAT, Rules, Target, Unplayable, build_plan, card_size, song_path, target, tidy_plan};

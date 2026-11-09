@@ -291,10 +291,14 @@ pub fn write(
     if !dest.is_dir() {
         return Outcome { manifest: w.manifest.clone(), card_gone: true, ..Default::default() };
     }
+    let drive = super::copy::drive_of(dest);
     // Labelled first, so a write stopped halfway still says whose card it is.
     let label = super::Label::for_card(w, dest);
     let labelled = label.save(dest).map_err(|e| format!("{e:#}"));
     let card_id = labelled.is_ok().then_some(label.card);
+    // Halves of files a write cut short left behind (the card pulled out mid-copy): Pausetape's
+    // own, by their name, and no use to anyone.
+    super::remove_partials(dest);
     // Songs that only changed name move on the card instead of being copied again.
     let (manifest, renamed, rename_errors) = relocate(w, tracks, plan, dest);
     let moved = WriteProfile { manifest, ..w.clone() };
@@ -329,7 +333,7 @@ pub fn write(
     let mut keep: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
     keep.extend(plan.iter().filter(|p| p.skip.is_none()).map(|p| p.rel.to_string_lossy().to_lowercase()));
     let removed = if w.prune { super::prune(dest, &w.manifest, &keep) } else { 0 };
-    let card_gone = !dest.is_dir();
+    let card_gone = !super::copy::card_there(dest, drive);
     let cleaned = if w.options.clean_mac_files && !card_gone { super::clean_mac_files(dest) } else { 0 };
     // What's recorded is what's on the card: earlier files this write neither replaced nor could
     // remove (a song whose new copy failed, a write-protected card) stay this setup's.
@@ -340,7 +344,13 @@ pub fn write(
     }
 
     let mut errors = r.errors;
-    errors.extend(pl.errors);
+    if card_gone && !pl.errors.is_empty() {
+        // Pulled out while the playlists were written: one line says so, rather than the system's
+        // answer for each file.
+        errors.push("playlists: the card went away while they were written".into());
+    } else {
+        errors.extend(pl.errors);
+    }
     Outcome {
         manifest,
         copied: r.copied + pl.copied,
@@ -407,6 +417,51 @@ mod tests {
         let out = write(&w, &tracks, &plan, &[], &root, &card, &AtomicBool::new(false), |_| {});
         assert!(out.card_gone && !out.stopped);
         assert_eq!(out.manifest, w.manifest, "nothing can be checked, so nothing is forgotten");
+        assert!(!card.exists(), "no folder made where the card was");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_half_copy_left_by_a_pulled_card_goes_at_the_next_sync() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-half-copy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let card = root.join("card");
+        // The song being copied when the card was pulled out, no longer chosen; and its album's
+        // folder, which held nothing else.
+        let half = super::super::copy::partial_path(&card.join("Band/Album/05 - Song.mp3"));
+        fs::create_dir_all(half.parent().unwrap()).unwrap();
+        fs::write(&half, [0u8; 64]).unwrap();
+        let out = write(&WriteProfile::default(), &[], &[], &[], &root, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert!(!half.exists() && !card.join("Band").exists(), "the half and its folders are gone");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_card_pulled_out_mid_copy_says_so_rather_than_the_systems_answer() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-pulled-mid-copy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let card = root.join("card");
+        fs::create_dir_all(&card).unwrap();
+        // A song that's a pipe: the copy waits on it, and the card goes while it waits.
+        let song = root.join("song.mp3");
+        assert!(std::process::Command::new("mkfifo").arg(&song).status().unwrap().success());
+        let tracks = vec![Track { path: song.clone(), ext: "mp3".into(), size: 4, ..Default::default() }];
+        let plan = vec![PlanItem { track: 0, rel: PathBuf::from("Band/Album/01 - Song.mp3"), target: Target::Copy, skip: None }];
+        let pull = {
+            let (song, card) = (song.clone(), card.clone());
+            // Opening the pipe to write waits until the copy has opened it to read.
+            std::thread::spawn(move || {
+                let mut pipe = fs::OpenOptions::new().write(true).open(&song).unwrap();
+                fs::remove_dir_all(&card).unwrap();
+                std::io::Write::write_all(&mut pipe, b"song").unwrap();
+            })
+        };
+        let out = write(&WriteProfile::default(), &tracks, &plan, &[], &root, &card, &AtomicBool::new(false), |_| {});
+        pull.join().unwrap();
+        assert!(out.card_gone && out.copied == 0);
+        assert_eq!(out.errors, [format!("{}: the card went away while copying it", song.display())]);
         assert!(!card.exists(), "no folder made where the card was");
         let _ = fs::remove_dir_all(&root);
     }
