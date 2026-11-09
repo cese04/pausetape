@@ -51,11 +51,15 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
   are pointed out, so you can remove them if you like.
 - **Cover art in the songs:** when a cover is only an image in the folder, the player offers to
   embed it, so the Echo Mini shows it.
+- **Listens with you:** a queue to see and edit, a view by genre, and lyrics in the details panel,
+  in time with the song: the song's own, or found on [LRCLIB](https://lrclib.net) and kept.
+- **Careful with the card:** a card has its own identity, a Sync that loses the card keeps its
+  record and leaves no half-copied song behind, and a finished Sync offers to eject it.
 
 ## Status
 
-Early: 0.1.0 is the first release. Developed and used most on **macOS**, tested by hand on
-**Windows 11**; **Linux** builds and passes its tests, but hasn't been run on a desktop yet.
+Early, and moving fast. Developed and used most on **macOS**, tested by hand on **Windows 11**;
+**Linux** builds and passes its tests, but hasn't been run on a desktop yet.
 Details: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Downloads are on [Releases](https://github.com/cese04/pausetape/releases) (or the
