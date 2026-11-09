@@ -215,8 +215,30 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.add(egui::TextEdit::singleline(&mut app.saved.mb_contact).align(egui::Align2::LEFT_CENTER).hint_text("email or URL (optional)").desired_width(320.0));
             help(ui, "MusicBrainz asks apps to say who's asking; this is sent with each lookup.");
         });
+
+        ui.add_space(S2);
+        widgets::section(ui, Icon::Info, "About");
+        ui.add_space(S1);
+        setting(ui, "Version", |ui| {
+            ui.label(env!("CARGO_PKG_VERSION"));
+        });
+        help(ui, "The text of each licence, for what's built into the app:");
+        for (name, text) in LICENCES {
+            egui::CollapsingHeader::new(RichText::new(*name).color(ink(ui).muted)).show(ui, |ui| {
+                ui.set_max_width(640.0);
+                ui.label(RichText::new(*text).size(font::META).color(ink(ui).muted));
+            });
+        }
     });
 }
+
+/// What's built into the app, with the licence that asks for its text to go along with it.
+const LICENCES: &[(&str, &str)] = &[
+    ("Pausetape (MIT)", include_str!("../../LICENSE")),
+    ("ET Book, the type of the music (MIT)", include_str!("../../assets/fonts/LICENSE-ET-Book.txt")),
+    ("Courier Prime, the type of the figures (SIL Open Font Licence)", include_str!("../../assets/fonts/OFL-Courier-Prime.txt")),
+    ("Kalam, the type of the names (SIL Open Font Licence)", include_str!("../../assets/fonts/OFL-Kalam.txt")),
+];
 
 /// One artist decision to take back.
 enum Undo {
