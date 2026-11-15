@@ -92,6 +92,18 @@ compiles the bundled ffmpeg:
 scripts/package-macos.sh      # → dist/Pausetape.app and dist/Pausetape-<version>.dmg
 ```
 
+### Build the Windows installer
+
+The minimal ffmpeg is cross-compiled on Linux (Debian or Ubuntu with `mingw-w64` and
+`libz-mingw-w64-dev`; WSL or a container will do), then the installer is made on Windows, in Git
+Bash, with NSIS (`winget install NSIS.NSIS`) and Python 3. The CI does both
+([windows.yml](.github/workflows/windows.yml)).
+
+```sh
+scripts/build-ffmpeg-windows.sh   # on Linux → target/ffmpeg-windows; copy it over
+scripts/package-windows.sh        # on Windows → dist/Pausetape-<version>-setup.exe
+```
+
 ## Build from source (any platform)
 
 Install Rust from <https://rustup.rs>, plus on Windows the Visual Studio C++ build tools, and on

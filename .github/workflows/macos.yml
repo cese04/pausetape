@@ -51,6 +51,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.dmg*
+          # windows.yml writes to the same release: each adds its part.
+          append_body: true
           body: |
             macOS 12 or later, Apple Silicon and Intel.
 

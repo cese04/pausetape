@@ -133,9 +133,14 @@ Per platform:
   one universal binary, then package. A DMG with the usual "drag to Applications" window.
 - **Windows.** NSIS installer: per-user install (no admin rights), Start-menu shortcut,
   uninstaller. MSI only if someone asks for it. *Done 2026-11-02:* the icon and version info
-  are built into the .exe (`build.rs`, with `winresource`). ffmpeg is an optional component,
-  ticked by default (§3), so the installer needs its own NSIS script, or a custom template if a
-  packaging tool makes it: default templates have no components page.
+  are built into the .exe (`build.rs`, with `winresource`). *Done 2026-11-14:*
+  `scripts/package-windows.sh` makes `dist/Pausetape-<version>-setup.exe` (11 MB; 35 MB
+  installed) from its own NSIS script, `assets/windows/installer.nsi`, as default templates have
+  no components page: per-user in `%LOCALAPPDATA%\Programs`, Start-menu shortcut, listed in
+  Settings › Apps with its version and size, uninstaller; ffmpeg optional (§3). Settings and the
+  library in `%APPDATA%` stay when it's uninstalled. Run on Windows 11, silently: installed,
+  installed again keeping ffmpeg out, uninstalled leaving nothing behind; the components page
+  was looked at, not clicked through.
 - **Linux.** Build on Ubuntu 22.04 so the binary runs on older distributions too (glibc
   2.35). The AppImage bundles everything except system audio (ALSA/PipeWire) and graphics
   drivers. The .deb declares its dependencies. A `.desktop` file and icons go in both. The
@@ -169,21 +174,25 @@ ffmpeg that includes LAME (the usual `winget` and distribution builds do).
 
 **Windows: optional, ticked by default** (decided 2026-11-14).
 
-- **Where it goes.** The installer has a components page. *Pausetape* is required. *Audio
-  conversion (FFmpeg, about 9 MB)* is ticked, with one line on what it's for: Dolby, Opus, APE
-  and WMA files, cutting CUE albums, converting what the player can't read.
+- **Where it goes.** The installer has a components page. *Pausetape* is required. *FFmpeg
+  (conversion)* is ticked, and its description says what it's for: Dolby, Opus, APE and WMA files,
+  cutting CUE albums, converting what the player can't read; and to untick it to use one's own.
 - **Who unticks it.** Someone who already has their own ffmpeg, or doesn't want third-party
-  programs. Unticked, neither `ffmpeg.exe` nor its licences are installed. Running the installer
-  again adds it; the uninstaller removes whatever was installed.
+  programs. Unticked, neither `ffmpeg.exe` nor its licences are installed, and a copy from an
+  earlier install is removed. Installing again starts with it unticked, keeping that choice;
+  ticking it adds it back. The uninstaller removes whatever was installed.
 - **The app needs no change.** It looks for `ffmpeg.exe` beside its own .exe first, then in the
   usual places and the `PATH` (`audio::ffmpeg`). With none found, it gives the install hint, and
   songs it can't convert or cut are listed with the reason.
 - **Precedence.** If the component stays ticked while another ffmpeg is installed, the bundled one
   is used. `PAUSETAPE_FFMPEG` overrides both.
-- **The build.** `scripts/build-ffmpeg-windows.sh` is still to write: the macOS script's configure
-  flags, cross-compiled on a Linux runner with mingw-w64 and linked statically so it needs no
-  DLLs. It's cached in CI like the macOS build. If Windows signing is set up, `ffmpeg.exe` is
-  signed too.
+- **The build.** `scripts/build-ffmpeg-windows.sh`: the macOS script's configure flags,
+  cross-compiled on Linux with mingw-w64 and linked statically. **5.5 MB**, needing only Windows'
+  own DLLs (`bcrypt`, `kernel32`, `msvcrt`, `shell32`; the script fails on any other). Built in an
+  Ubuntu 24.04 container in about 3 minutes, and cached in CI like the macOS build
+  (`windows.yml`). Run on Windows 11 against real files: AC-3 and AAC to WAV, AC-3 to FLAC, AAC
+  to MP3 320, a 30-second cut from a CUE album's FLAC, and paths in Japanese and with accents.
+  If Windows signing is set up, `ffmpeg.exe` is signed too.
 
 ---
 
@@ -219,8 +228,11 @@ GitHub Actions, triggered by pushing a tag like `v0.1.0`:
 
 Every push (not just tags) also runs `cargo test` and a release build on all three platforms,
 so portability breaks are caught early. **This part exists:** `.github/workflows/ci.yml`
-(build + test on macOS, Windows, Linux, uploading each binary) and
-`.github/workflows/macos.yml` (DMG, attached to `v*` releases). Neither has run yet.
+(build + test on macOS, Windows, Linux, uploading each binary),
+`.github/workflows/macos.yml` (DMG, attached to `v*` releases) and
+`.github/workflows/windows.yml` (ffmpeg cross-compiled on Linux, then the installer on Windows,
+attached to `v*` releases). The release text of a tag is added to by both packaging workflows
+(`append_body`), so neither replaces the other's.
 
 Sketch (to be fleshed out in Phase 3):
 

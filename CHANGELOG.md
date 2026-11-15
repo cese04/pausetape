@@ -1335,3 +1335,16 @@ twenty times, landing between songs and in the middle of one.
   empty and on the computer's own drive. Looked at then, it read as the card with no label, which
   sets a setup's record aside as a different card. The watcher, the drive list and the start of a
   Sync now count such a folder as absent: in the mount folders, a card must be on a drive of its own.
+
+### 110. A Windows installer, with ffmpeg as an option (2026-11-14)
+- `scripts/package-windows.sh` makes `Pausetape-<version>-setup.exe`: installed for the user alone,
+  with no administrator rights, in `%LOCALAPPDATA%\Programs`, with a Start-menu shortcut, an entry
+  in Settings › Apps and an uninstaller. Settings and the library stay when it's uninstalled.
+- FFmpeg is a component, ticked by default, for those who already have their own to untick.
+  Installing again keeps that choice. Without it the app uses an installed ffmpeg, or says how to
+  get one, as before.
+- The ffmpeg is the Mac's minimal LGPL build, with the same configure flags, cross-compiled on Linux
+  with mingw-w64 (`scripts/build-ffmpeg-windows.sh`): 5.5 MB, needing only Windows' own DLLs.
+- `.github/workflows/windows.yml` builds both and attaches the installer to version tags' releases,
+  as `macos.yml` does the disk image. Shell scripts keep LF line endings on Windows
+  (`.gitattributes`), so Git Bash can run them there.
