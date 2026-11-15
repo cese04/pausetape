@@ -1,0 +1,97 @@
+# Test and package the Windows installer for `main`, version tags and pull requests, as
+# macos.yml does for the Mac. The installer of a version tag (`v*`) goes on its GitHub Release,
+# kept for good; that of `main` is kept 90 days, the most GitHub allows; pull requests are
+# checked, not kept.
+#
+# ffmpeg is cross-compiled on Linux (scripts/build-ffmpeg-windows.sh) and handed to the Windows
+# job, which builds the app and the installer (scripts/package-windows.sh).
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write   # to create releases from tags
+
+jobs:
+  ffmpeg:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The minimal ffmpeg takes minutes to build; rebuild only when its script changes.
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: target/ffmpeg-windows
+          key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg-windows.sh') }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 libz-mingw-w64-dev
+
+      - run: scripts/build-ffmpeg-windows.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: target/ffmpeg-windows
+          retention-days: 1
+
+  package:
+    needs: ffmpeg
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-release-${{ hashFiles('Cargo.lock') }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: target/ffmpeg-windows
+
+      # Not on every runner image.
+      - run: |
+          if [[ ! -x "/c/Program Files (x86)/NSIS/makensis.exe" ]]; then
+            choco install nsis -y --no-progress
+          fi
+
+      - run: cargo test --locked
+
+      - run: scripts/package-windows.sh
+
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-installer
+          path: dist/*-setup.exe*
+          retention-days: 90
+
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*-setup.exe*
+          # macos.yml writes to the same release: each adds its part.
+          append_body: true
+          body: |
+            Windows 10 and 11 (64-bit). Installs for you alone, with no administrator rights.
+
+            This beta isn't signed yet, so Windows SmartScreen says it "protected your PC":
+            click "More info", then "Run anyway". FFmpeg (audio conversion) is offered as a
+            ticked option; untick it if you already have your own.
