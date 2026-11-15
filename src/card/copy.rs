@@ -386,9 +386,11 @@ pub fn plain_copy(src: &Path, dst: &Path) -> Result<()> {
     let tmp = partial_path(dst);
     let copy = || -> Result<()> {
         let mut reader = BufReader::with_capacity(1 << 20, File::open(src)?);
-        let mut writer = BufWriter::with_capacity(1 << 20, File::create(&tmp)?);
+        let mut writer = BufWriter::with_capacity(1 << 20, crate::platform::create_hidden(&tmp)?);
         io::copy(&mut reader, &mut writer)?;
         writer.into_inner().map_err(|e| e.into_error())?.sync_all()?;
+        // Hidden while it's a half; a song left hidden would be skipped by the player.
+        crate::platform::unhide(&tmp)?;
         Ok(())
     };
     // A copy cut short (a full card, say) mustn't leave its half behind taking room.
@@ -427,27 +429,31 @@ const PARTIAL: &str = ".pausetape-partial";
 
 /// Where a file for `dst` is made before it takes its name: hidden, beside it. A copy cut short
 /// removes its half, but not on a card that has just been pulled out; the name says the half is
-/// Pausetape's, so the next Sync can remove it (`remove_partials`) whatever it's choosing then.
+/// Pausetape's, so the next Sync can remove it (`tidy_card`) whatever it's choosing then.
 pub(super) fn partial_path(dst: &Path) -> PathBuf {
     let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     dst.with_file_name(format!(".{name}{PARTIAL}"))
 }
 
-/// Remove the halves of files left on the card by a write cut short (the card pulled out
-/// mid-copy, a crash), and the folders that held only them. Only files named as `partial_path`
-/// names them; hidden folders, such as the system's own, aren't looked in. Returns how many.
-pub fn remove_partials(root: &Path) -> usize {
-    let halves: Vec<PathBuf> = WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| e.depth() == 0 || !e.file_type().is_dir() || !e.file_name().to_string_lossy().starts_with('.'))
-        .flatten()
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| {
-            let n = e.file_name().to_string_lossy();
-            n.starts_with('.') && n.ends_with(PARTIAL)
-        })
-        .map(|e| e.into_path())
-        .collect();
+/// Tidy the card at the end of a write, in one walk over it: remove the halves of files left by a
+/// write cut short (the card pulled out mid-copy, a crash), with the folders that held only them;
+/// and, with `mac_files`, macOS's `._` and `.DS_Store` files (`clean_mac_files`). Halves are only
+/// files named as `partial_path` names them, and aren't looked for in hidden folders, such as the
+/// system's own. Returns how many halves, then how many macOS files.
+pub fn tidy_card(root: &Path, mac_files: bool) -> (usize, usize) {
+    let hidden = |p: &Path| p.components().any(|c| c.as_os_str().to_string_lossy().starts_with('.'));
+    let (mut halves, mut mac) = (Vec::new(), 0);
+    // Hidden folders are only gone into for macOS files.
+    let walk = WalkDir::new(root).into_iter().filter_entry(|e| mac_files || e.depth() == 0 || !e.file_type().is_dir() || !e.file_name().to_string_lossy().starts_with('.'));
+    for e in walk.flatten().filter(|e| e.file_type().is_file()) {
+        let n = e.file_name().to_string_lossy();
+        let in_hidden = e.path().strip_prefix(root).ok().and_then(Path::parent).is_some_and(hidden);
+        if n.starts_with('.') && !n.starts_with("._") && n.ends_with(PARTIAL) && !in_hidden {
+            halves.push(e.into_path());
+        } else if mac_files && (n.starts_with("._") || n == ".DS_Store") && fs::remove_file(e.path()).is_ok() {
+            mac += 1;
+        }
+    }
     let mut removed = 0;
     for half in halves {
         if fs::remove_file(&half).is_err() {
@@ -463,7 +469,7 @@ pub fn remove_partials(root: &Path) -> usize {
             dir = d.parent();
         }
     }
-    removed
+    (removed, mac)
 }
 
 /// Delete files an earlier write recorded that are not in `keep` (lowercased rel paths: the card
@@ -573,19 +579,46 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let ours = partial_path(&root.join("Band/Album/01 - Song.mp3"));
         let kept = ["Band/Album/02 - Song.mp3", "Band/Album/notes.partial", "Other/.hidden.partial", ".Spotlight-V100/.x.mp3.pausetape-partial"];
-        for f in kept.iter().map(|f| root.join(f)).chain([ours.clone(), root.join("Gone/Away/.01 - Song.flac.pausetape-partial")]) {
+        let mac = ["Band/Album/._.01 - Song.mp3.pausetape-partial", ".Spotlight-V100/._x"];
+        for f in kept.iter().chain(&mac).map(|f| root.join(f)).chain([ours.clone(), root.join("Gone/Away/.01 - Song.flac.pausetape-partial")]) {
             fs::create_dir_all(f.parent().unwrap()).unwrap();
             fs::write(f, b"x").unwrap();
         }
         assert_eq!(ours.file_name().unwrap(), ".01 - Song.mp3.pausetape-partial");
-        assert_eq!(remove_partials(&root), 2);
+        // macOS's own files, a half's among them, aren't halves.
+        assert_eq!(tidy_card(&root, false), (2, 0));
         assert!(!ours.exists() && root.join("Band/Album").is_dir(), "the half goes, its folder stays while it holds songs");
         assert!(!root.join("Gone").exists(), "folders that held only a half go");
         assert!(kept.iter().all(|f| root.join(f).exists()), "anything else stays, and hidden folders aren't looked in");
+        assert!(root.join(mac[1]).exists(), "macOS files only when asked");
+        // In the same walk, macOS files too, hidden folders included; their halves still stay.
+        assert_eq!(tidy_card(&root, true), (0, 1));
+        assert!(!root.join(mac[1]).exists() && kept.iter().all(|f| root.join(f).exists()));
         // A plain copy leaves no half behind, and takes its name.
         plain_copy(&root.join("Band/Album/02 - Song.mp3"), &root.join("Band/Album/03 - Song.mp3")).unwrap();
-        assert_eq!(remove_partials(&root), 0);
+        assert_eq!(tidy_card(&root, false), (0, 0));
         assert!(root.join("Band/Album/03 - Song.mp3").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn a_half_is_hidden_on_windows_and_the_song_is_not() {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN: u32 = 0x2;
+        let root = std::env::temp_dir().join(format!("pausetape-test-hidden-half-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let (src, dst) = (root.join("src.mp3"), root.join("01 - Song.mp3"));
+        fs::write(&src, b"song").unwrap();
+        // A half left by a card pulled out, hidden: written over all the same.
+        let half = partial_path(&dst);
+        crate::platform::create_hidden(&half).unwrap();
+        assert!(fs::metadata(&half).unwrap().file_attributes() & HIDDEN != 0);
+        plain_copy(&src, &dst).unwrap();
+        assert!(!half.exists());
+        assert_eq!(fs::metadata(&dst).unwrap().file_attributes() & HIDDEN, 0, "the song can be seen");
+        assert_eq!(fs::read(&dst).unwrap(), b"song");
         let _ = fs::remove_dir_all(&root);
     }
 

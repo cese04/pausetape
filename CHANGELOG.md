@@ -1324,3 +1324,14 @@ twenty times, landing between songs and in the middle of one.
   plugged in again, and the next Sync finished the job. Where the card went between the check and
   making a folder, macOS refused to make it (`/Volumes` is the system's), so nothing lands on the
   computer's own drive.
+
+### 109. Tidier halves, and a mount point left behind isn't the card (2026-11-14)
+- On Windows the halves of copies cut short were visible: a leading dot hides a file only on macOS
+  and Linux. They're now made hidden there too, and shown again before they take the song's name.
+  One left hidden by a card pulled out is written over all the same.
+- Each Sync went through the whole card twice at the end, once for halves and once for macOS
+  files. It's now one walk.
+- On macOS and Linux, a card pulled out by force leaves its mount point behind for a moment,
+  empty and on the computer's own drive. Looked at then, it read as the card with no label, which
+  sets a setup's record aside as a different card. The watcher, the drive list and the start of a
+  Sync now count such a folder as absent: in the mount folders, a card must be on a drive of its own.

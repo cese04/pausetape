@@ -288,7 +288,7 @@ pub fn write(
     stop: &AtomicBool,
     mut progress: impl FnMut(Progress),
 ) -> Outcome {
-    if !dest.is_dir() {
+    if !super::connected(dest) {
         return Outcome { manifest: w.manifest.clone(), card_gone: true, ..Default::default() };
     }
     let drive = super::copy::drive_of(dest);
@@ -296,9 +296,6 @@ pub fn write(
     let label = super::Label::for_card(w, dest);
     let labelled = label.save(dest).map_err(|e| format!("{e:#}"));
     let card_id = labelled.is_ok().then_some(label.card);
-    // Halves of files a write cut short left behind (the card pulled out mid-copy): Pausetape's
-    // own, by their name, and no use to anyone.
-    super::remove_partials(dest);
     // Songs that only changed name move on the card instead of being copied again.
     let (manifest, renamed, rename_errors) = relocate(w, tracks, plan, dest);
     let moved = WriteProfile { manifest, ..w.clone() };
@@ -312,7 +309,10 @@ pub fn write(
     } else {
         0
     };
-    // Clean the macOS files once at the end, after playlists too.
+    // The card is tidied once at the end, after playlists too (`tidy_card`): halves of files a
+    // write cut short left behind (the card pulled out mid-copy), Pausetape's own by their name
+    // and no use to anyone, and macOS's files if wanted.
+    let tidy = || super::tidy_card(dest, w.options.clean_mac_files).1;
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
     let mut r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, stop, &mut progress);
     r.errors.extend(labelled.err());
@@ -321,7 +321,7 @@ pub fn write(
         let mut manifest = r.written;
         let mut have: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
         manifest.extend(w.manifest.iter().filter(|m| have.insert(m.rel.to_string_lossy().to_lowercase()) && (r.card_gone || dest.join(&m.rel).exists())).cloned());
-        let cleaned = if w.options.clean_mac_files && !r.card_gone { super::clean_mac_files(dest) } else { 0 };
+        let cleaned = if r.card_gone { 0 } else { tidy() };
         return Outcome { manifest, copied: r.copied, unchanged: r.unchanged, skipped: r.skipped, tagged: r.tagged, removed: early, renamed, cleaned, errors: r.errors, stopped: r.stopped, card_gone: r.card_gone, card_id };
     }
 
@@ -334,7 +334,7 @@ pub fn write(
     keep.extend(plan.iter().filter(|p| p.skip.is_none()).map(|p| p.rel.to_string_lossy().to_lowercase()));
     let removed = if w.prune { super::prune(dest, &w.manifest, &keep) } else { 0 };
     let card_gone = !super::copy::card_there(dest, drive);
-    let cleaned = if w.options.clean_mac_files && !card_gone { super::clean_mac_files(dest) } else { 0 };
+    let cleaned = if card_gone { 0 } else { tidy() };
     // What's recorded is what's on the card: earlier files this write neither replaced nor could
     // remove (a song whose new copy failed, a write-protected card) stay this setup's.
     if w.prune || card_gone {

@@ -90,6 +90,43 @@ pub fn unlock(_: &Path) -> bool {
     false
 }
 
+/// Create (or empty) a file the player's owner needn't see. A leading dot in its name hides it on
+/// macOS and Linux; Windows needs its hidden attribute, which must also be given to write over it
+/// once set.
+pub fn create_hidden(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut open = std::fs::OpenOptions::new();
+    open.write(true).create(true).truncate(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        open.attributes(windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_HIDDEN);
+    }
+    open.open(path)
+}
+
+/// Show a file made with `create_hidden` again, before it takes a name that should be seen.
+/// Only Windows has something to undo: elsewhere the name was what hid it.
+pub fn unhide(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_HIDDEN, GetFileAttributesW, INVALID_FILE_ATTRIBUTES, SetFileAttributesW};
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        // SAFETY: `wide` is a NUL-terminated path; the calls only read it.
+        let attributes = unsafe { GetFileAttributesW(wide.as_ptr()) };
+        if attributes == INVALID_FILE_ATTRIBUTES {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: as above.
+        if attributes & FILE_ATTRIBUTE_HIDDEN != 0 && unsafe { SetFileAttributesW(wide.as_ptr(), attributes & !FILE_ATTRIBUTE_HIDDEN) } == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+    Ok(())
+}
+
 /// How to install ffmpeg here, for messages that ask for it.
 pub const FFMPEG_INSTALL: &str = if cfg!(target_os = "macos") {
     "brew install ffmpeg"

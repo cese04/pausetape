@@ -89,18 +89,9 @@ impl Label {
     }
 }
 
-/// Write a file the player's owner needn't see. The leading dot hides it on macOS and Linux;
-/// Windows needs its hidden attribute, which must also be given to write over it once set.
+/// Write a file the player's owner needn't see (`platform::create_hidden`).
 fn write_hidden(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut open = std::fs::OpenOptions::new();
-    open.write(true).create(true).truncate(true);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
-        open.attributes(FILE_ATTRIBUTE_HIDDEN);
-    }
-    std::io::Write::write_all(&mut open.open(path)?, bytes)
+    std::io::Write::write_all(&mut crate::platform::create_hidden(path)?, bytes)
 }
 
 /// Whether the card found is the one `w`'s record describes. Only a clear answer says no: a

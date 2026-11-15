@@ -196,7 +196,7 @@ App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
   copy extended attributes, which appear as `._` files on FAT cards.
 - Copies go to a hidden `.<name>.pausetape-partial` file first and are renamed when complete. A
   card pulled out mid-copy leaves that half behind; each Sync removes any it finds
-  (`card::remove_partials`), and only files named that way.
+  (`card::tidy_card`, in the same walk as the macOS files), and only files named that way.
 - Album files with a CUE sheet are **never moved or retagged**: *Reorganise* skips them, and
   corrections to their songs stay in the app (and in card copies).
 
