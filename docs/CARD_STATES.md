@@ -76,6 +76,13 @@ An answer about another setup or card than the one asked about is dropped and as
 That's what stops a look read before a Sync, on a blank card, from clearing the record the Sync
 has just made.
 
+**Where "there" is decided.** Every look, and the start of a Sync, use `card::connected`: the
+folder exists, its drive isn't being ejected, and on macOS and Linux a folder in the mount folders
+(`/Volumes`, `/media/<user>`, `/run/media/<user>`) is on a drive of its own. A mount point a card
+pulled out has left behind is on the computer's drive, so it counts as absent rather than as a card
+with no label, which would set the setup's record aside. During a Sync, `copy::card_there` also
+checks the card is still on the drive it started on.
+
 **Noticing a card.** While a job runs, the drives are listed and arrivals wait, so a setup's `dest`
 doesn't change under running work. Once the slot is free, a drive not in `mounted` whose top folder
 holds a label counts as arrived. That covers every start, when opening the library holds the slot:
@@ -150,7 +157,8 @@ stateDiagram-v2
   clear answer counts: a label that can't be read changes nothing, and labels or setups from
   before cards had ids go by whose label it is (`label::same_card`).
 - **The order of a Sync** (`card::write`): label; rename what only changed name; remove what's no
-  longer wanted; copy; playlists; remove what's left over; clean macOS files.
+  longer wanted; copy; playlists; remove what's left over; tidy the card in one walk (halves of
+  copies cut short, and macOS files if chosen: `tidy_card`).
 - **Stopped**: the song being copied finishes. The manifest is what was copied plus earlier
   entries still on the card, so the next Sync carries on and can still remove its own files.
 - **The card goes away** (checked before each file, at the start, and when a copy fails): the
@@ -167,7 +175,7 @@ stateDiagram-v2
 - **A song the plan still wants is never removed**, even if its new copy failed.
 - **Half a copy** can't sit under a song's name: `plain_copy` and `encode` write to a hidden
   `.<name>.pausetape-partial` beside it, then rename. If the copy fails, the half is removed; if
-  the card went with it, the half stays there, and the next Sync removes it (`remove_partials`),
+  the card went with it, the half stays there, and the next Sync removes it (`tidy_card`),
   whatever it's choosing then. Only files with that name are touched.
 
 ## 5. Machine D: the Eject offer

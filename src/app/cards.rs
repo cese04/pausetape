@@ -68,7 +68,7 @@ fn look_at(dest: &Path) -> CardLook {
     }
     let found = Label::find(dest);
     // Looked for after reading: a card pulled out just now finds no label either.
-    if !dest.is_dir() {
+    if !card::connected(dest) {
         return nothing();
     }
     let test_folder = dest.join(testcard::TEST_FOLDER).is_dir() || dest.join(testcard::TEST_PLAYLIST).is_file();
