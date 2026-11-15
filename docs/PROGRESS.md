@@ -269,7 +269,7 @@ Smaller items, ordered by value.
 | **Copy by default, reorganise in place only on request** | The music folder is the user's own; it may be organised for other players or tools. |
 | **Card writes delete only their own files** | The manifest records what each write created and at what size; anything else on the card is never touched. |
 | **Tags cached raw, folder guesses recomputed** | Guesses from folder names depend on which folder is the music root, so caching them would go stale. |
-| **ffmpeg as a separate program, bundled on macOS** | Most libraries are FLAC/MP3/AAC, which play without it. For the rest (Dolby, Opus, APE…) the Mac app ships a minimal LGPL build made from source (8.3 MB, not a 70–100 MB GPL download). It runs as its own program, so the app stays MIT. On Windows/Linux it is still a separate install, for now. |
+| **ffmpeg as a separate program, bundled on macOS** | Most libraries are FLAC/MP3/AAC, which play without it. For the rest (Dolby, Opus, APE…) the Mac app ships a minimal LGPL build made from source (8.3 MB, not a 70–100 MB GPL download). It runs as its own program, so the app stays MIT. On Windows it will be an optional installer component, ticked by default ([DISTRIBUTION](DISTRIBUTION.md) §3); until then, and on Linux, it is a separate install. |
 | **MIT licence** | Simple and compatible with every dependency (Symphonia is MPL-2.0; bundled ffmpeg LGPL as a separate program). Also qualifies for free open-source code signing on Windows (SignPath). |
 | **Mac first, unsigned for now** | No Apple Developer Program yet: builds are ad-hoc signed and users approve the app once in System Settings. |
 
