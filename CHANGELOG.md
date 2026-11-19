@@ -1363,3 +1363,6 @@ twenty times, landing between songs and in the middle of one.
 ### 113. Ready for 0.2.0 (2026-11-08)
 - The website says lyrics come from LRCLIB, and what's sent there; what the app does now, in the
   README and on the site. Hints no longer point to tabs that became the sidebar.
+- On Windows the website and the README offer the installer first, and the program alone as the
+  portable choice. The site's buttons try patterns in order, so a release from before the
+  installer still gets its program (2026-11-18).

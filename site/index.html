@@ -255,17 +255,22 @@
 
     <article class="platform" data-os="windows">
       <h3>Windows</h3>
-      <p class="muted small">Windows 10 or 11 · one file, nothing to install</p>
-      <a class="button primary" data-asset="Windows\.exe$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <p class="muted small">Windows 10 or 11 · installer, ffmpeg included</p>
+      <a class="button primary" data-asset="-setup\.exe$ Windows\.exe$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <p class="small muted">Or <a data-asset="Windows\.exe$" data-label="the portable program" href="https://github.com/cese04/pausetape/releases">the portable program</a>:
+        one file, nothing installed.</p>
       <details>
         <summary>Opening it the first time</summary>
         <ol>
-          <li>Run the file you downloaded.</li>
-          <li>If Windows says it protected your PC, click <b>More info</b>, then
-            <b>Run anyway</b>.</li>
-          <li>For the rarer formats (Dolby, Opus, APE, WavPack, WMA), install ffmpeg: in a
-            terminal, <code>winget install Gyan.FFmpeg</code>.</li>
+          <li>Run the installer. If Windows says it protected your PC, click <b>More info</b>,
+            then <b>Run anyway</b>.</li>
+          <li>FFmpeg, for the rarer formats (Dolby, Opus, APE, WavPack, WMA), comes ticked: untick
+            it if you already have your own.</li>
+          <li>Pausetape is then in the Start menu. Your settings and library stay if you uninstall
+            it.</li>
         </ol>
+        <p class="small muted">The portable program asks the same the first time. For the rarer
+          formats it needs ffmpeg: in a terminal, <code>winget install Gyan.FFmpeg</code>.</p>
       </details>
     </article>
 

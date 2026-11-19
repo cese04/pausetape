@@ -69,7 +69,7 @@ so each system asks once whether to trust it.
 | Platform | Download | State |
 |---|---|---|
 | macOS 12+ (Apple Silicon + Intel) | `Pausetape-<version>.dmg`, ffmpeg included | Works |
-| Windows 10/11 (x64) | `pausetape-v<version>-Windows.exe`, one file, nothing to install | Works on Windows 11; what was checked is in [docs/TESTING.md](docs/TESTING.md) §3 |
+| Windows 10/11 (x64) | `Pausetape-<version>-setup.exe`, ffmpeg included as an option; or `pausetape-v<version>-Windows.exe`, one file, nothing installed | Works on Windows 11; what was checked is in [docs/TESTING.md](docs/TESTING.md) §3 |
 | Linux (x86-64) | `pausetape-v<version>-Linux`, one file | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) §3 |
 
 ## Install
@@ -80,8 +80,10 @@ so each system asks once whether to trust it.
 2. Open it once; macOS says it can't verify the developer. Click **Done**.
 3. System Settings › Privacy & Security › **Open Anyway**. Only needed the first time.
 
-**Windows:** run the `.exe`. If Windows says it protected your PC, click **More info**, then
-**Run anyway**. For Dolby, Opus, APE, WavPack and WMA files, install ffmpeg:
+**Windows:** run `Pausetape-<version>-setup.exe`. If Windows says it protected your PC, click
+**More info**, then **Run anyway**. It installs for you alone, without administrator rights, with
+ffmpeg ticked; untick it if you have your own. The portable `pausetape-v<version>-Windows.exe`
+asks the same, and for Dolby, Opus, APE, WavPack and WMA files needs ffmpeg:
 `winget install Gyan.FFmpeg`.
 
 **Linux:** `chmod +x pausetape-v<version>-Linux`, then run it. For the same rarer formats,
@@ -121,7 +123,7 @@ cargo run --release -- --plan ~/Music        # dry run: print the planned layout
 cargo test                                   # offline tests
 ```
 
-ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
+ffmpeg is optional outside the Mac app and the Windows installer (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
 `brew install ffmpeg`). Without it, everything except Dolby, Opus, APE, WavPack and WMA plays.
 
 ## Documentation
