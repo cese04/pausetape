@@ -1366,3 +1366,16 @@ twenty times, landing between songs and in the middle of one.
 - On Windows the website and the README offer the installer first, and the program alone as the
   portable choice. The site's buttons try patterns in order, so a release from before the
   installer still gets its program (2026-11-18).
+
+### 114. A folder for the music, and players beyond the Echo Mini (2026-11-18)
+- A card setup can put its songs and playlists in a folder on the card: a Walkman lists only
+  what's in `MUSIC`, and most players and phones look in `Music`. Left empty, the top of the card,
+  as before, so setups already in use don't change. Changing it moves what's on the card at the
+  next Sync rather than copying it again; the label stays at the top, and the test card goes in
+  the folder, where the player will look.
+- Three players to choose from besides the Echo Mini, each with the formats it plays and the
+  folder it looks in, offered when it's chosen: Sony's Walkmans of the NW-A and NW-ZX lines
+  (`MUSIC`), Rockbox (`Music`) and another player or phone (`Music`, and only FLAC, MP3 and WAV
+  until the test card shows more). From the makers' specifications and Rockbox's manual: none
+  checked on a player yet.
+- The .m3u8 beside a playlist finds the songs from however deep it sits.

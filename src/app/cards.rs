@@ -17,6 +17,8 @@ const WATCH_EVERY: Duration = Duration::from_secs(3);
 struct Asked {
     setup: String,
     dest: PathBuf,
+    /// The setup's music folder on the card (`WriteProfile::music_root`).
+    music: PathBuf,
     card: Option<String>,
 }
 
@@ -60,8 +62,9 @@ pub(super) struct SourceLook {
     free: Option<u64>,
 }
 
-/// Read what's at `dest`, unless its drive has just been ejected.
-fn look_at(dest: &Path) -> CardLook {
+/// Read what's at `dest`, unless its drive has just been ejected. `music`: the setup's music
+/// folder there, where a test folder would be.
+fn look_at(dest: &Path, music: &Path) -> CardLook {
     let nothing = || CardLook { dest: dest.to_path_buf(), there: false, found: Found::NotThere, space: None, test_folder: false };
     if card::held(dest) {
         return nothing();
@@ -71,7 +74,7 @@ fn look_at(dest: &Path) -> CardLook {
     if !card::connected(dest) {
         return nothing();
     }
-    let test_folder = dest.join(testcard::TEST_FOLDER).is_dir() || dest.join(testcard::TEST_PLAYLIST).is_file();
+    let test_folder = [dest.to_path_buf(), dest.join(music)].iter().any(|d| d.join(testcard::TEST_FOLDER).is_dir() || d.join(testcard::TEST_PLAYLIST).is_file());
     CardLook { dest: dest.to_path_buf(), there: true, found, space: card::space(dest), test_folder }
 }
 
@@ -83,7 +86,7 @@ pub(super) fn watcher(asks: Receiver<Ask>, tx: Sender<Msg>, ctx: egui::Context) 
         let seen_idle = ask.seen.is_some();
         let arrived = ask.seen.map(|seen| volumes.iter().filter(|v| !seen.contains(&v.path)).filter_map(|v| Some((v.path.clone(), Label::read(&v.path)?))).collect());
         let reachable = ask.dests.into_iter().filter(|d| card::connected(d)).collect();
-        let card = ask.active.as_ref().map(|a| look_at(&a.dest));
+        let card = ask.active.as_ref().map(|a| look_at(&a.dest, &a.music));
         let source = ask.source.map(|path| {
             let there = path.is_dir();
             let free = there.then(|| card::space(&path)).flatten().map(|s| s.free);
@@ -139,7 +142,7 @@ impl App {
                 self.volumes = card::volumes();
             }
             if let Some(dest) = self.write().dest.clone() {
-                self.card_look = Some(look_at(&dest));
+                self.card_look = Some(look_at(&dest, &self.write().music_root()));
                 self.reachable = std::iter::once(dest).filter(|d| card::connected(d)).collect();
             }
             return;
@@ -171,7 +174,7 @@ impl App {
 
     fn asked(&self) -> Option<Asked> {
         let w = self.write();
-        Some(Asked { setup: w.id.clone(), dest: w.dest.clone()?, card: w.card_id.clone() })
+        Some(Asked { setup: w.id.clone(), dest: w.dest.clone()?, music: w.music_root(), card: w.card_id.clone() })
     }
 
     /// The answer to a look. Cards that arrive during other work (as at every start, while the
@@ -304,7 +307,7 @@ impl App {
             return;
         };
         let idle = self.busy.is_none();
-        self.saw_card(look_at(&dest), idle);
+        self.saw_card(look_at(&dest, &self.write().music_root()), idle);
     }
 
     /// What's at the active setup's destination now known; a different card from the one its

@@ -25,6 +25,9 @@ pub struct WriteProfile {
     pub id: String,
     pub name: String,
     pub dest: Option<PathBuf>,
+    /// The folder on the card the music and playlists go in (`MUSIC` for a Walkman), with `/`
+    /// between levels; empty for the card's top level, as setups had before there was a choice.
+    pub music_folder: String,
     pub options: Options,
     pub custom: Custom,
     /// Names of playlists to put on the card.
@@ -47,6 +50,7 @@ impl Default for WriteProfile {
             id: super::label::new_id(),
             name: "Echo Mini".into(),
             dest: None,
+            music_folder: String::new(),
             options: Options::default(),
             custom: Custom::default(),
             playlists: BTreeSet::new(),
@@ -66,14 +70,27 @@ impl WriteProfile {
         // Song folders keep clear of the folders the app keeps for itself on the card (an
         // artist called "_Playlists"): they'd be taken for its playlist copies or test samples.
         let own = [sanitize_component(&self.playlists_folder, 80).to_lowercase(), super::testcard::TEST_FOLDER.to_lowercase()];
+        let root = self.music_root();
         for p in &mut plan {
             let mut parts = p.rel.components();
             let Some(first) = parts.next().map(|c| c.as_os_str().to_string_lossy().into_owned()) else { continue };
             if parts.clone().next().is_some() && own.contains(&first.to_lowercase()) {
                 p.rel = PathBuf::from(format!("{first}_")).join(parts.as_path());
             }
+            p.rel = root.join(&p.rel);
         }
         plan
+    }
+
+    /// `music_folder` as a path on the card, each level made safe for FAT; empty for the top.
+    pub fn music_root(&self) -> PathBuf {
+        // Leading dots go (no hidden folder, no ".."), and a level left with nothing is dropped.
+        self.music_folder.split(['/', '\\']).filter(|c| !c.trim().trim_start_matches('.').trim().is_empty()).map(|c| sanitize_component(c, 80)).collect()
+    }
+
+    /// Where the playlists' folders go on the card, inside `music_root`.
+    pub fn playlists_dir(&self) -> PathBuf {
+        self.music_root().join(sanitize_component(&self.playlists_folder, 80))
     }
 
     pub fn chosen_playlists(&self, all: &[Playlist]) -> Vec<Playlist> {
@@ -84,10 +101,12 @@ impl WriteProfile {
         self.manifest.iter().map(|w| w.size).sum()
     }
 
-    /// A card file of this write that's one of its playlist copies.
+    /// A card file of this write that's one of its playlist copies: in its playlists folder,
+    /// or that folder at the card's top, where it was before the music had a folder.
     fn in_playlists(&self, rel: &Path) -> bool {
-        let dir = sanitize_component(&self.playlists_folder, 80).to_lowercase();
-        Path::new(&rel.to_string_lossy().to_lowercase()).starts_with(&dir)
+        let lower = |p: &Path| PathBuf::from(p.to_string_lossy().to_lowercase());
+        let rel = lower(rel);
+        rel.starts_with(lower(&self.playlists_dir())) || rel.starts_with(sanitize_component(&self.playlists_folder, 80).to_lowercase())
     }
 }
 
@@ -233,7 +252,7 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     }
     let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
     let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
-    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.rules()) {
+    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_dir(), w.options.rules()) {
         p.playlist_files += copies.len();
         for c in copies {
             check(&c.rel, c.track, c.target, &mut p, &mut keep);
@@ -326,7 +345,7 @@ pub fn write(
     }
 
     let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
-    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.rules(), &w.manifest, |_, _| {});
+    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_dir(), w.options.rules(), &w.manifest, |_, _| {});
 
     let mut manifest = r.written;
     manifest.extend(pl.written);
@@ -702,6 +721,50 @@ mod tests {
         assert_eq!((out.renamed, out.copied), (2, 1));
         assert_eq!(fs::read(card.join("Muse/Absolution/02 - Apocalypse Please.mp3")).unwrap(), b"Muse/Absolution/02 - Apocalypse Please.mp3");
         assert!(!card.join("Muse - Absolution").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_music_folder_takes_the_songs_and_playlists_and_moves_what_is_there() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-music-folder-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (src, card) = (root.join("src"), root.join("card"));
+        fs::create_dir_all(&card).unwrap();
+        for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3"] {
+            fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
+            fs::write(src.join(f), f.as_bytes()).unwrap();
+        }
+        let (tracks, _) = scan(&src, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        let playlists = vec![Playlist { name: "Mix".into(), tracks: vec![tracks[0].id()] }];
+        let mut w = WriteProfile { dest: Some(card.clone()), options: Options { write_tags: false, ..Default::default() }, ..Default::default() };
+        w.playlists.insert("Mix".into());
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert_eq!(out.copied, 3);
+        assert!(card.join("Muse/Absolution/01 - Intro.mp3").is_file() && card.join("_Playlists/Mix.m3u8").is_file(), "no folder: the top, as before");
+        w.manifest = out.manifest;
+
+        // A Walkman's folder: the songs move into it, the playlist is made there afresh.
+        w.music_folder = "MUSIC".into();
+        assert_eq!(preview(&w, &tracks, &index, &playlists, &card).renamed, 2);
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert_eq!((out.renamed, out.copied), (2, 1));
+        assert!(card.join("MUSIC/Muse/Absolution/02 - Apocalypse Please.mp3").is_file());
+        assert!(!card.join("Muse").exists() && !card.join("_Playlists").exists(), "nothing left at the top");
+        let m3u = fs::read_to_string(card.join("MUSIC/_Playlists/Mix.m3u8")).unwrap();
+        assert!(m3u.contains("\n../../MUSIC/Muse/Absolution/0"), "the .m3u8 reaches the song from inside the folder: {m3u}");
+        assert!(super::super::Label::read(&card).is_some(), "the label stays at the top");
+        w.manifest = out.manifest;
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert_eq!((out.renamed, out.copied, out.removed), (0, 0, 0), "settled");
+
+        // What's typed is made safe for the card, a level at a time.
+        let root_of = |f: &str| WriteProfile { music_folder: f.into(), ..Default::default() }.music_root();
+        assert_eq!(root_of(" "), PathBuf::new());
+        assert_eq!(root_of("/MUSIC/"), PathBuf::from("MUSIC"));
+        assert_eq!(root_of("../Music"), PathBuf::from("Music"));
+        assert_eq!(root_of("Audio\\Music: Mine"), PathBuf::from("Audio").join("Music - Mine"));
         fs::remove_dir_all(root).unwrap();
     }
 

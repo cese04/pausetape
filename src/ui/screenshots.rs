@@ -137,9 +137,20 @@ impl Shooter {
                     app.card_album(ai, bi, on);
                 }
             }
-            // PAUSETAPE_SHOT_DEVICE=stock: write for the Echo Mini's stock firmware instead of RECHO.
-            if std::env::var("PAUSETAPE_SHOT_DEVICE").is_ok_and(|d| d == "stock") {
-                app.write_mut().options.device = crate::card::Device::EchoMiniStock;
+            // PAUSETAPE_SHOT_DEVICE=stock|walkman|rockbox|other: write for that player instead of
+            // RECHO, in the music folder it looks in.
+            use crate::card::Device;
+            let device = match std::env::var("PAUSETAPE_SHOT_DEVICE").as_deref() {
+                Ok("stock") => Some(Device::EchoMiniStock),
+                Ok("walkman") => Some(Device::Walkman),
+                Ok("rockbox") => Some(Device::Rockbox),
+                Ok("other") => Some(Device::Other),
+                _ => None,
+            };
+            if let Some(d) = device {
+                let w = app.write_mut();
+                w.options.device = d;
+                w.music_folder = d.music_folder().into();
             }
             // PAUSETAPE_SHOT_PATTERN=<pattern>: name the card's songs by it.
             if let Ok(p) = std::env::var("PAUSETAPE_SHOT_PATTERN") {
