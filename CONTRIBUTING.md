@@ -49,7 +49,8 @@ A hotfix goes the same way, from `main` (`hotfix/0.2.1`), back into both `main` 
 
 Every push and pull request is built and tested on macOS, Windows and Linux
 ([ci.yml](.github/workflows/ci.yml)); `main`, version tags and pull requests also get the
-packaged Mac app ([macos.yml](.github/workflows/macos.yml)). The website in `site/` is published from `main`
+packaged Mac app ([macos.yml](.github/workflows/macos.yml)) and the Windows installer
+([windows.yml](.github/workflows/windows.yml)). The website in `site/` is published from `main`
 ([pages.yml](.github/workflows/pages.yml); see [WEBSITE](docs/WEBSITE.md)).
 
 The dependencies are checked with [cargo-deny](https://embarkstudios.github.io/cargo-deny/) on
@@ -73,8 +74,8 @@ about data files it can't read, not a problem).
 
 | Pushed to | Kept | For |
 |---|---|---|
-| a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image, and the Windows and Linux binaries | Versions people download |
-| `main` | 90 days (GitHub's most): binaries and the disk image, as artifacts | The latest release build |
+| a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image, the Windows installer, and the Windows and Linux binaries | Versions people download |
+| `main` | 90 days (GitHub's most): binaries, the disk image and the installer, as artifacts | The latest release build |
 | `develop`, `feature/*` | 7 days: binaries, as artifacts | Trying a build out |
 | a pull request | nothing; it's only checked | — |
 

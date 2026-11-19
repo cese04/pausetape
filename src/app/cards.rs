@@ -60,29 +60,15 @@ pub(super) struct SourceLook {
     free: Option<u64>,
 }
 
-/// How long to wait before believing there's no label: a card's mount point outlasts it on macOS
-/// by 20 to 30 ms (measured with drives detached by force), empty, so no label is found there.
-const MOUNT_POINT_LINGERS: Duration = Duration::from_millis(250);
-
-/// Whether this setup holds a record of a card, which a look could set aside.
-fn has_record(w: &WriteProfile) -> bool {
-    !w.manifest.is_empty() || w.last_written.is_some() || w.card_id.is_some()
-}
-
-/// Read what's at `dest`, unless its drive has just been ejected. `careful`: make sure of a
-/// missing label before saying so, which costs that wait.
-fn look_at(dest: &Path, careful: bool) -> CardLook {
+/// Read what's at `dest`, unless its drive has just been ejected.
+fn look_at(dest: &Path) -> CardLook {
     let nothing = || CardLook { dest: dest.to_path_buf(), there: false, found: Found::NotThere, space: None, test_folder: false };
     if card::held(dest) {
         return nothing();
     }
-    let mut found = Label::find(dest);
-    if careful && matches!(found, Found::NotThere) {
-        std::thread::sleep(MOUNT_POINT_LINGERS);
-        found = Label::find(dest);
-    }
+    let found = Label::find(dest);
     // Looked for after reading: a card pulled out just now finds no label either.
-    if !dest.is_dir() {
+    if !card::connected(dest) {
         return nothing();
     }
     let test_folder = dest.join(testcard::TEST_FOLDER).is_dir() || dest.join(testcard::TEST_PLAYLIST).is_file();
@@ -97,7 +83,7 @@ pub(super) fn watcher(asks: Receiver<Ask>, tx: Sender<Msg>, ctx: egui::Context) 
         let seen_idle = ask.seen.is_some();
         let arrived = ask.seen.map(|seen| volumes.iter().filter(|v| !seen.contains(&v.path)).filter_map(|v| Some((v.path.clone(), Label::read(&v.path)?))).collect());
         let reachable = ask.dests.into_iter().filter(|d| card::connected(d)).collect();
-        let card = ask.active.as_ref().map(|a| look_at(&a.dest, true));
+        let card = ask.active.as_ref().map(|a| look_at(&a.dest));
         let source = ask.source.map(|path| {
             let there = path.is_dir();
             let free = there.then(|| card::space(&path)).flatten().map(|s| s.free);
@@ -153,7 +139,7 @@ impl App {
                 self.volumes = card::volumes();
             }
             if let Some(dest) = self.write().dest.clone() {
-                self.card_look = Some(look_at(&dest, false));
+                self.card_look = Some(look_at(&dest));
                 self.reachable = std::iter::once(dest).filter(|d| card::connected(d)).collect();
             }
             return;
@@ -318,8 +304,7 @@ impl App {
             return;
         };
         let idle = self.busy.is_none();
-        let record = has_record(self.write());
-        self.saw_card(look_at(&dest, record), idle);
+        self.saw_card(look_at(&dest), idle);
     }
 
     /// What's at the active setup's destination now known; a different card from the one its
@@ -327,7 +312,8 @@ impl App {
     /// says none ran when this was looked at).
     fn saw_card(&mut self, seen: CardLook, idle: bool) {
         let w = self.write();
-        let another_card = idle && self.busy.is_none() && has_record(w) && seen.there && !same_card(w, &seen.found);
+        let has_record = !w.manifest.is_empty() || w.last_written.is_some() || w.card_id.is_some();
+        let another_card = idle && self.busy.is_none() && has_record && seen.there && !same_card(w, &seen.found);
         self.dest_label = match &seen.found {
             Found::Label(l) => Some(l.clone()),
             _ => None,
@@ -410,25 +396,6 @@ fn bring_up(writes: &[WriteProfile], active: usize, arrived: &[(PathBuf, Label)]
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_mount_point_on_its_way_out_is_not_another_card() {
-        let dir = std::env::temp_dir().join(format!("pausetape-lingers-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let going = dir.clone();
-        let remover = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(30));
-            std::fs::remove_dir(going).unwrap();
-        });
-        let seen = look_at(&dir, true);
-        remover.join().unwrap();
-        assert!(!seen.there, "gone by the time the missing label was believed");
-
-        std::fs::create_dir_all(&dir).unwrap();
-        let blank = look_at(&dir, true);
-        assert!(blank.there && matches!(blank.found, Found::NotThere), "a card with no label is still one");
-        std::fs::remove_dir(&dir).unwrap();
-    }
 
     #[test]
     fn a_card_plugged_in_brings_up_its_setup() {

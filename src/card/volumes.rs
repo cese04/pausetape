@@ -36,7 +36,41 @@ pub fn held(path: &Path) -> bool {
 
 /// Whether the folder `path` can be reached. Reads the drive, unless it's just been ejected.
 pub fn connected(path: &Path) -> bool {
-    !held(path) && path.is_dir()
+    !held(path) && path.is_dir() && still_mounted(path)
+}
+
+/// Whether `path`, if it's in a folder cards are mounted in, is on a card still mounted there. A
+/// card pulled out by force can leave its mount point behind for a moment (on macOS, about a
+/// third of a second): an empty folder on the computer's own drive, not to be taken for the card.
+#[cfg(unix)]
+fn still_mounted(path: &Path) -> bool {
+    mount_roots().iter().all(|root| mounted_under(path, root))
+}
+
+/// Elsewhere a drive that goes takes its folder with it.
+#[cfg(not(unix))]
+fn still_mounted(_: &Path) -> bool {
+    true
+}
+
+/// True unless `path` is in `root` and the folder it's in there is on `root`'s own drive, or gone.
+#[cfg(unix)]
+fn mounted_under(path: &Path, root: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Some(first) = path.strip_prefix(root).ok().and_then(|rest| rest.components().next()) else { return true };
+    let drive = |p: &Path| fs::metadata(p).map(|m| m.dev()).ok();
+    drive(&root.join(first)).is_some_and(|d| Some(d) != drive(root))
+}
+
+/// The folders cards are mounted in: /Volumes on macOS, /media and /run/media on Linux.
+#[cfg(not(windows))]
+fn mount_roots() -> Vec<PathBuf> {
+    let mut roots = vec![PathBuf::from("/Volumes")];
+    if let Ok(user) = std::env::var("USER") {
+        roots.push(PathBuf::from("/media").join(&user));
+        roots.push(PathBuf::from("/run/media").join(&user));
+    }
+    roots
 }
 
 /// See which ejected drives have lost their medium (taken out, or another put in), and go back
@@ -118,18 +152,18 @@ pub fn space(_path: &Path) -> Option<SpaceInfo> {
 /// Mounted removable-looking volumes: /Volumes on macOS, /media and /run/media on Linux.
 #[cfg(not(windows))]
 pub fn volumes() -> Vec<Volume> {
-    let mut roots = vec![PathBuf::from("/Volumes")];
-    if let Ok(user) = std::env::var("USER") {
-        roots.push(PathBuf::from("/media").join(&user));
-        roots.push(PathBuf::from("/run/media").join(&user));
-    }
     let mut out = Vec::new();
-    for root in roots {
+    for root in mount_roots() {
         let Ok(entries) = fs::read_dir(&root) else { continue };
         for e in entries.flatten() {
             let path = e.path();
             // macOS lists the boot disk here as a symlink to "/".
             if fs::read_link(&path).is_ok() || !path.is_dir() {
+                continue;
+            }
+            // A mount point a card pulled out has left behind.
+            #[cfg(unix)]
+            if !mounted_under(&path, &root) {
                 continue;
             }
             out.push(Volume { name: e.file_name().to_string_lossy().into_owned(), info: space(&path), path });
@@ -251,6 +285,20 @@ mod tests {
         ejecting(gone);
         eject_ended(gone, true);
         assert!(!held(gone));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_mount_point_left_behind_is_not_the_card() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-mounts-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("CARD/Music")).unwrap();
+        // A folder in the mount root on the root's own drive: what a card pulled out leaves.
+        assert!(!mounted_under(&root.join("CARD/Music"), &root));
+        assert!(!mounted_under(&root.join("GONE"), &root), "nothing there at all");
+        // Not in that root, or the root itself: nothing to say.
+        assert!(mounted_under(&std::env::temp_dir(), &root));
+        assert!(mounted_under(&root, &root));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

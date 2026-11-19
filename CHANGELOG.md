@@ -1327,21 +1327,39 @@ twenty times, landing between songs and in the middle of one.
   making a folder, macOS refused to make it (`/Volumes` is the system's), so nothing lands on the
   computer's own drive.
 
-### 109. What 0.1.0's settings become (2026-11-08)
+### 109. Tidier halves, and a mount point left behind isn't the card (2026-11-14)
+- On Windows the halves of copies cut short were visible: a leading dot hides a file only on macOS
+  and Linux. They're now made hidden there too, and shown again before they take the song's name.
+  One left hidden by a card pulled out is written over all the same.
+- Each Sync went through the whole card twice at the end, once for halves and once for macOS
+  files. It's now one walk.
+- On macOS and Linux, a card pulled out by force leaves its mount point behind for a moment,
+  empty and on the computer's own drive. Looked at then, it read as the card with no label, which
+  sets a setup's record aside as a different card. The watcher, the drive list and the start of a
+  Sync now count such a folder as absent: in the mount folders, a card must be on a drive of its own.
+
+### 110. A Windows installer, with ffmpeg as an option (2026-11-14)
+- `scripts/package-windows.sh` makes `Pausetape-<version>-setup.exe`: installed for the user alone,
+  with no administrator rights, in `%LOCALAPPDATA%\Programs`, with a Start-menu shortcut, an entry
+  in Settings › Apps and an uninstaller. Settings and the library stay when it's uninstalled.
+- FFmpeg is a component, ticked by default, for those who already have their own to untick.
+  Installing again keeps that choice. Without it the app uses an installed ffmpeg, or says how to
+  get one, as before.
+- The ffmpeg is the Mac's minimal LGPL build, with the same configure flags, cross-compiled on Linux
+  with mingw-w64 (`scripts/build-ffmpeg-windows.sh`): 5.5 MB, needing only Windows' own DLLs.
+- `.github/workflows/windows.yml` builds both and attaches the installer to version tags' releases,
+  as `macos.yml` does the disk image. Shell scripts keep LF line endings on Windows
+  (`.gitattributes`), so Git Bash can run them there.
+
+### 111. What 0.1.0's settings become (2026-11-08)
 - Settings hold everything, defaults too, so someone updating from 0.1.0 kept its brick accent,
   the colour of warnings now, and the list by artist. Once, on updating, brick becomes teal and
   the album table comes first; any other accent stays, and what's chosen afterwards is kept.
 
-### 110. A card pulled out isn't taken for another card (2026-11-08)
-- On macOS, a card's mount point outlasts it by 20 to 30 ms, empty. A look at that moment found
-  no label and set the setup's record aside, as for a different card. A missing label is now
-  read twice, 250 ms apart. With images detached by force and the look run without a pause: 2,631
-  wrong answers before, none after.
-
-### 111. Licences in Settings, on every system (2026-11-08)
+### 112. Licences in Settings, on every system (2026-11-08)
 - Settings › *About* gives the version and the licence texts of the app and its three fonts. The
-  Windows and Linux programs are one file each, with nowhere else to carry them.
+  bare Windows and Linux programs are one file each, with nowhere else to carry them.
 
-### 112. Ready for 0.2.0 (2026-11-08)
+### 113. Ready for 0.2.0 (2026-11-08)
 - The website says lyrics come from LRCLIB, and what's sent there; what the app does now, in the
   README and on the site. Hints no longer point to tabs that became the sidebar.
