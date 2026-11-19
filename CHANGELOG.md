@@ -1389,3 +1389,5 @@ twenty times, landing between songs and in the middle of one.
 - Checked on a FAT32 card image (`music_folder_on_fat`, ignored by default): 40 songs for a
   Walkman, then the folder moved three times, each a move in under 0.2 s with no copy, every
   playlist line reaching its song.
+- A pushed `release/*` branch gets the disk image and the Windows installer too, kept 90 days,
+  so testers try a version before it's tagged (`macos.yml`, `windows.yml`).

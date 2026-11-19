@@ -76,6 +76,7 @@ about data files it can't read, not a problem).
 |---|---|---|
 | a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image, the Windows installer, and the Windows and Linux binaries | Versions people download |
 | `main` | 90 days (GitHub's most): binaries, the disk image and the installer, as artifacts | The latest release build |
+| `release/*` | 90 days: the disk image and the installer; binaries 7 days | Testers trying the version before it's tagged |
 | `develop`, `feature/*` | 7 days: binaries, as artifacts | Trying a build out |
 | a pull request | nothing; it's only checked | — |
 

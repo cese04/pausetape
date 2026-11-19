@@ -1,7 +1,7 @@
-# Test and package the Windows installer for `main`, version tags and pull requests, as
-# macos.yml does for the Mac. The installer of a version tag (`v*`) goes on its GitHub Release,
-# kept for good; that of `main` is kept 90 days, the most GitHub allows; pull requests are
-# checked, not kept.
+# Test and package the Windows installer for `main`, release branches, version tags and pull
+# requests, as macos.yml does for the Mac. The installer of a version tag (`v*`) goes on its
+# GitHub Release, kept for good; that of `main` or a `release/*` branch (to try before the
+# release) is kept 90 days, the most GitHub allows; pull requests are checked, not kept.
 #
 # ffmpeg is cross-compiled on Linux (scripts/build-ffmpeg-windows.sh) and handed to the Windows
 # job, which builds the app and the installer (scripts/package-windows.sh).
@@ -9,7 +9,7 @@ name: Windows
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
 
