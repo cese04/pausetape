@@ -20,16 +20,28 @@ pub enum Device {
     /// The Echo Mini with Snowsky's own firmware: a library built from tags, more formats,
     /// covers on the play screen, at most 8,192 songs.
     EchoMiniStock,
+    /// Sony's Walkmans of the NW-A and NW-ZX lines: only what's in the MUSIC folder, listed
+    /// from the tags.
+    Walkman,
+    /// Rockbox, the free firmware for iPods, Sansas and others: folders sorted by name, nearly
+    /// every format.
+    Rockbox,
+    /// Any other player, or a phone: a library from the tags, and the formats every player
+    /// plays, until the test card shows more.
+    Other,
 }
 
 impl Device {
-    pub const ALL: [Device; 2] = [Device::EchoMiniRecho, Device::EchoMiniStock];
+    pub const ALL: [Device; 5] = [Device::EchoMiniRecho, Device::EchoMiniStock, Device::Walkman, Device::Rockbox, Device::Other];
 
     /// For choosing one: "Echo Mini · RECHO".
     pub fn name(self) -> &'static str {
         match self {
             Device::EchoMiniRecho => "Echo Mini · RECHO",
             Device::EchoMiniStock => "Echo Mini · stock firmware",
+            Device::Walkman => "Sony Walkman · NW-A, NW-ZX",
+            Device::Rockbox => "Rockbox · iPod, Sansa…",
+            Device::Other => "Another player or phone",
         }
     }
 
@@ -38,6 +50,9 @@ impl Device {
         match self {
             Device::EchoMiniRecho => "RECHO",
             Device::EchoMiniStock => "the Echo Mini",
+            Device::Walkman => "the Walkman",
+            Device::Rockbox => "Rockbox",
+            Device::Other => "the player",
         }
     }
 
@@ -46,6 +61,9 @@ impl Device {
         match self {
             Device::EchoMiniRecho => "RECHO plays FLAC, MP3 and WAV only.",
             Device::EchoMiniStock => "The Echo Mini's stock firmware plays FLAC, MP3, WAV, APE, AAC (M4A), Ogg Vorbis, WMA and DSD.",
+            Device::Walkman => "The Walkman plays FLAC, MP3, WAV, AIFF, AAC and ALAC (M4A), APE, WMA and DSD.",
+            Device::Rockbox => "Rockbox plays FLAC, MP3, WAV, AIFF, AAC and ALAC (M4A), Ogg Vorbis, Opus, WavPack, APE and WMA.",
+            Device::Other => "Nearly every player plays FLAC, MP3 and WAV; the test card finds out what else this one does.",
         }
     }
 
@@ -56,6 +74,13 @@ impl Device {
             Device::EchoMiniStock => {
                 "Lists artists and albums from the tags, so corrected tags matter most. Plays more formats and shows embedded covers; lists at most 8,192 songs. From reviews, not yet checked on a player."
             }
+            Device::Walkman => {
+                "Lists only what's in the MUSIC folder, by artist and album from the tags, with embedded covers. Plays nearly every lossless format, DSD too. From Sony's specifications (NW-A50 and later), not yet checked on a player."
+            }
+            Device::Rockbox => {
+                "Browses folders sorted by name, so album folders carry the year; its database lists by tags if built. Plays nearly every format; shows covers. From Rockbox's manual, not yet checked on a player."
+            }
+            Device::Other => "For a player not listed, or a phone: songs go in a Music folder, named by their tags. Test it on the player to learn what it plays.",
         }
     }
 
@@ -74,6 +99,25 @@ impl Device {
                             _ => false,
                         }
             }
+            Device::Walkman => {
+                t.plays_anywhere()
+                    || t.cue.is_none()
+                        && match t.ext.as_str() {
+                            "aiff" | "aif" | "ape" | "wma" | "dsf" | "dff" => true,
+                            "m4a" | "m4b" | "mp4" => matches!(t.codec.as_deref(), Some("mp4a" | "alac")),
+                            _ => false,
+                        }
+            }
+            Device::Rockbox => {
+                t.plays_anywhere()
+                    || t.cue.is_none()
+                        && match t.ext.as_str() {
+                            "aiff" | "aif" | "ogg" | "oga" | "opus" | "wv" | "ape" | "wma" | "mp2" => true,
+                            "m4a" | "m4b" | "mp4" => matches!(t.codec.as_deref(), Some("mp4a" | "alac")),
+                            _ => false,
+                        }
+            }
+            Device::Other => t.plays_anywhere(),
         }
     }
 
@@ -82,24 +126,37 @@ impl Device {
         match self {
             Device::EchoMiniRecho => "format not playable on RECHO",
             Device::EchoMiniStock => "format not playable on the Echo Mini",
+            Device::Walkman => "format not playable on the Walkman",
+            Device::Rockbox => "format not playable on Rockbox",
+            Device::Other => "format not known to play on the player",
         }
     }
 
     /// The player shows covers embedded in the songs.
     pub fn shows_covers(self) -> bool {
-        self == Device::EchoMiniStock
+        self != Device::EchoMiniRecho
     }
 
     /// The player builds its library from tags (so a playlist's copies show up as songs too).
     pub fn browses_by_tags(self) -> bool {
-        self == Device::EchoMiniStock
+        matches!(self, Device::EchoMiniStock | Device::Walkman | Device::Other)
     }
 
     /// The most songs the player lists.
     pub fn max_songs(self) -> Option<usize> {
         match self {
-            Device::EchoMiniRecho => None,
             Device::EchoMiniStock => Some(8192),
+            _ => None,
+        }
+    }
+
+    /// The folder on the card the player looks for music in, offered for a new card setup:
+    /// empty for the card's top level.
+    pub fn music_folder(self) -> &'static str {
+        match self {
+            Device::EchoMiniRecho | Device::EchoMiniStock => "",
+            Device::Walkman => "MUSIC",
+            Device::Rockbox | Device::Other => "Music",
         }
     }
 }
@@ -329,6 +386,12 @@ mod tests {
         let leave = |device: Device| Rules { unplayable: Unplayable::Leave, player: device.into(), ..Default::default() };
         assert_eq!(target(&aac, leave(stock)), Ok(Target::Copy));
         assert_eq!(target(&aac, leave(recho)), Err("format not playable on RECHO"));
+        let (aiff, opus, dsd) = (song("aiff", None), song("opus", None), song("dsf", None));
+        let (walkman, rockbox, other) = (Device::Walkman, Device::Rockbox, Device::Other);
+        assert!(walkman.plays(&alac) && walkman.plays(&dsd) && !walkman.plays(&opus));
+        assert!(rockbox.plays(&alac) && rockbox.plays(&opus) && rockbox.plays(&aiff) && !rockbox.plays(&dsd));
+        assert!(other.plays(&flac) && !other.plays(&aac), "only what every player plays, until tested");
+        assert_eq!((recho.music_folder(), walkman.music_folder(), other.music_folder()), ("", "MUSIC", "Music"));
         // Card setups saved before players existed are for RECHO.
         let old: Options = serde_json::from_str(r#"{"album_order":"Year"}"#).unwrap();
         assert_eq!(old.device, Device::EchoMiniRecho);

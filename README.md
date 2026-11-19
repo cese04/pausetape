@@ -38,6 +38,10 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 - **Writes to the card the way you want it.** Saved *card setups* choose which artists, albums
   and playlists go on a card, what they're called there and in what order. Each Sync copies only
   what changed and removes only files it put there itself.
+- **Other players too:** Sony Walkmans (NW-A, NW-ZX), Rockbox (iPods, Sansas…) and any other
+  player or phone, each with what it plays and the folder it looks in (`MUSIC` on a Walkman),
+  set per card setup. Only the Echo Mini has been checked on the player; the test card checks
+  the rest.
 - **Playlists for a player without playlists:** folders of numbered copies (FAT/exFAT cards
   can't hold symlinks).
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks

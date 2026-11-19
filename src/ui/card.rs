@@ -395,7 +395,13 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         }
     });
     if device != app.write().options.device {
-        app.write_mut().options.device = device;
+        let w = app.write_mut();
+        // The folder follows the player, unless it was set by hand.
+        if w.music_folder.trim().eq_ignore_ascii_case(w.options.device.music_folder()) {
+            w.music_folder = device.music_folder().into();
+        }
+        w.options.device = device;
+        app.write_preview = None;
         app.refresh_on_card();
     }
 }
@@ -478,7 +484,7 @@ fn pattern_example(index: &crate::library::grouping::Index, tracks: &[crate::lib
     let ck = &index.clusters[artist.cluster].key;
     let t = &tracks[*album.tracks.get(1)?];
     let name = w.custom.artist_names.get(ck).unwrap_or(&artist.name);
-    let rel = song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext);
+    let rel = w.music_root().join(song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext));
     Some(rel.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join(" / "))
 }
 
@@ -508,7 +514,7 @@ impl Sizes {
         let w = app.write();
         let mut h = std::collections::hash_map::DefaultHasher::new();
         app.library_generation.hash(&mut h);
-        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder)).unwrap_or_default().hash(&mut h);
+        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder, &w.music_folder)).unwrap_or_default().hash(&mut h);
         for p in &app.saved.playlists {
             (&p.name, &p.tracks).hash(&mut h);
         }
@@ -560,7 +566,7 @@ impl Sizes {
         s.largest.sort_by_key(|&(_, _, bytes)| std::cmp::Reverse(bytes));
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules);
+        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_dir(), rules);
         s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target))).sum();
         s.songs += planned.iter().map(|(_, copies, _)| copies.len()).sum::<usize>();
         s
@@ -895,6 +901,18 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     let w = &mut app.saved.writes[app.saved.active_write];
     widgets::section(ui, Icon::Settings, "Folders and options");
     ui.add_space(S1);
+    widgets::setting(ui, "Music folder on the card", |ui| {
+        changed |= ui.add(egui::TextEdit::singleline(&mut w.music_folder).hint_text("the top of the card").align(egui::Align2::LEFT_CENTER).desired_width(160.0)).changed();
+        widgets::help(ui, "Where the songs and playlists go. A Walkman finds music only in MUSIC; most other players and phones look in Music. Left empty, they go at the top of the card. Songs already on the card move there at the next Sync, not copied again.");
+        let wanted = device.device.music_folder();
+        if !w.music_folder.trim().eq_ignore_ascii_case(wanted) {
+            let back = if wanted.is_empty() { "Back to the top of the card".to_string() } else { format!("Back to “{wanted}”, where {} looks", device.short()) };
+            if widgets::icon_link(ui, Icon::Back, back).clicked() {
+                w.music_folder = wanted.into();
+                changed = true;
+            }
+        }
+    });
     widgets::setting(ui, "Album folders", |ui| {
         row(ui, |ui| {
             for (order, label) in [(AlbumOrder::Year, "1997 - Album"), (AlbumOrder::Title, "Album"), (AlbumOrder::Custom, "01 - Album")] {
