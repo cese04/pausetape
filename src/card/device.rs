@@ -26,8 +26,8 @@ pub enum Device {
     /// Rockbox, the free firmware for iPods, Sansas and others: folders sorted by name, nearly
     /// every format.
     Rockbox,
-    /// Any other player, or a phone: a library from the tags, and the formats every player
-    /// plays, until the test card shows more.
+    /// Any other player, or a phone: a library from the tags, and the formats nearly every
+    /// player plays, until the test card shows more.
     Other,
 }
 
@@ -63,7 +63,7 @@ impl Device {
             Device::EchoMiniStock => "The Echo Mini's stock firmware plays FLAC, MP3, WAV, APE, AAC (M4A), Ogg Vorbis, WMA and DSD.",
             Device::Walkman => "The Walkman plays FLAC, MP3, WAV, AIFF, AAC and ALAC (M4A), APE, WMA and DSD.",
             Device::Rockbox => "Rockbox plays FLAC, MP3, WAV, AIFF, AAC and ALAC (M4A), Ogg Vorbis, Opus, WavPack, APE and WMA.",
-            Device::Other => "Nearly every player plays FLAC, MP3 and WAV; the test card finds out what else this one does.",
+            Device::Other => "Nearly every player and phone plays FLAC, MP3, WAV and AAC (M4A); the test card finds out what else this one does.",
         }
     }
 
@@ -75,12 +75,12 @@ impl Device {
                 "Lists artists and albums from the tags, so corrected tags matter most. Plays more formats and shows embedded covers; lists at most 8,192 songs. From reviews, not yet checked on a player."
             }
             Device::Walkman => {
-                "Lists only what's in the MUSIC folder, by artist and album from the tags, with embedded covers. Plays nearly every lossless format, DSD too. From Sony's specifications (NW-A50 and later), not yet checked on a player."
+                "Lists only what's in the MUSIC folder, by artist and album from the tags, with embedded covers; playlists are .m3u8 files. Plays nearly every lossless format, DSD too. From Sony's specifications (NW-A50 and later), not yet checked on a player."
             }
             Device::Rockbox => {
-                "Browses folders sorted by name, so album folders carry the year; its database lists by tags if built. Plays nearly every format; shows covers. From Rockbox's manual, not yet checked on a player."
+                "Browses folders sorted by name, so album folders carry the year; its database lists by tags if built. Plays nearly every format, shows covers, reads .m3u8 playlists. From Rockbox's manual, not yet checked on a player."
             }
-            Device::Other => "For a player not listed, or a phone: songs go in a Music folder, named by their tags. Test it on the player to learn what it plays.",
+            Device::Other => "For a player not listed, or a phone: songs go in a Music folder, and playlists are .m3u8 files. Counted on to play FLAC, MP3, WAV and AAC; test it on the player to learn what else it plays.",
         }
     }
 
@@ -117,7 +117,8 @@ impl Device {
                             _ => false,
                         }
             }
-            Device::Other => t.plays_anywhere(),
+            // AAC too: every phone and nearly every player since the iPod.
+            Device::Other => t.plays_anywhere() || t.cue.is_none() && matches!(t.ext.as_str(), "m4a" | "m4b" | "mp4") && t.codec.as_deref() == Some("mp4a"),
         }
     }
 
@@ -140,6 +141,22 @@ impl Device {
     /// The player builds its library from tags (so a playlist's copies show up as songs too).
     pub fn browses_by_tags(self) -> bool {
         matches!(self, Device::EchoMiniStock | Device::Walkman | Device::Other)
+    }
+
+    /// The player reads .m3u8 playlists, so a playlist needs no copies of songs already on the
+    /// card.
+    pub fn reads_playlists(self) -> bool {
+        matches!(self, Device::Walkman | Device::Rockbox | Device::Other)
+    }
+
+    /// The name a new card setup for this player starts with.
+    pub fn setup_name(self) -> &'static str {
+        match self {
+            Device::EchoMiniRecho | Device::EchoMiniStock => "Echo Mini",
+            Device::Walkman => "Walkman",
+            Device::Rockbox => "Rockbox",
+            Device::Other => "My player",
+        }
     }
 
     /// The most songs the player lists.
@@ -328,6 +345,11 @@ impl Player {
         self.device.browses_by_tags()
     }
 
+    /// As the test card's playlist showed, else as the profile says.
+    pub fn reads_playlists(self) -> bool {
+        self.tested.answer(Sample::Playlist).unwrap_or(self.device.reads_playlists())
+    }
+
     /// The player plays `t` as it is: as tested, else as its profile says. A song in an album
     /// file is cut into FLAC (or MP3) on the card.
     pub fn plays(self, t: &Track) -> bool {
@@ -390,7 +412,8 @@ mod tests {
         let (walkman, rockbox, other) = (Device::Walkman, Device::Rockbox, Device::Other);
         assert!(walkman.plays(&alac) && walkman.plays(&dsd) && !walkman.plays(&opus));
         assert!(rockbox.plays(&alac) && rockbox.plays(&opus) && rockbox.plays(&aiff) && !rockbox.plays(&dsd));
-        assert!(other.plays(&flac) && !other.plays(&aac), "only what every player plays, until tested");
+        assert!(other.plays(&flac) && other.plays(&aac) && !other.plays(&alac) && !other.plays(&ape), "only what nearly every player plays, until tested");
+        assert!(!recho.reads_playlists() && walkman.reads_playlists());
         assert_eq!((recho.music_folder(), walkman.music_folder(), other.music_folder()), ("", "MUSIC", "Music"));
         // Card setups saved before players existed are for RECHO.
         let old: Options = serde_json::from_str(r#"{"album_order":"Year"}"#).unwrap();

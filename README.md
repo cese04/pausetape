@@ -43,7 +43,7 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
   set per card setup. Only the Echo Mini has been checked on the player; the test card checks
   the rest.
 - **Playlists for a player without playlists:** folders of numbered copies (FAT/exFAT cards
-  can't hold symlinks).
+  can't hold symlinks). A player that reads playlists gets an .m3u8 instead.
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks
   clearly what the Echo Mini can't play.
 - **Converts for the card** what the Echo Mini can't play: ALAC, AIFF, APE and other lossless

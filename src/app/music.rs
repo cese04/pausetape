@@ -114,9 +114,9 @@ impl App {
         s.planned_bytes = planned.values().map(|p| card::card_size(&self.tracks[p.track], p.target)).sum();
         let ids: Vec<PathBuf> = self.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&self.tracks).collect();
-        s.planned_bytes += playlist::planned(&w.chosen_playlists(&self.saved.playlists), &by_path, &w.playlists_dir(), w.options.rules())
+        s.planned_bytes += playlist::planned(&w.chosen_playlists(&self.saved.playlists), &by_path, &card::organised(&self.tracks, &plan), &w.playlists_dir(), w.options.rules())
             .iter()
-            .flat_map(|(_, copies, _)| copies.iter().map(|c| card::card_size(c.track, c.target)))
+            .flat_map(|(_, copies, _)| copies.iter().filter(|c| c.copy).map(|c| card::card_size(c.track, c.target)))
             .sum::<u64>();
         let (mut adds, mut removes) = (HashSet::new(), HashSet::new());
         for a in &self.index.artists {

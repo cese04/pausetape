@@ -51,6 +51,12 @@ pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> 
     })
 }
 
+/// `s` with its first letter in capitals: "the Walkman" → "The Walkman".
+pub fn capitalised(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+}
+
 /// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play" / "damaged".
 pub fn format_badge(t: &crate::library::Track, device: Player) -> String {
     if t.harmed() {

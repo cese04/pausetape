@@ -18,7 +18,7 @@ use super::layout::{S1, S2, row, font, list_rows};
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
-    if device.browses_by_tags() {
+    if device.browses_by_tags() && !device.reads_playlists() {
         ui.label(RichText::new(playlist_copies_warning(device)).size(font::UI).color(ink.warn));
     }
     ui.add_space(S1);
@@ -67,8 +67,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
             let pl = &app.saved.playlists[pi];
             let dur: Duration = pl.tracks.iter().filter_map(|p| by_path.get(p.as_path())).map(|t| t.duration).sum();
-            let how = "The Echo Mini has no playlists and FAT/exFAT cards can't hold symbolic links, so each playlist is written to the card as a folder of numbered copies. Hold Play on the folder to play it in order. An .m3u8 is written alongside for future firmware. Which playlists go on a card: the card's Setup.";
-            muted(ui, format!("{} tracks · {} · on the card, a folder of copies ({})", pl.tracks.len(), text::duration(dur), text::bytes(pl.bytes(&by_path)))).on_hover_text(how);
+            let (on_card, how) = if device.reads_playlists() {
+                (
+                    "on the card, a playlist file".to_string(),
+                    format!("{} reads playlists, so each is written to the card as an .m3u8 pointing at the songs. Songs not on the card otherwise are copied beside it. Which playlists go on a card: the card's Setup.", text::capitalised(device.short())),
+                )
+            } else {
+                (
+                    format!("on the card, a folder of copies ({})", text::bytes(pl.bytes(&by_path))),
+                    format!("{} reads no playlists, and FAT/exFAT cards can't hold symbolic links, so each playlist is written to the card as a folder of numbered copies. Open the folder on the player to play it in order. An .m3u8 is written alongside for a later firmware. Which playlists go on a card: the card's Setup.", text::capitalised(device.short())),
+                )
+            };
+            muted(ui, format!("{} tracks · {} · {on_card}", pl.tracks.len(), text::duration(dur))).on_hover_text(how);
             ui.add_space(S1);
             ScrollArea::vertical().auto_shrink(false).max_height(ui.available_height() - 40.0).show(ui, |ui| {
                 let compact = app.saved.compact;

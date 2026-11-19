@@ -21,4 +21,4 @@ pub use plan::{AlbumOrder, Chosen, Custom, Options, PlanItem, REPEAT, Rules, Tar
 pub use volumes::{SpaceInfo, Volume, connected, eject_ended, ejecting, held, let_go_of_ejected, space, volumes};
 #[cfg(windows)]
 pub use volumes::drives;
-pub use write::{Outcome, Preview, WriteProfile, now, preview, removing, renamed, write};
+pub use write::{Outcome, Preview, WriteProfile, now, organised, preview, removing, renamed, write};

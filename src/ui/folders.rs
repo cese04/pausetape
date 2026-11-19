@@ -149,7 +149,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
         match &dest {
             None => {
-                muted(ui, "Put the Echo Mini's card in a reader (or connect the player as a drive), then choose it.");
+                muted(ui, "Put the player's card in a reader (or connect the player as a drive), then choose it.");
             }
             Some(d) => {
                 let vol = volume_of(&app.volumes, d);

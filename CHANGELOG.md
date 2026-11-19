@@ -1379,3 +1379,13 @@ twenty times, landing between songs and in the middle of one.
   until the test card shows more). From the makers' specifications and Rockbox's manual: none
   checked on a player yet.
 - The .m3u8 beside a playlist finds the songs from however deep it sits.
+- A player that reads playlists (the three new ones; any player whose test card played the
+  playlist) gets the .m3u8 alone, pointing at the songs where they are on the card: copies would
+  show up twice in a library built from tags. Only songs not on the card otherwise are copied,
+  beside it. The Echo Mini keeps its folders of copies.
+- Words that took the player for an Echo Mini now name the player chosen: what clutter is, where
+  to put the card, how playlists go on it. A setup still called after its player takes the new
+  one's name, and the test card says which folder it writes to.
+- Checked on a FAT32 card image (`music_folder_on_fat`, ignored by default): 40 songs for a
+  Walkman, then the folder moved three times, each a move in under 0.2 s with no copy, every
+  playlist line reaching its song.

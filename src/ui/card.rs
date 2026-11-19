@@ -395,9 +395,14 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         }
     });
     if device != app.write().options.device {
+        // The setup's name and folder follow the player, unless they were set by hand.
+        let was = app.write().options.device;
+        let renamed = app.write().name == was.setup_name() && !app.saved.writes.iter().any(|o| o.name == device.setup_name());
         let w = app.write_mut();
-        // The folder follows the player, unless it was set by hand.
-        if w.music_folder.trim().eq_ignore_ascii_case(w.options.device.music_folder()) {
+        if renamed {
+            w.name = device.setup_name().into();
+        }
+        if w.music_folder.trim().eq_ignore_ascii_case(was.music_folder()) {
             w.music_folder = device.music_folder().into();
         }
         w.options.device = device;
@@ -566,9 +571,10 @@ impl Sizes {
         s.largest.sort_by_key(|&(_, _, bytes)| std::cmp::Reverse(bytes));
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_dir(), rules);
-        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target))).sum();
-        s.songs += planned.iter().map(|(_, copies, _)| copies.len()).sum::<usize>();
+        let organised = crate::card::organised(&app.tracks, &w.plan(&app.tracks, &app.index));
+        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &organised, &w.playlists_dir(), rules);
+        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().filter(|c| c.copy).map(|c| card_size(c.track, c.target))).sum();
+        s.songs += planned.iter().map(|(_, copies, _)| copies.iter().filter(|c| c.copy).count()).sum::<usize>();
         s
     }
 }
@@ -873,7 +879,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 let kinds: Vec<String> = clutter.iter().map(|(k, n, s)| format!("{k}: {} ({})", plural(*n, "file"), text::bytes(*s))).collect();
                 ui.checkbox(&mut app.delete_clutter_on_take_over, format!("delete clutter: {} ({}) of iTunes data, system files and rip logs; can't be undone", plural(n, "file"), text::bytes(bytes)))
                     .on_hover_text(format!(
-                        "{}\n\nThe Echo Mini can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
+                        "{}\n\nThe player can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
                         kinds.join("\n")
                     ));
             }
@@ -1075,11 +1081,13 @@ fn playlists(app: &mut App, ui: &mut Ui) {
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
     let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
     let mut changed = false;
+    // A player that reads playlists gets a small .m3u8, not copies: the size would mislead.
+    let lists = app.player().reads_playlists();
     let w = &mut app.saved.writes[app.saved.active_write];
     row_wrapped(ui, |ui| {
         for p in &app.saved.playlists {
             let mut on = w.playlists.contains(&p.name);
-            let label = format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path)));
+            let label = if lists { format!("{} ({})", p.name, plural(p.tracks.len(), "song")) } else { format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path))) };
             if ui.checkbox(&mut on, label).changed() {
                 changed = true;
                 if on {
