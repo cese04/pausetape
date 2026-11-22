@@ -1,6 +1,6 @@
 # Pausetape: progress and roadmap
 
-*Last updated: 2026-11-08, for 0.2.0. Section 1 was written before the sidebar replaced the tabs, and still describes them; the [CHANGELOG](../CHANGELOG.md) is the full record.*
+*Last updated: 2026-11-21, for 0.2.0. Section 1 was written before the sidebar replaced the tabs, and still describes them; the [CHANGELOG](../CHANGELOG.md) is the full record.*
 
 Pausetape organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to

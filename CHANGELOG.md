@@ -778,7 +778,7 @@ Calibre's device view, for music: the library is where you choose what goes on t
   (ci.yml), no longer also the Mac program on its own, which only opens in Terminal and would
   confuse someone choosing what to download.
 
-## 0.2.0 (2026-11-08)
+## 0.2.0 (2026-11-21)
 
 ### 65. Keyboard focus you can see; controls screen readers can name (2026-11-05)
 - Tab moves through the app's own controls (links, commands, buttons, tabs, chips, song and
