@@ -1391,3 +1391,9 @@ twenty times, landing between songs and in the middle of one.
   playlist line reaching its song.
 - A pushed `release/*` branch gets the disk image and the Windows installer too, kept 90 days,
   so testers try a version before it's tagged (`macos.yml`, `windows.yml`).
+
+### 115. The Windows installer builds with newer Rust (2026-11-21)
+- `windows.yml` failed at "== assembling": the packaging script looked for the icon build.rs makes
+  at a fixed place inside `target`, and newer Cargo keeps it elsewhere. Cargo now says where
+  (`--message-format=json`), whatever its version. Checked here with a full build and with one that
+  had nothing to rebuild.

@@ -39,8 +39,18 @@ done
 [[ -n "$python" ]] || { echo "needs Python 3 (or PYTHON=<path>)"; exit 1; }
 
 echo "== building"
-cargo build --release --locked 2>&1 | grep -E "^(warning|error)|Finished" || true
+# Cargo says where build.rs put the icon it made for the .exe (for the installer and uninstaller
+# too): where that folder sits inside `target` changes between Cargo versions.
+out_dir=$(cargo build --release --locked --message-format=json-render-diagnostics | "$python" -c '
+import json, sys
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get("reason") == "build-script-executed" and "path+file:" in m["package_id"]:
+        print(m["out_dir"].replace("\\", "/"))
+')
 [[ -f target/release/pausetape.exe ]] || { echo "build failed"; exit 1; }
+icon="$out_dir/icon.ico"
+[[ -f "$icon" ]] || { echo "build.rs made no icon (looked in \"$out_dir\")"; exit 1; }
 
 echo "== assembling $STAGE"
 rm -rf "$STAGE" && mkdir -p "$STAGE/Licenses/FFmpeg" "$STAGE/Licenses/Fonts"
@@ -51,13 +61,11 @@ cp LICENSE "$STAGE/Licenses/LICENSE.txt"
 cp "$FFMPEG/COPYING.LGPLv2.1" "$FFMPEG/COPYING.LAME" "$FFMPEG/BUILD-INFO.txt" "$STAGE/Licenses/FFmpeg/"
 cp assets/fonts/*.txt "$STAGE/Licenses/Fonts/"
 "$python" -I scripts/third-party-notices.py x86_64-pc-windows-msvc > "$STAGE/Licenses/THIRD-PARTY.txt"
-# The icon build.rs made for the .exe, for the installer and uninstaller too.
-icon=$(ls -t target/release/build/pausetape-*/out/icon.ico | head -1)
 
 echo "== installer"
 setup="$DIST/$APP_NAME-$VERSION-setup.exe"
 win() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else echo "$1"; fi; }
-"$makensis" -V2 -DAPP_NAME="$APP_NAME" -DVERSION="$VERSION" -DSTAGE="$(win "$STAGE")" -DICON="$(win "$ROOT/$icon")" \
+"$makensis" -V2 -DAPP_NAME="$APP_NAME" -DVERSION="$VERSION" -DSTAGE="$(win "$STAGE")" -DICON="$(win "$icon")" \
     -DOUTFILE="$(win "$setup")" "$(win "$ROOT/assets/windows/installer.nsi")"
 (cd "$DIST" && sha256sum "$(basename "$setup")" > "$(basename "$setup").sha256")
 
