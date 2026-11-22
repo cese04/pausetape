@@ -5,6 +5,10 @@
 //! `_Playlists/Road Trip/01 - Artist - Title.flac`. Holding Play on that folder in RECHO plays it
 //! in order. An `.m3u8` pointing at the organised originals is written alongside, ready for when
 //! the firmware exposes its internal m3u support.
+//!
+//! A player that reads playlists (`Player::reads_playlists`) gets the `.m3u8` alone: copies would
+//! show up as songs twice in a library built from tags. Only songs not on the card otherwise are
+//! copied, beside it.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -43,20 +47,26 @@ pub struct ExportReport {
     pub written: Vec<Written>,
 }
 
-/// One planned copy: card path (relative to the card root), source track, label for the m3u8.
+/// One song of a playlist on the card: card path (relative to the card root), source track,
+/// label for the m3u8.
 pub struct Planned<'a> {
     pub rel: PathBuf,
     pub track: &'a Track,
     pub target: Target,
     pub label: String,
+    /// A copy in the playlist's folder; else the song where the card's layout puts it, which the
+    /// .m3u8 points at.
+    pub copy: bool,
 }
 
-/// Where each playlist's copies go: `<folder>/<Name>/NN - Artist - Title.ext`.
-/// Returns, per playlist, its folder (relative) and its copies; missing tracks are skipped.
+/// Where each playlist's copies go: `<root>/<Name>/NN - Artist - Title.ext`, `root` relative to
+/// the card (`WriteProfile::playlists_dir`).
+/// Returns, per playlist, its folder (relative) and its songs; missing tracks are skipped.
 /// Tracks the player can't play are converted, copied or left out as `rules` say (numbering closes
-/// the gaps).
-pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, folder: &str, rules: Rules) -> Vec<(PathBuf, Vec<Planned<'a>>, usize)> {
-    let root = PathBuf::from(sanitize_component(folder, 80));
+/// the gaps). `organised`: where the card's layout puts each song (track id → card path); for a
+/// player that reads playlists, those aren't copied.
+pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, organised: &HashMap<PathBuf, PathBuf>, root: &Path, rules: Rules) -> Vec<(PathBuf, Vec<Planned<'a>>, usize)> {
+    let lists = rules.player.reads_playlists();
     playlists
         .iter()
         .map(|pl| {
@@ -76,8 +86,11 @@ pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, 
                 .enumerate()
                 .map(|(n, (t, to))| {
                     let label = format!("{} - {}", t.artist.as_deref().unwrap_or("Unknown"), t.display_title());
+                    if let Some(rel) = organised.get(&t.id()).filter(|_| lists) {
+                        return Planned { rel: rel.clone(), track: t, target: to, label, copy: false };
+                    }
                     let file = format!("{:0width$} - {}.{}", n + 1, sanitize_component(&label, 110), to.ext(t));
-                    Planned { rel: dir.join(file), track: t, target: to, label }
+                    Planned { rel: dir.join(file), track: t, target: to, label, copy: true }
                 })
                 .collect();
             (dir, copies, missing)
@@ -85,7 +98,7 @@ pub fn planned<'a>(playlists: &[Playlist], by_path: &HashMap<&Path, &'a Track>, 
         .collect()
 }
 
-/// Export every playlist under `dest/<folder>`. `organised` maps a track id to where the
+/// Export every playlist under `dest/<root>`. `organised` maps a track id to where the
 /// organiser put it (relative to `dest`), used for the m3u8; may be empty. `previous` is the last
 /// write's manifest.
 #[allow(clippy::too_many_arguments)]
@@ -94,7 +107,7 @@ pub fn export(
     tracks: &[Track],
     organised: &HashMap<PathBuf, PathBuf>,
     dest: &Path,
-    folder: &str,
+    root: &Path,
     rules: Rules,
     previous: &[Written],
     mut progress: impl FnMut(usize, usize),
@@ -103,14 +116,18 @@ pub fn export(
     let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
     let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
     let previous = by_rel(previous);
-    let plan = planned(playlists, &by_id, folder, rules);
+    let plan = planned(playlists, &by_id, organised, root, rules);
+    // From the .m3u8, beside the playlists' folders, back up to the card's top.
+    let up: PathBuf = root.components().map(|_| "..").collect();
     let total: usize = plan.iter().map(|(_, c, _)| c.len()).sum();
     let mut done = 0;
     for (dir_rel, copies, missing) in plan {
         r.missing += missing;
         let dir = dest.join(&dir_rel);
-        if let Err(e) = fs::create_dir_all(&dir) {
-            r.errors.push(format!("{}: {e}", dir.display()));
+        // The folder only if there are copies to put in it; the .m3u8 goes beside it either way.
+        let folder = if copies.iter().any(|c| c.copy) { dir.as_path() } else { dir.parent().unwrap_or(dest) };
+        if let Err(e) = fs::create_dir_all(folder) {
+            r.errors.push(format!("{}: {e}", folder.display()));
             continue;
         }
         let mut keep = HashSet::new();
@@ -118,6 +135,10 @@ pub fn export(
         for c in copies {
             done += 1;
             progress(done, total);
+            if !c.copy {
+                m3u.push_str(&format!("#EXTINF:{},{}\n{}\n", c.track.duration.as_secs(), c.label, up.join(&c.rel).to_string_lossy().replace('\\', "/")));
+                continue;
+            }
             let dst = dest.join(&c.rel);
             keep.insert(c.rel.file_name().unwrap().to_string_lossy().into_owned());
             let prev = previous.get(&c.rel.to_string_lossy().to_lowercase()).copied();
@@ -133,7 +154,7 @@ pub fn export(
             r.written.push(Written { rel: c.rel.clone(), size, source: source_key(c.track, c.target) });
             let target = organised
                 .get(&c.track.id())
-                .map(|rel| Path::new("..").join(rel))
+                .map(|rel| up.join(rel))
                 .unwrap_or_else(|| c.rel.strip_prefix(dir_rel.parent().unwrap_or(Path::new(""))).unwrap_or(&c.rel).to_path_buf());
             m3u.push_str(&format!("#EXTINF:{},{}\n{}\n", c.track.duration.as_secs(), c.label, target.to_string_lossy().replace('\\', "/")));
         }
@@ -144,6 +165,9 @@ pub fn export(
                 if !keep.contains(&n) && fs::remove_file(e.path()).is_ok() {
                     r.removed += 1;
                 }
+            }
+            if keep.is_empty() {
+                let _ = fs::remove_dir(&dir);
             }
         }
         // The m3u8 sits beside the folder: `_Playlists/Road Trip.m3u8`.
@@ -187,14 +211,14 @@ mod tests {
             .collect();
         let mut pl = Playlist { name: "Road: Trip".into(), tracks: vec![tracks[1].path.clone(), tracks[0].path.clone()] };
         let dest = root.join("card");
-        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, ..Default::default() }, &[], |_, _| {});
+        let r = export(&[pl.clone()], &tracks, &HashMap::new(), &dest, Path::new("_Playlists"), Rules { unplayable: crate::card::Unplayable::Leave, ..Default::default() }, &[], |_, _| {});
         assert_eq!((r.copied, r.errors.len(), r.written.len()), (2, 0, 3));
         let dir = dest.join("_Playlists/Road - Trip");
         assert!(dir.join("01 - X - B.mp3").exists() && dir.join("02 - X - A.mp3").exists());
         assert!(dest.join("_Playlists/Road - Trip.m3u8").exists());
 
         pl.tracks.pop();
-        let r = export(&[pl], &tracks, &HashMap::new(), &dest, "_Playlists", Rules { unplayable: crate::card::Unplayable::Leave, ..Default::default() }, &[], |_, _| {});
+        let r = export(&[pl], &tracks, &HashMap::new(), &dest, Path::new("_Playlists"), Rules { unplayable: crate::card::Unplayable::Leave, ..Default::default() }, &[], |_, _| {});
         assert_eq!((r.unchanged, r.removed), (1, 1));
         fs::remove_dir_all(root).unwrap();
     }

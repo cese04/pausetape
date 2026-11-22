@@ -114,7 +114,7 @@ fn sample(folder: &Path, s: Sample, n: usize, tracks: &[Track]) -> Result<()> {
         std::fs::copy(&t.path, &path).with_context(|| format!("copying {}", t.path.display()))?;
         return Ok(());
     }
-    let Some(ff) = crate::audio::ffmpeg() else { bail!("needs ffmpeg (brew install ffmpeg)") };
+    let Some(ff) = crate::audio::ffmpeg() else { bail!("needs ffmpeg ({})", crate::platform::FFMPEG_INSTALL) };
     let rate = match s {
         Sample::Flac96 => 96_000,
         Sample::Flac192 => 192_000,

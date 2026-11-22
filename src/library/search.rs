@@ -2,6 +2,8 @@
 //! narrow albums by what they are ("format:m4a", "quality:lossy", "card:on", "cover:no",
 //! "year:1979..1985", "edited:yes", "damaged:yes"); a leading "-" turns a term around ("-format:mp3").
 
+use deunicode::deunicode_char;
+
 use super::Track;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -16,8 +18,10 @@ pub enum Filter {
     Year(Option<u16>, Option<u16>),
     /// Has songs with corrections not yet in the files.
     Edited(bool),
-    /// Has damaged files (`Track::damaged`).
+    /// Has damaged files (`Track::harmed`).
     Damaged(bool),
+    /// Has this genre (by `genres::key`); "" for albums with none.
+    Genre(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -40,11 +44,13 @@ pub enum OnCard {
     Changing,
     /// Chosen, while another copy has its songs in higher quality.
     Better,
+    /// On the card, or chosen for it: what the card view lists (including what Sync takes off).
+    Listed,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Query {
-    /// Lowercased; each must appear in the artist, the album or a song title.
+    /// Folded (`fold`); each must appear in the artist, the album or a song title.
     pub words: Vec<String>,
     /// (filter, wanted): false for a "-" term.
     pub filters: Vec<(Filter, bool)>,
@@ -69,15 +75,17 @@ pub struct AlbumFacts<'a> {
     pub tracks: Vec<&'a Track>,
     pub card: CardFacts,
     pub cover: bool,
+    /// Its genres, by `genres::key` (its artist's, when it has none of its own).
+    pub genres: Vec<String>,
 }
 
 pub const HELP: &str = "Words find artists, albums and song titles. Narrow by what albums are:\n\
     format:flac   format:m4a   format:alac\n\
     quality:lossless   quality:lossy   quality:hires\n\
-    card:on   card:off   card:sync (changes at the next Sync)   card:better (a better copy exists)\n\
+    card:on   card:off   card:sync (changes at the next Sync)   card:all (on it, going on or off)   card:better (a better copy exists)\n\
     cover:no   cover:yes\n\
     year:1979   year:1979..1985   year:..1990\n\
-    edited:yes   damaged:yes\n\
+    edited:yes   damaged:yes   genre:trip-hop   genre:none\n\
     A \"-\" in front turns a term around: -format:mp3";
 
 impl Query {
@@ -89,7 +97,7 @@ impl Query {
                 _ => (true, term),
             };
             let Some((field, value)) = body.split_once(':') else {
-                q.words.push(term.to_lowercase());
+                q.words.push(fold(term));
                 continue;
             };
             let value = value.to_lowercase();
@@ -111,11 +119,13 @@ impl Query {
                     "off" | "no" => Some(Filter::Card(OnCard::Off)),
                     "sync" | "changing" | "pending" => Some(Filter::Card(OnCard::Changing)),
                     "better" => Some(Filter::Card(OnCard::Better)),
+                    "all" | "any" => Some(Filter::Card(OnCard::Listed)),
                     _ => None,
                 },
                 "cover" => yes_no(&value).map(Filter::Cover),
                 "edited" => yes_no(&value).map(Filter::Edited),
                 "damaged" => yes_no(&value).map(Filter::Damaged),
+                "genre" | "g" if !value.is_empty() => Some(Filter::Genre(if value == "none" { String::new() } else { super::genres::key(&value) })),
                 "year" | "y" => year_range(&value).map(|(a, b)| Filter::Year(a, b)),
                 _ => None,
             };
@@ -138,13 +148,13 @@ impl Query {
 
     /// Every word is in the artist or album name: then all its songs are shown.
     pub fn names_match(&self, artist: &str, album: &str) -> bool {
-        let (artist, album) = (artist.to_lowercase(), album.to_lowercase());
+        let (artist, album) = (fold(artist), fold(album));
         self.words.iter().all(|w| artist.contains(w) || album.contains(w))
     }
 
     /// Every word is in the artist, the album or this song's title.
     pub fn song_matches(&self, artist: &str, album: &str, title: &str) -> bool {
-        let (artist, album, title) = (artist.to_lowercase(), album.to_lowercase(), title.to_lowercase());
+        let (artist, album, title) = (fold(artist), fold(album), fold(title));
         self.words.iter().all(|w| artist.contains(w) || album.contains(w) || title.contains(w))
     }
 
@@ -169,12 +179,31 @@ impl Filter {
             Filter::Card(OnCard::Off) => !a.card.on && !a.card.chosen,
             Filter::Card(OnCard::Changing) => a.card.changing,
             Filter::Card(OnCard::Better) => a.card.better,
+            Filter::Card(OnCard::Listed) => a.card.on || a.card.chosen,
             Filter::Cover(has) => a.cover == *has,
             Filter::Year(from, to) => a.year.is_some_and(|y| from.is_none_or(|f| y >= f) && to.is_none_or(|t| y <= t)),
             Filter::Edited(e) => a.tracks.iter().any(|t| t.dirty) == *e,
-            Filter::Damaged(d) => a.tracks.iter().any(|t| t.damaged) == *d,
+            Filter::Damaged(d) => a.tracks.iter().any(|t| t.harmed()) == *d,
+            Filter::Genre(k) if k.is_empty() => a.genres.is_empty(),
+            Filter::Genre(k) => a.genres.contains(k),
         }
     }
+}
+
+/// Lowercased, with Latin letters' accents dropped and curly quotes made straight, so that
+/// "bjork" finds "Björk", "strasse" "Straße" and "don't" "Don’t". Other scripts are kept as they
+/// are: spelt in Latin letters they'd match too much ("lin" in "林檎", read "Lin Qin").
+/// The card tab's filter folds the same way.
+pub fn fold(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        let latin = matches!(c, '\u{c0}'..='\u{24f}' | '\u{1e00}'..='\u{1eff}' | '\u{2010}'..='\u{201f}');
+        match deunicode_char(c).filter(|_| latin) {
+            Some(plain) => out.push_str(plain),
+            None => out.push(c),
+        }
+    }
+    out.to_lowercase()
 }
 
 /// "1979" → 1979..=1979, "1979..1985", "..1990", "2000..".
@@ -216,7 +245,7 @@ mod tests {
     fn matches_albums_by_what_they_are() {
         let song = |ext: &str, title: &str| Track { ext: ext.into(), title: Some(title.into()), ..Default::default() };
         let (a, b) = (song("flac", "Disorder"), song("m4a", "Candidate"));
-        let album = |tracks| AlbumFacts { artist: "Joy Division", album: "Unknown Pleasures", year: Some(1979), tracks, card: CardFacts::default(), cover: false };
+        let album = |tracks| AlbumFacts { artist: "Joy Division", album: "Unknown Pleasures", year: Some(1979), tracks, card: CardFacts::default(), cover: false, genres: vec!["postpunk".into()] };
         let mixed = album(vec![&a, &b]);
         let flac_only = album(vec![&a]);
         let m = |q: &str, al: &AlbumFacts| Query::parse(q).album_matches(al);
@@ -225,8 +254,20 @@ mod tests {
         assert!(m("quality:lossless", &flac_only) && !m("quality:lossless", &mixed) && m("quality:lossy", &mixed));
         assert!(m("year:1979", &mixed) && m("year:1970..1980", &mixed) && !m("year:1980..", &mixed));
         assert!(m("cover:no card:off", &mixed) && !m("cover:yes", &mixed) && !m("card:on", &mixed));
+        assert!(!m("card:all", &mixed), "neither on the card nor chosen");
         assert!(!m("edited:yes", &mixed));
+        assert!(m("genre:Post-Punk", &mixed) && m("genre:postpunk", &mixed), "any spelling of the genre");
+        assert!(!m("genre:none", &mixed) && !m("genre:rock", &mixed));
         let q = Query::parse("joy candidate");
         assert!(!q.names_match("Joy Division", "Unknown Pleasures") && q.song_matches("Joy Division", "Unknown Pleasures", "Candidate"));
+    }
+
+    #[test]
+    fn ignores_accents_and_curly_quotes() {
+        let names = |q: &str, artist: &str| Query::parse(q).names_match(artist, "");
+        assert!(names("bjork", "Björk") && names("björk", "Bjork") && names("BJÖRK", "björk"));
+        assert!(names("sigur ros", "Sigur Rós") && names("motorhead", "Motörhead") && names("strasse", "Straße"));
+        assert!(Query::parse("don't").song_matches("Oasis", "", "Don’t Look Back in Anger"));
+        assert!(names("кино", "Кино") && names("林檎", "椎名林檎") && !names("lin", "椎名林檎"));
     }
 }

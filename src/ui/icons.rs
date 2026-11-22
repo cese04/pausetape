@@ -26,6 +26,8 @@ pub enum Icon {
     Sync,
     Compare,
     Back,
+    /// What a value becomes (MusicBrainz suggestions).
+    Forward,
     Close,
     Info,
     Up,
@@ -34,6 +36,8 @@ pub enum Icon {
     Check,
     /// A picture: covers.
     Image,
+    /// A triangle over a bar: eject the card.
+    Eject,
     // The artist panel
     /// A shopping bag: where to buy.
     Buy,
@@ -153,6 +157,10 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             p.add(line(&[(0.88, 0.5), (0.14, 0.5)]));
             p.add(line(&[(0.4, 0.24), (0.14, 0.5), (0.4, 0.76)]));
         }
+        Icon::Forward => {
+            p.add(line(&[(0.12, 0.5), (0.86, 0.5)]));
+            p.add(line(&[(0.6, 0.24), (0.86, 0.5), (0.6, 0.76)]));
+        }
         Icon::Close => {
             p.add(line(&[(0.22, 0.22), (0.78, 0.78)]));
             p.add(line(&[(0.78, 0.22), (0.22, 0.78)]));
@@ -167,6 +175,10 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
         }
         Icon::Down => {
             p.add(line(&[(0.22, 0.36), (0.5, 0.66), (0.78, 0.36)]));
+        }
+        Icon::Eject => {
+            p.add(closed(&[(0.2, 0.6), (0.5, 0.24), (0.8, 0.6)]));
+            p.add(line(&[(0.2, 0.78), (0.8, 0.78)]));
         }
         Icon::Copy => {
             p.add(closed(&[(0.3, 0.3), (0.88, 0.3), (0.88, 0.88), (0.3, 0.88)]));

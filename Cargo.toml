@@ -1,6 +1,6 @@
 [package]
 name = "pausetape"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Organise a music library for the Snowsky Echo Mini (RECHO firmware), and play it."
 license = "MIT"
@@ -13,7 +13,8 @@ deunicode = "1.6.2"
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui = "0.37"
 encoding_rs = "0.8"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+# Covers: JPEG and PNG, and the BMP, GIF and WebP some taggers embed.
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "bmp", "gif", "webp"] }
 libc = "0.2.191"
 lofty = "0.25.5"
 rfd = "0.17.2"
@@ -28,8 +29,9 @@ ureq = { version = "3.5.0", features = ["json"] }
 walkdir = "2.5.0"
 
 [target.'cfg(windows)'.dependencies]
-# Listing drive letters, their labels, filesystems and free space.
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+# Listing drive letters, their labels, filesystems and free space; whether the system asks for
+# less motion.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_IO", "Win32_System_Ioctl", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 lto = "thin"
@@ -39,3 +41,12 @@ strip = true
 # Symphonia (FLAC/MP3 decoding) is painfully slow unoptimised; keep our own crate fast to rebuild.
 [profile.dev.package."*"]
 opt-level = 2
+
+# Every `unsafe` block says why it's sound (CI fails otherwise).
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
+[build-dependencies]
+# build.rs: the app icon for the window, and built into the Windows .exe. Not shipped.
+image ={ version = "0.25.10", default-features = false, features = ["png", "ico"] }
+winresource = "0.1.34"

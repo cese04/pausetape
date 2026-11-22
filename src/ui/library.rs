@@ -16,7 +16,7 @@ use super::ROW_H;
 use crate::app::{App, Lookup};
 use crate::card::Player;
 use crate::library::Track;
-use super::layout::{ICON, S1, S2, S4, S5, S6, row, row_wrapped};
+use super::layout::{ICON, ROW, S1, S2, S4, S6, row, row_wrapped, font, list_rows};
 
 /// Longest folder path shown before it's shortened with "…" in the middle.
 const FOLDER_CHARS: usize = 60;
@@ -28,6 +28,8 @@ pub(super) enum Mark {
     On,
     /// Chosen; the next Sync copies it (for an album, some of it may be there already).
     Adding,
+    /// On the card, copied there by hand: taking the card over moves it into place.
+    ByHand,
     /// On the card; the next Sync takes it off.
     Removing,
 }
@@ -51,6 +53,10 @@ impl Mark {
             Mark::Adding => {
                 p.circle_stroke(at, r, Stroke::new(1.2, ink.text));
             }
+            Mark::ByHand => {
+                p.circle_stroke(at, r, Stroke::new(1.2, ink.text));
+                p.circle_filled(at, r * 0.45, ink.text);
+            }
             Mark::Removing => {
                 p.circle_stroke(at, r, Stroke::new(1.2, ink.warn));
                 p.hline(at.x - r - 1.5..=at.x + r + 1.5, at.y, Stroke::new(1.2, ink.warn));
@@ -59,23 +65,29 @@ impl Mark {
     }
 }
 
+/// Where an album's track numbers end: clear of the card mark at the left even for "2-10", and
+/// the same for every song of the album, so their titles line up.
+fn number_column(ui: &Ui, numbers: &[String]) -> f32 {
+    let widest = numbers.iter().map(|n| ui.painter().layout_no_wrap(n.clone(), FontId::proportional(font::UI), egui::Color32::PLACEHOLDER).size().x).fold(0.0, f32::max);
+    (14.0 + widest).max(30.0)
+}
+
 /// A track row painted directly so columns line up like a table without any grid lines.
+/// `number`: the track number, and where the album's numbers end (`number_column`).
 /// `repeat`: an extra copy of a song the album already has. `selected`: chosen for editing tags.
 #[allow(clippy::too_many_arguments)]
-fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
+fn track_row(ui: &mut Ui, t: &Track, device: Player, (number, number_end): (&str, f32), show_artist: bool, playing: bool, can_add: bool, mark: Option<Mark>, repeat: bool, selected: bool) -> (egui::Response, bool) {
     let ink = ink(ui);
     let width = ui.available_width();
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click_and_drag());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, t.display_title()));
+    widgets::focus_ring(ui, &resp, rect, 4.0);
+    widgets::row_background(ui, &resp, rect, selected);
     let p = ui.painter_at(rect);
-    if selected {
-        p.rect_filled(rect, 4.0, ink.chip);
-    } else if resp.hovered() {
-        p.rect_filled(rect, 0.0, ink.hover);
-    }
     let y = rect.center().y;
-    let font = FontId::proportional(14.5);
+    let font = FontId::proportional(font::UI);
     let num_color = if playing { ink.accent } else { ink.muted };
-    p.text(egui::pos2(rect.left() + 30.0, y), Align2::RIGHT_CENTER, if playing { "▸" } else { number }, font.clone(), num_color);
+    p.text(egui::pos2(rect.left() + number_end, y), Align2::RIGHT_CENTER, if playing { "▸" } else { number }, font.clone(), num_color);
     if let Some(m) = mark {
         m.paint(&p, egui::pos2(rect.left() + 6.0, y), 2.4, &ink);
     }
@@ -84,30 +96,33 @@ fn track_row(ui: &mut Ui, t: &Track, device: Player, number: &str, show_artist: 
     if show_artist && let Some(a) = &t.artist {
         title = format!("{title}  ·  {a}");
     }
-    let right_cols = if device.plays(t) && !repeat { 130.0 } else { 250.0 };
-    let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - 44.0 - right_cols);
-    p.galley(egui::pos2(rect.left() + 44.0, y - galley.size().y / 2.0), galley, ink.text);
+    let right_cols = if device.plays(t) && !t.harmed() && !repeat { 130.0 } else { 250.0 };
+    let title_x = number_end + 14.0;
+    let galley = truncated(ui, title, font.clone(), if t.plays_here() { ink.text } else { ink.muted }, width - title_x - right_cols);
+    p.galley(egui::pos2(rect.left() + title_x, y - galley.size().y / 2.0), galley, ink.text);
 
     let mut x = rect.right() - 28.0;
-    p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, text::duration(t.duration), font.clone(), ink.muted);
+    p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, text::duration(t.duration), widgets::data(), ink.muted);
     x -= 56.0;
     if repeat {
-        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(12.0), ink.warn);
-    } else if !device.plays(t) {
+        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "stored twice", FontId::proportional(font::META), ink.warn);
+    } else if t.harmed() || !device.plays(t) {
         // A small outlined badge: the format, and what it means for the player.
         let label = text::format_badge(t, device);
-        let g = ui.painter().layout_no_wrap(label, FontId::proportional(11.5), ink.warn);
+        let g = ui.painter().layout_no_wrap(label, FontId::proportional(font::CAPS), ink.warn);
         let badge = egui::Rect::from_min_size(egui::pos2(x - g.size().x - 8.0, y - g.size().y / 2.0 - 2.0), g.size() + vec2(8.0, 4.0));
         p.rect_stroke(badge, 3.0, Stroke::new(0.8, ink.warn), egui::StrokeKind::Inside);
         p.galley(badge.min + vec2(4.0, 2.0), g, ink.warn);
     } else if t.dirty {
-        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "edited", FontId::proportional(12.0), ink.muted);
+        p.text(egui::pos2(x, y), Align2::RIGHT_CENTER, "edited", FontId::proportional(font::META), ink.muted);
     }
     let mut added = false;
     if can_add {
         let plus = egui::Rect::from_center_size(egui::pos2(rect.right() - 8.0, y), vec2(16.0, ROW_H));
         let r = ui.interact(plus, resp.id.with("add"), Sense::click()).on_hover_text("add to playlist");
-        if resp.hovered() || r.hovered() {
+        widgets::name(ui, &r, egui::Role::Button, "add to playlist");
+        widgets::focus_ring(ui, &r, plus, 2.0);
+        if resp.hovered() || r.hovered() || r.has_focus() {
             p.text(plus.center(), Align2::CENTER_CENTER, "+", font, if r.hovered() { ink.text } else { ink.muted });
         }
         added = r.clicked();
@@ -129,142 +144,110 @@ fn album_minutes(tracks: &[Track], idxs: &[usize]) -> String {
 const RAIL_W: f32 = S4;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    // The details of what's selected, at the right edge, where there's room for them; the
+    // library in the rest.
+    app.details_beside = super::details::fits(ui.available_width()) && !app.tracks.is_empty();
+    if app.details_beside {
+        let mut actions = Vec::new();
+        let frame = egui::Frame::new().inner_margin(egui::Margin { left: S2 as i8, ..Default::default() });
+        egui::Panel::right("details").exact_size(super::details::WIDTH + S2).resizable(false).show_separator_line(false).frame(frame).show(ui, |ui| super::details::show(app, ui, &mut actions));
+        apply(app, actions);
+    }
+    egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| page(app, ui));
+}
+
+fn page(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let device = app.player();
-    // The music folder and what's in it.
-    row_wrapped(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
-        icons::paint(ui.painter(), rect, Icon::Folder, ink.text);
-        let name = app.saved.source.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "not chosen".into());
-        ui.label(RichText::new(name).size(18.0).color(ink.text)).on_hover_text(app.saved.source.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
-        let albums: usize = app.index.artists.iter().map(|a| a.albums.len()).sum();
-        let mut facts = format!("{} · {} · {}", plural(app.tracks.len(), "song"), plural(app.index.artists.len(), "artist"), plural(albums, "album"));
-        let dirty = app.dirty_count();
-        if dirty > 0 {
-            facts.push_str(&format!(" · {} with corrected tags", plural(dirty, "song")));
-        }
-        muted(ui, facts);
-        if widgets::icon_link(ui, Icon::Folder, "change folder").clicked() {
-            app.picker = Some(crate::ui::folders::Picker::Source(crate::ui::navigator::Navigator::new(app.saved.source.as_deref())));
-        }
-        let since = app.library_read.map(|t| format!(" (read {})", text::ago(t))).unwrap_or_default();
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Rescan, "rescan").on_hover_text(format!("pick up files added, changed or removed by other programs since the folder was last read{since}")).clicked() {
-            app.scan();
-        }
-        if app.source_missing {
-            ui.label(RichText::new("can't reach this folder: is its drive connected? It's read again once it's back").color(ink.warn));
-        }
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Add, "add music").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
-            app.picker = Some(crate::ui::folders::Picker::AddFrom(crate::ui::navigator::Navigator::new(crate::ui::folders::dirs_downloads().as_deref())));
-        }
-    });
-    ui.add_space(S1);
-    // Searching, and how the library is shown.
-    row_wrapped(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), Sense::hover());
-        icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        widgets::search_field(ui, &mut app.filter, "search, or try format:flac", 260.0).on_hover_text(crate::library::search::HELP);
-        filters_menu(app, ui);
-        let typed = app.filter.trim().to_string();
-        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "save").on_hover_text("keep this search for later, beside the box").clicked() {
-            app.saved.searches.push(typed);
-        }
-        saved_searches(app, ui);
-        ui.add_space(S1);
-        if widgets::tab(ui, "artists", !app.saved.album_table).on_hover_text("albums by artist, with their songs").clicked() {
-            app.saved.album_table = false;
-        }
-        if widgets::tab(ui, "albums", app.saved.album_table).on_hover_text("a table of albums: sort by any column, select several").clicked() {
-            app.saved.album_table = true;
-        }
-        ui.add_space(S1);
-        if !app.saved.album_table && widgets::icon_link(ui, Icon::Collapse, "collapse all").clicked() {
-            app.expanded.clear();
-        }
-        let dirty = app.dirty_in_files();
-        if dirty > 0 && widgets::icon_link(ui, Icon::Check, format!("write {dirty} corrected tags to source files")).clicked() {
-            app.save_tags_to_source();
-        }
-    });
-    // What's worth a look: each chip shows only that part of the library.
-    row_wrapped(ui, |ui| {
-        let spare = app.index.superseded();
-        if !spare.is_empty() {
-            let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
-            let copies = if spare.len() == 1 { "album copy" } else { "album copies" };
-            let hint = "Copies whose songs are all in another copy of the album, in the same or higher quality. Click to show only them.";
-            if widgets::chip(ui, Icon::Copy, format!("{} {copies} covered by another ({})", spare.len(), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
-                app.duplicates_only = true;
+    // The page's own right edge, before anything is laid out: something too wide for the page
+    // widens what egui gives out after it, which must never carry the A–Z rail (or the list)
+    // over the details beside the page. What's too wide is cut at the edge rather than drawn
+    // over them.
+    let right_edge = ui.max_rect().right();
+    ui.shrink_clip_rect(ui.max_rect());
+    // What's shown, in words, and what can be done with all of it. (The folder, the views and
+    // what's worth a look are in the sidebar; the search box is in the top bar.) The title wraps
+    // in the room the commands leave it; where that's too little, they go on a line of their own.
+    let title = if app.duplicates_only {
+        "Duplicates".to_string()
+    } else if app.look_alikes_only {
+        "Artists that look alike".to_string()
+    } else {
+        let filter = app.filter.trim().to_string();
+        match filter.as_str() {
+            "" if app.saved.album_table => "Albums".to_string(),
+            "" => "Artists".to_string(),
+            "cover:no" => "Without a cover".to_string(),
+            "damaged:yes" => "Damaged files".to_string(),
+            "edited:yes" => "Corrected, not in the files".to_string(),
+            "genre:none" => "No genre".to_string(),
+            f if f.starts_with("genre:") && !f.contains(' ') => {
+                let k = crate::library::genres::key(&f["genre:".len()..]);
+                let name = app.genre_index().genres.iter().find(|g| g.key == k).map(|g| g.name.clone());
+                name.unwrap_or_else(|| f["genre:".len()..].to_string())
             }
+            f => format!("Searching “{f}”"),
         }
-        let repeats = app.index.repeats();
-        if !repeats.is_empty() {
-            let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
-            let hint = "Songs kept twice in the same album, like the copies a backup tool leaves. Click to show only their albums.";
-            if widgets::chip(ui, Icon::Copy, format!("{} stored twice ({})", plural(repeats.len(), "song"), text::bytes(bytes)), ink.text).on_hover_text(hint).clicked() {
-                app.duplicates_only = true;
+    };
+    let in_genre = app.filter.trim().starts_with("genre:") && !app.filter.trim().contains(' ');
+    let dirty = app.dirty_in_files();
+    let write = (dirty > 0).then(|| format!("Write {dirty} corrected tags to source files"));
+    let collapse = !app.saved.album_table;
+    let gap = ui.spacing().item_spacing.x;
+    let commands_w: f32 = write.iter().map(String::as_str).chain(collapse.then_some("Collapse all")).map(|w| widgets::icon_link_width(ui, w) + gap).sum();
+    let back_w = if in_genre { widgets::icon_link_width(ui, "All genres") + gap } else { 0.0 };
+    let title_w = widgets::text_width(ui, &title, font::HEADING);
+    let beside = ui.available_width() - back_w - commands_w - S2 >= title_w.min(360.0);
+    let commands = |ui: &mut Ui, app: &mut App, layout: Layout| {
+        ui.with_layout(layout, |ui| {
+            let covers = app.tracks.iter().filter(|t| t.dirty && t.cue.is_none() && t.cover.is_some()).count();
+            let hint = if covers > 0 {
+                format!("Writes the corrections into the music files. {covers} of them get a cover, which makes the file's tags bigger than the room kept for them, so the whole file is written again: on a USB drive, count on about a minute per gigabyte. It can be stopped and carried on later.")
+            } else {
+                "Writes the corrections into the music files.".to_string()
+            };
+            if let Some(w) = &write
+                && widgets::icon_link(ui, Icon::Check, w).on_hover_text(hint).clicked()
+            {
+                app.save_tags_to_source();
             }
-        }
-        // Files a failing card or disk left blank: nothing here or on the card can use them.
-        let damaged: std::collections::HashSet<&std::path::Path> = app.tracks.iter().filter(|t| t.damaged).map(|t| t.path.as_path()).collect();
-        if !damaged.is_empty()
-            && widgets::chip(ui, Icon::Remove, format!("{} damaged", plural(damaged.len(), "file")), ink.warn)
-                .on_hover_text("These files start blank where their audio should be, as files a failing card or disk lost do. They can't be played or written to the card; replace them from a backup or the original. Click to show their albums.")
-                .clicked()
-        {
-            app.filter = "damaged:yes".into();
-            app.duplicates_only = false;
-        }
-        let coverless = app.albums_without_cover().len();
-        if coverless > 0
-            && widgets::chip(ui, Icon::Image, format!("{} without a cover", plural(coverless, "album")), ink.text)
-                .on_hover_text(covers_hint(device, "Click to show only these albums, and find covers for them."))
-                .clicked()
-        {
-            app.filter = "cover:no".into();
-            app.duplicates_only = false;
-        }
-        if !app.index.suggestions.is_empty()
-            && widgets::chip(ui, Icon::Artists, format!("{} artists that look alike", app.index.suggestions.len()), ink.text)
-                .on_hover_text("Artists whose names look alike (“Jimi Hendrix” / “Jimmy Hendrix”). Click to show only them, and say which are the same.")
-                .clicked()
-        {
-            app.look_alikes_only = true;
-            app.duplicates_only = false;
-        }
-    });
-    if let Some((n, formats)) = crate::library::unplayable_summary(&app.tracks, |t| device.plays(t)) {
-        ui.add_space(S1);
-        let collapsed = app.saved.format_note_collapsed;
-        theme::warning_frame(ui).show(ui, |ui| {
-            ui.set_max_width(ui.available_width() - RAIL_W - S5);
-            row_wrapped(ui, |ui| {
-                ui.label(RichText::new(format!("{} in formats {} can't play: {formats}", plural(n, "song"), device.short())).color(ink.warn));
-                if link(ui, if collapsed { "why?" } else { "hide" }).clicked() {
-                    app.saved.format_note_collapsed = !collapsed;
-                }
-            });
-            if !collapsed {
-                let here = if crate::audio::ffmpeg().is_some() {
-                    "Here, AAC, ALAC, AIFF and Ogg play directly; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA by converting with ffmpeg first, in stereo; Dolby AC-4 has no decoder yet."
-                } else {
-                    "AAC, ALAC, AIFF and Ogg still play here; Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg (brew install ffmpeg)."
-                };
-                muted(
-                    ui,
-                    format!(
-                        "{} {here} On the card they're converted (lossless to FLAC, the rest to MP3 320) unless you choose otherwise in the card tab, where the player can be changed too.",
-                        device.plays_text()
-                    ),
-                );
+            if collapse && widgets::icon_link(ui, Icon::Collapse, "Collapse all").clicked() {
+                app.expanded.clear();
             }
         });
+    };
+    row_wrapped(ui, |ui| {
+        if in_genre && widgets::icon_link(ui, Icon::Back, "All genres").clicked() {
+            app.tab = crate::app::Tab::Genres;
+        }
+        let left = ui.available_size_before_wrap().x;
+        let room = if beside { left - commands_w - S2 } else { left };
+        ui.allocate_ui_with_layout(vec2(room, ROW), Layout::left_to_right(Align::Center).with_main_wrap(true), |ui| {
+            ui.label(RichText::new(title).size(font::HEADING).color(ink.text));
+            if app.source_missing {
+                ui.label(RichText::new("can't reach the music folder: is its drive connected? It's read again once it's back").color(ink.warn));
+            }
+        });
+        if beside {
+            commands(ui, app, Layout::right_to_left(Align::Min));
+        }
+    });
+    if !beside && commands_w > 0.0 {
+        let one_row = commands_w <= ui.available_width();
+        commands(ui, app, if one_row { Layout::right_to_left(Align::Center) } else { Layout::top_down(Align::Max) });
     }
+    // What the last tag write (or card operation) couldn't do.
+    if app.problems.is_some() {
+        ui.add_space(S1);
+        super::card::problems(app, ui);
+    }
+    // Songs the card's player can't play are said in their rows (a badge) and dealt with in the
+    // card tab, where converting them is chosen.
     ui.add_space(S2);
     if app.tracks.is_empty() {
         // An unreachable folder is said in red above.
         if !app.source_missing {
-            muted(ui, "Choose the folder that holds your music in the folders tab. It can be as messy as it likes; nothing in it changes unless you ask.");
+            muted(ui, "Choose the folder that holds your music: the menu at the top of the sidebar, or Settings › Music folder. It can be as messy as it likes; nothing in it changes unless you ask.");
         }
         return;
     }
@@ -274,8 +257,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
     }
     let mut actions = Vec::new();
-    if !app.selected.is_empty() {
+    // One song selected is only a highlight (a click selects); from two, a bar says what to do
+    // with them. Esc clears either.
+    if app.selected.len() > 1 {
         super::tag_editor::selection_bar(app, ui, &mut actions);
+    } else if !app.selected.is_empty() && app.tag_edit.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        actions.push(Action::ClearSelection);
     }
     // Albums (by base id) where one copy covers another, or with songs stored twice, for the
     // duplicates view.
@@ -302,7 +289,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         theme::panel_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             row_wrapped(ui, |ui| {
-                if widgets::button_with(ui, Icon::Back, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                if widgets::button_with(ui, Icon::Back, "Back to the whole library").on_hover_text("or press Esc").clicked() {
                     app.look_alikes_only = false;
                 }
                 ui.add_space(S1);
@@ -318,7 +305,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         theme::panel_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             row_wrapped(ui, |ui| {
-                if widgets::button_with(ui, Icon::Back, "back to the whole library").on_hover_text("or press Esc").clicked() {
+                if widgets::button_with(ui, Icon::Back, "Back to the whole library").on_hover_text("or press Esc").clicked() {
                     app.duplicates_only = false;
                 }
                 ui.add_space(S1);
@@ -329,7 +316,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.add_space(S1);
                 let bytes: u64 = spare.iter().flat_map(|&(a, b)| &app.index.artists[a].albums[b].tracks).map(|&i| app.tracks[i].size).sum();
                 let hint = "Each copy goes only while the copy that covers it is still there: its folder, or only its songs if the folder holds other music. You can put them back from the Trash.";
-                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("move all {} covered copies to the Trash ({})", spare.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("Move all {} covered copies to the Trash ({})", spare.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
                     actions.push(Action::TrashCopies(spare));
                 }
             }
@@ -338,7 +325,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.add_space(S1);
                 let bytes: u64 = repeats.iter().map(|&(c, _)| app.tracks[c].size).sum();
                 let hint = "Each extra copy is checked against the copy that stays first, and goes only if they're still the same file. You can put them back from the Trash.";
-                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
+                if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, format!("Move all {} extra copies to the Trash ({})", repeats.len(), text::bytes(bytes))).on_hover_text(hint).clicked() {
                     actions.push(Action::TrashRepeats(repeats));
                 }
             }
@@ -356,18 +343,23 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
     let current = app.current();
     let can_add = app.active_playlist.is_some();
+    let by_genre = query.filters.iter().any(|(f, wanted)| *wanted && matches!(f, crate::library::search::Filter::Genre(k) if !k.is_empty()));
     let mods = ui.input(|i| i.modifiers);
     let present: std::collections::BTreeSet<char> = app.index.artists.iter().map(|a| initial(&a.name)).collect();
     let jump = app.jump_to.take();
     let source_root = app.saved.source.clone().unwrap_or_default();
-    // The A–Z rail is a panel of its own at the right edge; the list fills the rest.
-    let mut rail_click = None;
-    let rail = egui::Frame::new().inner_margin(egui::Margin { left: S1 as i8, ..Default::default() });
-    egui::Panel::right("az rail").exact_size(RAIL_W).resizable(false).show_separator_line(false).frame(rail).show(ui, |ui| {
-        let height = ui.available_height();
-        rail_click = az_rail(ui, &present, height);
-    });
-    egui::CentralPanel::default().frame(egui::Frame::new()).show(ui, |ui| {
+    // Songs in the order they're shown, for the arrow keys; the one they last moved to.
+    let mut shown: Vec<usize> = Vec::new();
+    let scroll_to = app.scroll_to_song.take();
+    // The A–Z rail at the page's right edge (as it was before anything was laid out); the list
+    // fills the rest.
+    let (top, bottom, left) = (ui.cursor().top(), ui.max_rect().bottom(), ui.max_rect().left());
+    let rail_rect = egui::Rect::from_min_max(egui::pos2(right_edge - RAIL_W + S1, top), egui::pos2(right_edge, bottom));
+    let list_rect = egui::Rect::from_min_max(egui::pos2(left, top), egui::pos2(right_edge - RAIL_W, bottom));
+    let mut rail_ui = ui.new_child(egui::UiBuilder::new().max_rect(rail_rect));
+    let rail_click = az_rail(&mut rail_ui, &present, rail_rect.height());
+    ui.scope_builder(egui::UiBuilder::new().max_rect(list_rect), |ui| {
+        ui.shrink_clip_rect(list_rect);
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             let mut last_initial = None;
             for (ai, artist) in app.index.artists.iter().enumerate() {
@@ -390,7 +382,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 if last_initial != Some(letter) {
                     last_initial = Some(letter);
                     ui.add_space(S2);
-                    let r = ui.label(RichText::new(letter.to_string()).size(13.0).color(ink.muted).strong());
+                    let r = ui.label(RichText::new(letter.to_string()).size(font::UI).color(ink.muted).strong());
                     ui.painter().hline(r.rect.right() + 8.0..=ui.max_rect().right(), r.rect.center().y, Stroke::new(0.5, ink.faint));
                     if jump == Some(letter) {
                         r.scroll_to_me(Some(Align::TOP));
@@ -402,10 +394,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 let r = ui
                     .horizontal(|ui| {
                         let meta = format!("{} · {}", plural(artist.albums.len(), "album"), plural(n_tracks, "track"));
-                        let card_link = if whole { "take all off the card" } else { "send all to the card" };
-                        let name_w = ui.available_width() - widgets::text_width(ui, &meta, 15.5) - widgets::text_width(ui, card_link, 14.0) - 70.0;
-                        let name = RichText::new(&artist.name).size(20.0).color(ink.text);
+                        let card_link = if whole { "Take all off the card" } else { "Send all to the card" };
+                        let name_w = ui.available_width() - widgets::text_width(ui, &meta, font::BODY) - widgets::text_width(ui, card_link, font::UI) - 70.0;
+                        let name = RichText::new(&artist.name).size(font::HEADING).color(ink.text);
                         let r = widgets::fitted(ui, name, name_w, Sense::click()).on_hover_text(&artist.name);
+                        widgets::focus_ring(ui, &r, r.rect, 2.0);
+                        r.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Artist(ai), &mut actions, |_, _| {}));
                         muted(ui, meta);
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             let hint = if whole {
@@ -435,8 +429,45 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     let al = &artist.albums[bi];
                     let id = al.id(&app.index.clusters[artist.cluster].key);
                     ui.add_space(S1);
+                    // The album's commands, in the order they read: (icon, words, hint, what it does).
+                    let no_cover = app.lacks_cover(al);
+                    let chosen = app.write().custom.includes(ck, al, &artist.albums);
+                    let mut commands: Vec<(Icon, String, String, Option<Action>)> = vec![(Icon::Play, "Play".into(), String::new(), Some(Action::Play(al.tracks.clone(), 0)))];
+                    if no_cover && app.busy.is_none() {
+                        commands.push((Icon::Image, "Find cover".into(), covers_hint(device, "No cover in the songs. Looks in the album's folder, then on the Cover Art Archive."), Some(Action::FindCovers(vec![(ai, bi)]))));
+                    }
+                    commands.push((Icon::Search, "Look up".into(), "suggest tags from MusicBrainz".into(), Some(Action::LookupAlbum(ai, bi))));
+                    commands.push((Icon::Rename, "Edit tags".into(), format!("Album, artists, year, numbers and titles. To edit any songs together, {} them.", super::keys::COMMAND_CLICK), Some(Action::EditTags(al.tracks.clone()))));
+                    // A copy with all these songs in higher quality: offer it instead.
+                    if chosen
+                        && let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()).filter(|s| s.higher)
+                        && let Some(better) = artist.albums.iter().position(|o| o.base_id(ck) == al.base_id(ck) && o.edition.as_ref().is_some_and(|e| e.rank == s.rank))
+                    {
+                        let hint = format!("{} has all these songs in higher quality. It replaces this copy on the card at the next Sync.", s.label);
+                        commands.push((Icon::Copy, format!("Use the {} copy", s.format), hint, Some(Action::CardAlbum(ai, better, true))));
+                    }
+                    commands.push(if chosen {
+                        (Icon::Remove, "Take off the card".into(), "Takes it off the card at the next Sync.".into(), Some(Action::CardAlbum(ai, bi, false)))
+                    } else {
+                        (Icon::Add, "Send to the card".into(), "Copies it to the card at the next Sync. Of several editions, this one goes.".into(), Some(Action::CardAlbum(ai, bi, true)))
+                    });
+                    let commands_w: f32 = commands.iter().map(|(_, words, ..)| S1 + ICON + S1 + widgets::text_width(ui, words, font::UI) + S1 + ui.spacing().item_spacing.x).sum();
+                    let draw = |ui: &mut Ui, commands: &mut Vec<(Icon, String, String, Option<Action>)>, actions: &mut Vec<Action>, backwards: bool| {
+                        let order: Vec<usize> = if backwards { (0..commands.len()).rev().collect() } else { (0..commands.len()).collect() };
+                        for i in order {
+                            let (icon, words, hint, action) = &mut commands[i];
+                            let r = widgets::icon_link(ui, *icon, words.as_str());
+                            let r = if hint.is_empty() { r } else { r.on_hover_text(hint.as_str()) };
+                            if r.clicked()
+                                && let Some(a) = action.take()
+                            {
+                                actions.push(a);
+                            }
+                        }
+                    };
+                    let mut below = false;
                     row(ui, |ui| {
-                        ui.add_sized([44.0, 20.0], egui::Label::new(RichText::new(al.year.map(|y| y.to_string()).unwrap_or_default()).color(ink.muted)));
+                        ui.add_sized([44.0, 20.0], egui::Label::new(RichText::new(al.year.map(|y| y.to_string()).unwrap_or_default()).font(widgets::data()).color(ink.muted)));
                         let title = al.title.as_deref().unwrap_or("Loose tracks");
                         let mut meta = format!("{} · {}", plural(al.tracks.len(), "track"), album_minutes(&app.tracks, &al.tracks));
                         if let Some(e) = &al.edition {
@@ -449,63 +480,42 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             n if n == al.tracks.len() => format!("won't play on {}", device.short()),
                             n => format!("{n} won't play on {}", device.short()),
                         };
-                        // The title gets whatever the counts, warning and the album's commands leave.
-                        let no_cover = app.lacks_cover(al);
-                        let reserve = widgets::text_width(ui, &meta, 15.5) + widgets::text_width(ui, &off_text, 12.5) + widgets::text_width(ui, &status, 13.0) + 510.0 + if no_cover { 100.0 } else { 0.0 };
-                        let shown = RichText::new(title).italics().size(17.0);
-                        widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::hover()).on_hover_text(title);
+                        // The title gets whatever the counts, warning and the album's commands leave;
+                        // where the commands would crowd it (a narrow window), they go on a line below.
+                        let words = widgets::text_width(ui, &meta, font::BODY) + widgets::text_width(ui, &off_text, font::META) + widgets::text_width(ui, &status, font::UI) + 3.0 * S2 + 10.0;
+                        below = ui.available_width() < words + commands_w + 120.0;
+                        let reserve = words + if below { 0.0 } else { commands_w };
+                        let shown = RichText::new(title).family(super::theme::italic()).size(font::TITLE);
+                        let r = widgets::fitted(ui, shown, ui.available_width() - reserve, Sense::click()).on_hover_text(format!("{title}\nRight-click for what you can do with it."));
+                        widgets::focus_ring(ui, &r, r.rect, 2.0);
+                        r.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Album(ai, bi), &mut actions, |_, _| {}));
                         let r = ui.label(RichText::new(meta).color(ink.muted));
                         if let Some(e) = &al.edition {
-                            r.on_hover_text(format!("{}\nThe card gets one edition; choose which in the card tab.", e.label));
+                            r.on_hover_text(format!("{}\nThe card gets one edition; Send to the card chooses this one.", e.label));
                         }
                         if off > 0 {
-                            ui.label(RichText::new(off_text).size(12.5).color(ink.warn));
+                            ui.label(RichText::new(off_text).size(font::META).color(ink.warn));
                         }
                         if let Some(m) = mark {
                             let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                             m.paint(ui.painter(), rect.center(), 3.5, &ink);
-                            ui.label(RichText::new(&status).size(13.0).color(if m == Mark::Removing { ink.warn } else { ink.muted }));
+                            ui.label(RichText::new(&status).size(font::UI).color(if m == Mark::Removing { ink.warn } else { ink.muted }));
                         }
-                        let chosen = app.write().custom.includes(ck, al, &artist.albums);
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            let (text, hint) = if chosen {
-                                ("take off card", "Takes it off the card at the next Sync.")
-                            } else {
-                                ("send to card", "Copies it to the card at the next Sync. Of several editions, this one goes.")
-                            };
-                            if widgets::icon_link(ui, if chosen { Icon::Remove } else { Icon::Add }, text).on_hover_text(hint).clicked() {
-                                actions.push(Action::CardAlbum(ai, bi, !chosen));
-                            }
-                            // A copy with all these songs in higher quality: offer it instead.
-                            if chosen
-                                && let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()).filter(|s| s.higher)
-                                && let Some(better) = artist.albums.iter().position(|o| o.base_id(ck) == al.base_id(ck) && o.edition.as_ref().is_some_and(|e| e.rank == s.rank))
-                                && widgets::icon_link(ui, Icon::Copy, format!("use the {} copy", s.format))
-                                    .on_hover_text(format!("{} has all these songs in higher quality. It replaces this copy on the card at the next Sync.", s.label))
-                                    .clicked()
-                            {
-                                actions.push(Action::CardAlbum(ai, better, true));
-                            }
-                            if widgets::icon_link(ui, Icon::Rename, "edit tags")
-                                .on_hover_text("Album, artists, year, numbers and titles. To edit any songs together, ⌘-click them.")
-                                .clicked()
-                            {
-                                actions.push(Action::EditTags(al.tracks.clone()));
-                            }
-                            if widgets::icon_link(ui, Icon::Search, "look up").on_hover_text("suggest tags from MusicBrainz").clicked() {
-                                actions.push(Action::LookupAlbum(ai, bi));
-                            }
-                            if no_cover
-                                && app.busy.is_none()
-                                && widgets::icon_link(ui, Icon::Image, "find cover").on_hover_text(covers_hint(device, "No cover in the songs. Looks in the album's folder, then on the Cover Art Archive.")).clicked()
-                            {
-                                actions.push(Action::FindCovers(vec![(ai, bi)]));
-                            }
-                            if widgets::icon_link(ui, Icon::Play, "play").clicked() {
-                                actions.push(Action::Play(al.tracks.clone(), 0));
-                            }
-                        });
+                        // In a genre only by its artist's genres (no song of it names one): say so.
+                        if by_genre && app.album_genres(ai, bi).from_artist {
+                            ui.label(RichText::new("by the artist's genre").size(font::META).family(super::theme::italic()).color(ink.muted))
+                                .on_hover_text("No song of this album names a genre; its artist's, from MusicBrainz, put it here. Look it up to have its own suggested.");
+                        }
+                        if !below {
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| draw(ui, &mut commands, &mut actions, true));
+                        }
                     });
+                    if below {
+                        row_wrapped(ui, |ui| {
+                            ui.add_space(S6);
+                            draw(ui, &mut commands, &mut actions, false);
+                        });
+                    }
                     album_folders(ui, &app.tracks, &al.tracks, &source_root);
                     if let Some(s) = al.edition.as_ref().and_then(|e| e.superseded.as_ref()) {
                         superseded_note(ui, &app.tracks, &al.tracks, s, app.busy.is_none(), || actions.push(Action::TrashCopies(vec![(ai, bi)])));
@@ -522,51 +532,64 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                     let album_name = al.title.as_deref().unwrap_or("");
                     let every_song = query.names_match(&artist.name, album_name);
-                    for (pos, &ti) in al.tracks.iter().enumerate() {
-                        let t = &app.tracks[ti];
-                        if !every_song && !query.song_matches(&artist.name, album_name, &t.display_title()) {
-                            continue;
-                        }
-                        let num = match (t.track, al.multi_disc) {
-                            (Some(n), true) => format!("{}-{n}", t.disc.unwrap_or(1)),
-                            (Some(n), false) => n.to_string(),
-                            (None, _) => String::new(),
-                        };
-                        let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
-                        let selected = app.selected.contains(&ti);
-                        let (r, add) = track_row(ui, t, device, &num, al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
-                        if r.clicked() && mods.command {
-                            actions.push(Action::Select(ti));
-                        } else if r.clicked() && mods.shift {
-                            // A run from the last song clicked, if it's in this album.
-                            let from = app.select_anchor.and_then(|a| al.tracks.iter().position(|&x| x == a)).unwrap_or(pos);
-                            actions.push(Action::SelectRun(al.tracks[from.min(pos)..=from.max(pos)].to_vec()));
-                        } else if r.double_clicked() || r.clicked() {
-                            actions.push(Action::Play(al.tracks.clone(), pos));
-                        }
-                        r.context_menu(|ui| {
-                            let several = selected && app.selected.len() > 1;
-                            if several && widgets::icon_link(ui, Icon::Rename, format!("edit tags of the {} selected songs", app.selected.len())).clicked() {
-                                actions.push(Action::EditTags(app.selected.iter().copied().collect()));
-                                ui.close();
+                    let numbers: Vec<String> = al
+                        .tracks
+                        .iter()
+                        .map(|&ti| {
+                            let t = &app.tracks[ti];
+                            match (t.track, al.multi_disc) {
+                                (Some(n), true) => format!("{}-{n}", t.disc.unwrap_or(1)),
+                                (Some(n), false) => n.to_string(),
+                                (None, _) => String::new(),
                             }
-                            if widgets::icon_link(ui, Icon::Rename, "edit tags of this song").clicked() {
-                                actions.push(Action::EditTags(vec![ti]));
-                                ui.close();
+                        })
+                        .collect();
+                    let number_end = number_column(ui, &numbers);
+                    let compact = app.saved.compact;
+                    list_rows(ui, compact, |ui| {
+                        for (pos, &ti) in al.tracks.iter().enumerate() {
+                            let t = &app.tracks[ti];
+                            if !every_song && !query.song_matches(&artist.name, album_name, &t.display_title()) {
+                                continue;
                             }
-                            if widgets::icon_link(ui, Icon::Rename, "edit tags of the album").clicked() {
-                                actions.push(Action::EditTags(al.tracks.clone()));
-                                ui.close();
+                            let mark = Mark::of(app.card_state.on_card.contains(&ti), app.card_state.planned.contains(&ti));
+                            let selected = app.selected.contains(&ti);
+                            let (r, add) = track_row(ui, t, device, (&numbers[pos], number_end), al.various || al.title.is_none(), current == Some(ti), can_add, mark, al.is_repeat(ti), selected);
+                            shown.push(ti);
+                            if scroll_to == Some(ti) {
+                                r.scroll_to_me(None);
                             }
-                            if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, if selected { "unselect (⌘-click)" } else { "select (⌘-click)" }).clicked() {
+                            // Dragged onto a playlist: the selection it's in, or the song.
+                            super::drag::songs_from(&r, || if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] });
+                            // As in the album table and any file list: a click selects, a double click
+                            // plays (from this song to the album's end).
+                            if r.double_clicked() {
+                                actions.push(Action::Play(al.tracks.clone(), pos));
+                            } else if r.clicked() && mods.command {
                                 actions.push(Action::Select(ti));
-                                ui.close();
+                            } else if r.clicked() && mods.shift {
+                                // A run from the last song clicked, if it's in this album.
+                                let from = app.select_anchor.and_then(|a| al.tracks.iter().position(|&x| x == a)).unwrap_or(pos);
+                                actions.push(Action::SelectRun(al.tracks[from.min(pos)..=from.max(pos)].to_vec()));
+                            } else if r.clicked() {
+                                actions.push(Action::OnlySong(ti));
                             }
-                        });
-                        if add {
-                            actions.push(Action::Add(ti));
+                            r.context_menu(|ui| {
+                                // On a song in the selection, the menu is for the whole selection.
+                                let songs = if selected && app.selected.len() > 1 { app.selected.iter().copied().collect() } else { vec![ti] };
+                                super::menu::music(app, ui, super::menu::Of::Songs(songs), &mut actions, |ui, actions| {
+                                    ui.separator();
+                                    if widgets::icon_link(ui, if selected { Icon::Remove } else { Icon::Add }, format!("{} ({})", if selected { "Take out of the selection" } else { "Add to the selection" }, super::keys::COMMAND_CLICK)).clicked() {
+                                        actions.push(Action::Select(ti));
+                                        ui.close();
+                                    }
+                                });
+                            });
+                            if add {
+                                actions.push(Action::Add(ti));
+                            }
                         }
-                    }
+                    });
                 }
             }
         });
@@ -574,7 +597,50 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if let Some(c) = rail_click {
         app.jump_to = Some(c);
     }
+    song_keys(app, ui, &shown, &mut actions);
     apply(app, actions);
+}
+
+/// The keyboard in the library by artist: ↑/↓ move the selection through the songs shown (with
+/// Shift, extend it), Enter plays, ⌘A selects them all, ⌘I edits tags, ⌘D sends their albums
+/// to the card or takes them off.
+fn song_keys(app: &App, ui: &Ui, shown: &[usize], actions: &mut Vec<Action>) {
+    if shown.is_empty() || super::keys::taken(app, ui) {
+        return;
+    }
+    let navigation = super::keys::navigation_free(app, ui);
+    let at = app.select_anchor.and_then(|a| shown.iter().position(|&t| t == a));
+    for (key, step) in [(egui::Key::ArrowDown, 1isize), (egui::Key::ArrowUp, -1)] {
+        if let Some(extend) = super::keys::nav_key(ui, key).filter(|_| navigation) {
+            let next = match at {
+                Some(i) => (i as isize + step).clamp(0, shown.len() as isize - 1) as usize,
+                None if step > 0 => 0,
+                None => shown.len() - 1,
+            };
+            actions.push(Action::SongCursor(shown[next], extend));
+        }
+    }
+    if navigation && super::keys::nav_key(ui, egui::Key::Enter).is_some() && !app.selected.is_empty() {
+        let picked: Vec<usize> = shown.iter().copied().filter(|t| app.selected.contains(t)).collect();
+        if let [one] = picked[..] {
+            // One song plays on through its album, as a double click does.
+            if let Some(&(ai, bi)) = app.albums_of(&[one].into()).first() {
+                let al = &app.index.artists[ai].albums[bi];
+                actions.push(Action::Play(al.tracks.clone(), al.tracks.iter().position(|&t| t == one).unwrap_or(0)));
+            }
+        } else if !picked.is_empty() {
+            actions.push(Action::Play(picked, 0));
+        }
+    }
+    if super::keys::pressed(ui, &super::keys::SELECT_ALL) {
+        actions.push(Action::SelectRun(shown.to_vec()));
+    }
+    if !app.selected.is_empty() && super::keys::pressed(ui, &super::keys::EDIT_TAGS) {
+        actions.push(Action::EditTags(app.selected.iter().copied().collect()));
+    }
+    if !app.selected.is_empty() && super::keys::pressed(ui, &super::keys::CARD) {
+        actions.push(Action::ToggleCard(app.albums_of(&app.selected)));
+    }
 }
 
 /// An album's mark and words for where it stands with the card ("on card", "added at the next
@@ -584,16 +650,22 @@ pub(super) fn album_status(app: &App, ck: &str, artist: &crate::library::groupin
     let planned = al.tracks.iter().filter(|i| cs.planned.contains(i)).count();
     let there = al.tracks.iter().filter(|i| cs.on_card.contains(i)).count();
     let staying = al.tracks.iter().filter(|i| cs.planned.contains(i) && cs.on_card.contains(i)).count();
+    let hand = al.tracks.iter().filter(|i| cs.by_hand.contains(i)).count();
+    if hand > 0 && there == 0 {
+        let what = if hand == al.tracks.len() { "on the card".to_string() } else { format!("{hand} of {} on the card", al.tracks.len()) };
+        let then = if planned > 0 { "; Take over moves it into place" } else { "" };
+        return (Some(Mark::ByHand), format!("{what}, copied by hand{then}"));
+    }
     match (planned, there) {
         (0, 0) => (None, String::new()),
         (0, _) => {
             // Another copy of the album taking its place?
             let swapped = artist.albums.iter().any(|o| o.base_id(ck) == al.base_id(ck) && o.tracks.iter().any(|i| cs.planned.contains(i)));
-            (Some(Mark::Removing), if swapped { "swapped for the other copy at the next sync" } else { "taken off at the next sync" }.into())
+            (Some(Mark::Removing), if swapped { "swapped for the other copy at the next Sync" } else { "taken off at the next Sync" }.into())
         }
-        (p, _) if staying == p => (Some(Mark::On), "on card".into()),
-        (_, 0) => (Some(Mark::Adding), "added at the next sync".into()),
-        (p, _) => (Some(Mark::Adding), format!("{staying} of {p} on card, the rest at the next sync")),
+        (p, _) if staying == p => (Some(Mark::On), "on the card".into()),
+        (_, 0) => (Some(Mark::Adding), "added at the next Sync".into()),
+        (p, _) => (Some(Mark::Adding), format!("{staying} of {p} on the card, the rest at the next Sync")),
     }
 }
 
@@ -620,7 +692,10 @@ fn az_rail(ui: &mut Ui, present: &std::collections::BTreeSet<char>, height: f32)
         let has = present.contains(&c);
         let sense = if has { Sense::click() } else { Sense::hover() };
         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row), sense);
-        if resp.hovered() && has {
+        if has {
+            widgets::name(ui, &resp, egui::Role::Link, &format!("artists under {c}"));
+        }
+        if (resp.hovered() || resp.has_focus()) && has {
             ui.painter().circle_filled(rect.center(), row * 0.48, ink.faint);
         }
         let color = if has { ink.text } else { ink.faint };
@@ -640,10 +715,10 @@ fn superseded_note(ui: &mut Ui, tracks: &[Track], idxs: &[usize], s: &crate::lib
     let how = if s.higher { format!("in higher quality ({})", s.format) } else { format!("in the same quality ({})", s.format) };
     row_wrapped(ui, |ui| {
         ui.add_space(S6);
-        ui.label(RichText::new(format!("Edition {} has all these songs {how}; this copy could go ({}).", s.rank + 1, text::bytes(bytes))).size(12.5).italics().color(ink.text))
+        ui.label(RichText::new(format!("Edition {} has all these songs {how}; this copy could go ({}).", s.rank + 1, text::bytes(bytes))).size(font::META).family(super::theme::italic()).color(ink.text))
             .on_hover_text(format!("Edition {}: {}.\nUntil this copy goes, the card gets only one edition anyway.", s.rank + 1, s.label));
         let hint = "Moves this copy's folder to the Trash (or only its songs, if the folder holds other music), as long as the copy that covers it is still there. You can put it back from the Trash.";
-        if can_trash && widgets::icon_link(ui, Icon::Trash, "move it to the Trash").on_hover_text(hint).clicked() {
+        if can_trash && widgets::icon_link(ui, Icon::Trash, "Move it to the Trash").on_hover_text(hint).clicked() {
             trash();
         }
     });
@@ -667,9 +742,9 @@ fn repeats_note(ui: &mut Ui, app: &App, al: &crate::library::grouping::AlbumNode
     row_wrapped(ui, |ui| {
         ui.add_space(S6);
         let songs = if n == 1 { "1 song is".to_string() } else { format!("{n} songs are") };
-        ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(12.5).italics().color(ink.warn));
+        ui.label(RichText::new(format!("{songs} stored twice here ({} extra); the card gets each once.", text::bytes(bytes))).size(font::META).family(super::theme::italic()).color(ink.warn));
         let hint = "Moves the extra copies to the Trash, each only if it's still the same file as the copy that stays (the one with the shorter name). You can put them back from the Trash.";
-        if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, "move the extra copies to the Trash").on_hover_text(hint).clicked() {
+        if app.busy.is_none() && widgets::icon_link(ui, Icon::Trash, "Move the extra copies to the Trash").on_hover_text(hint).clicked() {
             actions.push(Action::TrashRepeats(al.repeats.clone()));
         }
     });
@@ -693,20 +768,20 @@ fn album_folders(ui: &mut Ui, tracks: &[Track], idxs: &[usize], root: &Path) {
             n => format!("{} and {} more folders", text::shorten(&rel(first), FOLDER_CHARS - 20), n - 1),
         };
         // "open folder" goes first so a long path can never push it out of view.
-        if widgets::icon_link(ui, Icon::Folder, "open folder").clicked() {
+        if widgets::icon_link(ui, Icon::Folder, "Open folder").clicked() {
             crate::platform::reveal(first);
         }
         if idxs.iter().any(|&i| tracks[i].cue.is_some()) {
-            ui.label(RichText::new("one file + CUE sheet ·").size(12.5).color(ink.muted))
+            ui.label(RichText::new("one file + CUE sheet ·").size(font::META).color(ink.muted))
                 .on_hover_text("This album is stored as a single file; its CUE sheet lists the songs. On the card each song becomes its own FLAC file.");
         }
-        let r = ui.add(egui::Label::new(RichText::new(text).size(12.5).color(ink.muted)).truncate());
+        let r = ui.add(egui::Label::new(RichText::new(text).size(font::META).color(ink.muted)).truncate());
         r.on_hover_text(dirs.iter().map(|d| rel(d)).collect::<Vec<_>>().join("\n"));
     });
 }
 
 /// MusicBrainz suggestions under an album. Identical changes across tracks collapse into one line.
-fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions: &mut Vec<Action>) {
+pub(super) fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions: &mut Vec<Action>) {
     let ink = ink(ui);
     ui.indent(id, |ui| {
         match l {
@@ -716,65 +791,134 @@ fn lookup_block(ui: &mut Ui, tracks: &[Track], id: &str, l: &mut Lookup, actions
             Lookup::Failed(e) => {
                 row_wrapped(ui, |ui| {
                     muted(ui, format!("MusicBrainz: {e}"));
-                    if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
+                    if widgets::icon_link(ui, Icon::Close, "Dismiss").clicked() {
                         actions.push(Action::Dismiss(id.to_string()));
                     }
                 });
             }
             Lookup::Ready { label, changes } => {
-                row_wrapped(ui, |ui| {
-                    caps(ui, "musicbrainz");
-                    ui.label(RichText::new(label.as_str()).color(ink.text));
-                });
-                if changes.is_empty() {
-                    row(ui, |ui| {
-                        muted(ui, "tags already agree.");
-                        if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
-                            actions.push(Action::Dismiss(id.to_string()));
+                let n = changes.iter().filter(|c| c.accept).count();
+                let card = theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
+                card.show(ui, |ui| {
+                    row_wrapped(ui, |ui| {
+                        widgets::icon(ui, Icon::Search, ink.accent);
+                        caps(ui, "musicbrainz suggests");
+                        ui.label(RichText::new(label.as_str()).color(ink.text));
+                        if !changes.is_empty() {
+                            muted(ui, format!("· {n} of {} chosen", changes.len()));
                         }
                     });
-                    return;
-                }
-                let mut groups: BTreeMap<(usize, String, String), Vec<usize>> = BTreeMap::new();
-                let mut order = Vec::new();
-                for (i, c) in changes.iter().enumerate() {
-                    let key = (c.field as usize, c.old.clone(), c.new.clone());
-                    if !groups.contains_key(&key) {
-                        order.push(key.clone());
+                    if changes.is_empty() {
+                        row(ui, |ui| {
+                            widgets::icon(ui, Icon::Check, ink.muted);
+                            muted(ui, "Your tags already agree.");
+                            if widgets::icon_link(ui, Icon::Close, "Dismiss").clicked() {
+                                actions.push(Action::Dismiss(id.to_string()));
+                            }
+                        });
+                        return;
                     }
-                    groups.entry(key).or_default().push(i);
-                }
-                for key in order {
-                    let idxs = &groups[&key];
-                    let first = changes[idxs[0]].clone();
-                    let mut on = idxs.iter().all(|&i| changes[i].accept);
-                    row(ui, |ui| {
-                        if ui.checkbox(&mut on, "").changed() {
+                    let mut groups: BTreeMap<(usize, String, String), Vec<usize>> = BTreeMap::new();
+                    let mut order = Vec::new();
+                    for (i, c) in changes.iter().enumerate() {
+                        let key = (c.field as usize, c.old.clone(), c.new.clone());
+                        if !groups.contains_key(&key) {
+                            order.push(key.clone());
+                        }
+                        groups.entry(key).or_default().push(i);
+                    }
+                    ui.add_space(S1 / 2.0);
+                    for key in order {
+                        let idxs = &groups[&key];
+                        let first = &changes[idxs[0]];
+                        let on = idxs.iter().all(|&i| changes[i].accept);
+                        let scope = if idxs.len() > 1 { format!("{} songs", idxs.len()) } else { tracks[first.track].display_title() };
+                        if suggestion_row(ui, first, &scope, on).clicked() {
                             for &i in idxs {
-                                changes[i].accept = on;
+                                changes[i].accept = !on;
                             }
                         }
-                        let scope = if idxs.len() > 1 { format!("{} tracks", idxs.len()) } else { tracks[first.track].display_title() };
-                        ui.add_sized([150.0, 18.0], egui::Label::new(RichText::new(format!("{} · {scope}", first.field.label())).size(12.5).color(ink.muted)).truncate());
-                        if !first.old.is_empty() {
-                            ui.label(RichText::new(&first.old).strikethrough().color(ink.muted));
-                            muted(ui, "→");
+                    }
+                    ui.add_space(S1);
+                    row_wrapped(ui, |ui| {
+                        ui.add_enabled_ui(n > 0, |ui| {
+                            let text = if n == 0 { "Apply".to_string() } else { format!("Apply {}", plural(n, "change")) };
+                            if widgets::primary_with(ui, Icon::Check, text).on_hover_text("Corrects these tags in the library; the files change when you write the corrected tags.").clicked() {
+                                actions.push(Action::ApplyLookup(id.to_string()));
+                            }
+                        });
+                        if widgets::button_with(ui, Icon::Close, "Dismiss").on_hover_text("Keeps your tags as they are.").clicked() {
+                            actions.push(Action::Dismiss(id.to_string()));
                         }
-                        ui.label(&first.new);
+                        ui.add_space(S1);
+                        if n < changes.len() && link(ui, "Choose all").clicked() {
+                            changes.iter_mut().for_each(|c| c.accept = true);
+                        }
+                        if n > 0 && link(ui, "None").clicked() {
+                            changes.iter_mut().for_each(|c| c.accept = false);
+                        }
                     });
-                }
-                row(ui, |ui| {
-                    if widgets::icon_link(ui, Icon::Check, "apply selected").clicked() {
-                        actions.push(Action::ApplyLookup(id.to_string()));
-                    }
-                    if widgets::icon_link(ui, Icon::Close, "dismiss").clicked() {
-                        actions.push(Action::Dismiss(id.to_string()));
-                    }
                 });
             }
         }
     });
     ui.add_space(S1);
+}
+
+/// One suggested change, a click turning it on or off. What the tag will be once applied is in
+/// ink, what goes is struck through: chosen, the old value goes and the new one comes, ticked;
+/// left out, the old value stays and the new one is struck.
+fn suggestion_row(ui: &mut Ui, c: &crate::musicbrainz::FieldChange, scope: &str, on: bool) -> egui::Response {
+    let ink = ink(ui);
+    let width = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, format!("{}: {} to {}", c.field.label(), c.old, c.new)));
+    widgets::focus_ring(ui, &resp, rect, 4.0);
+    let p = ui.painter_at(rect);
+    if resp.hovered() || resp.has_focus() {
+        p.rect_filled(rect, 4.0, ink.hover);
+    }
+    let y = rect.center().y;
+    // The tick: filled in the accent when chosen, an empty ring when not.
+    let at = egui::pos2(rect.left() + S1 + ICON / 2.0, y);
+    if on {
+        p.circle_filled(at, ICON / 2.0, ink.accent);
+        icons::paint(&p, egui::Rect::from_center_size(at, vec2(ICON, ICON)).shrink(4.0), Icon::Check, ink.bg);
+    } else {
+        p.circle_stroke(at, ICON / 2.0 - 0.6, Stroke::new(1.2, if resp.hovered() { ink.text } else { ink.muted }));
+    }
+    let small = FontId::proportional(font::META);
+    let font = FontId::proportional(font::UI);
+    let mut x = rect.left() + S1 + ICON + S2;
+    // What changes takes up to a third of the row; the values, the rest.
+    let label_w = (width * 0.3).clamp(72.0, 160.0);
+    let what = truncated(ui, format!("{} · {scope}", c.field.label()), small.clone(), ink.muted, label_w);
+    p.galley(egui::pos2(x, y - what.size().y / 2.0), what, ink.muted);
+    x += label_w + S2;
+    let room = (rect.right() - x - S1).max(0.0);
+    let struck = |text: &str, color, max_w| {
+        let mut job = egui::text::LayoutJob::default();
+        job.append(text, 0.0, egui::TextFormat { font_id: font.clone(), color, strikethrough: Stroke::new(1.0, color), ..Default::default() });
+        job.wrap = egui::text::TextWrapping::truncate_at_width(max_w);
+        ui.painter().layout_job(job)
+    };
+    let plain = |text: &str, color, max_w| truncated(ui, text.to_string(), font.clone(), color, max_w);
+    let arrow_w = S1 + ICON + S1;
+    let (old, new) = if c.old.is_empty() {
+        let empty = plain("empty", ink.faint, room / 2.0);
+        (empty, if on { plain(&c.new, ink.text, room / 2.0) } else { struck(&c.new, ink.muted, room / 2.0) })
+    } else if on {
+        (struck(&c.old, ink.muted, (room - arrow_w) / 2.0), plain(&c.new, ink.text, (room - arrow_w) / 2.0))
+    } else {
+        (plain(&c.old, ink.text, (room - arrow_w) / 2.0), struck(&c.new, ink.muted, (room - arrow_w) / 2.0))
+    };
+    let old_w = old.size().x;
+    p.galley(egui::pos2(x, y - old.size().y / 2.0), old, ink.text);
+    x += old_w + S1;
+    icons::paint(&p, egui::Rect::from_min_size(egui::pos2(x, y - ICON / 2.0), vec2(ICON, ICON)).shrink(2.0), Icon::Forward, if on { ink.accent } else { ink.faint });
+    x += ICON + S1;
+    p.galley(egui::pos2(x, y - new.size().y / 2.0), new, ink.text);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(if on { "Chosen: click to keep your tag" } else { "Left out: click to take this one" })
 }
 
 /// Search terms worth a click, toggled in the search box.
@@ -790,9 +934,9 @@ const QUICK_FILTERS: &[(&str, &str)] = &[
 ];
 
 /// A menu of common search terms; ticking one adds it to the search box, unticking removes it.
-fn filters_menu(app: &mut App, ui: &mut Ui) {
+pub(super) fn filters_menu(app: &mut App, ui: &mut Ui) {
     let active = QUICK_FILTERS.iter().filter(|(term, _)| app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term))).count();
-    let label = if active > 0 { format!("filters ({active})") } else { "filters".to_string() };
+    let label = if active > 0 { format!("Filters ({active})") } else { "Filters".to_string() };
     ui.menu_button(RichText::new(label).color(ink(ui).muted), |ui| {
         for (term, what) in QUICK_FILTERS {
             let mut on = app.filter.split_whitespace().any(|w| w.eq_ignore_ascii_case(term));
@@ -820,45 +964,24 @@ fn covers_panel(app: &mut App, ui: &mut Ui, query: &crate::library::search::Quer
             ui.label(RichText::new(what).color(ink.text));
             if !albums.is_empty() && app.busy.is_none() {
                 let hint = "For each album: an image in its folder (cover.jpg, folder.jpg…) if there is one, else the front cover of the matching MusicBrainz release, from the Cover Art Archive (about two seconds an album). Nothing changes in your files until you write corrected tags.";
-                if widgets::button_with(ui, Icon::Image, format!("find covers for {}", if albums.len() == 1 { "it".to_string() } else { format!("these {}", albums.len()) })).on_hover_text(hint).clicked() {
+                if widgets::button_with(ui, Icon::Image, format!("Find covers for {}", if albums.len() == 1 { "it".to_string() } else { format!("these {}", albums.len()) })).on_hover_text(hint).clicked() {
                     actions.push(Action::FindCovers(albums.clone()));
                 }
             }
-            if widgets::icon_link(ui, Icon::Close, "show everything").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Show everything").clicked() {
                 app.filter.clear();
             }
         });
         if !app.cover_misses.is_empty() {
             ui.add_space(S1);
             let n = app.cover_misses.len();
-            ui.collapsing(RichText::new(format!("not found last time: {}", plural(n, "album"))).size(13.0).color(ink.muted), |ui| {
+            ui.collapsing(RichText::new(format!("not found last time: {}", plural(n, "album"))).size(font::UI).color(ink.muted), |ui| {
                 for (album, why) in app.cover_misses.iter().take(300) {
-                    ui.add(egui::Label::new(RichText::new(format!("{album}: {why}")).size(12.5).color(ink.muted)).truncate());
+                    ui.add(egui::Label::new(RichText::new(format!("{album}: {why}")).size(font::META).color(ink.muted)).truncate());
                 }
             });
             widgets::help(ui, "Fixing an album's name (look up, or edit tags) often helps. Or put a cover.jpg in its folder.");
         }
     });
     ui.add_space(S1);
-}
-
-/// Searches kept for later: click one to search again; right-click to forget it.
-fn saved_searches(app: &mut App, ui: &mut Ui) {
-    let mut forget = None;
-    for (i, s) in app.saved.searches.iter().enumerate() {
-        let active = app.filter.trim() == s;
-        let r = widgets::tab(ui, &text::shorten(s, 28), active).on_hover_text(format!("{s}\nClick to search again (again to clear); right-click to forget."));
-        if r.clicked() {
-            app.filter = if active { String::new() } else { s.clone() };
-        }
-        r.context_menu(|ui| {
-            if widgets::icon_link(ui, Icon::Close, "forget this search").clicked() {
-                forget = Some(i);
-                ui.close();
-            }
-        });
-    }
-    if let Some(i) = forget {
-        app.saved.searches.remove(i);
-    }
 }

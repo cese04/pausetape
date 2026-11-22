@@ -10,7 +10,7 @@ use super::widgets::{self, muted};
 use crate::app::App;
 use crate::card::Sample;
 use crate::card::testcard::{TEST_FOLDER, file_name};
-use super::layout::{S1, S2, row, row_wrapped};
+use super::layout::{S1, S2, row, row_wrapped, font};
 
 pub fn dialog(app: &mut App, ui: &mut Ui) {
     if !app.player_test_open {
@@ -24,13 +24,15 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-            ui.label(RichText::new(format!("Test the player: {}", player.name())).size(18.0).color(ink.text));
+            ui.label(RichText::new(format!("Test the player: {}", player.name())).size(font::TITLE).color(ink.text));
         });
         ui.add_space(S1);
+        let root = app.write().music_root();
+        let place = if root.as_os_str().is_empty() { String::new() } else { format!(" in {}", root.to_string_lossy().replace('\\', "/")) };
         muted(
             ui,
             format!(
-                "Writes a folder, “{TEST_FOLDER}”, of 6-second tones in every format, a cover and accented titles, and a playlist. Eject the card, try each on the player, and tick what worked. Your answers are used instead of what's known of this player from its makers and reviews, for this card setup."
+                "Writes a folder{place}, “{TEST_FOLDER}”, of 6-second tones in every format, a cover and accented titles, and a playlist. Eject the card, try each on the player, and tick what worked. Your answers are used instead of what's known of this player from its makers and reviews, for this card setup."
             ),
         );
         ui.add_space(S1);
@@ -41,18 +43,18 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             });
         } else {
             row_wrapped(ui, |ui| {
-                let on_card = app.test_card_on_card();
+                let on_card = app.test_folder_seen();
                 if app.write().dest.is_none() {
-                    ui.label(RichText::new("Choose the card first (destination, in the card tab).").color(ink.warn));
+                    ui.label(RichText::new("Choose the card first: in the sidebar, the card's Setup.").color(ink.warn));
                 } else if widgets::primary_with(ui, Icon::Card, if on_card { "Write the test folder again" } else { "Write the test folder to the card" }).clicked() {
                     app.write_test_card();
                 }
-                if on_card && widgets::icon_link(ui, Icon::Remove, "take it off the card").on_hover_text("removes only the files the test wrote").clicked() {
+                if on_card && widgets::icon_link(ui, Icon::Remove, "Take it off the card").on_hover_text("removes only the files the test wrote").clicked() {
                     app.remove_test_card();
                 }
             });
             if crate::audio::ffmpeg().is_none() {
-                ui.label(RichText::new("The samples are made with ffmpeg, which isn't installed (brew install ffmpeg).").size(13.0).color(ink.warn));
+                ui.label(RichText::new(format!("The samples are made with ffmpeg, which isn't installed ({}).", crate::platform::FFMPEG_INSTALL)).size(font::UI).color(ink.warn));
             }
         }
         ui.add_space(S2);
@@ -81,7 +83,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
                         }
                     });
                     match made.as_ref().and_then(|m| m.iter().find(|(x, _)| *x == s)).map(|(_, r)| r) {
-                        Some(Err(why)) => ui.label(RichText::new("not written").size(12.5).color(ink.warn)).on_hover_text(why),
+                        Some(Err(why)) => ui.label(RichText::new("not written").size(font::META).color(ink.warn)).on_hover_text(why),
                         _ => ui.label(""),
                     };
                     ui.end_row();

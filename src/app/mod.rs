@@ -2,7 +2,7 @@
 //! `crate::ui`; this module owns the data, starts background work and folds its results back in.
 //!
 //! The `impl App` is split by topic: `music` (scanning, artists, MusicBrainz), `edit` (tags
-//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `cards` (noticing cards plugged in), `writes` (card writes, reorganising, playlists), `playback`, and `events`
+//! edited by hand), `covers` (finding covers), `browse` (search and the album table), `add` (adding music from a folder), `cards` (noticing cards plugged in), `writes` (card writes, reorganising, playlists), `undo` (taking back changes to playlists and to what goes on the card), `playback`, and `events`
 //! (the per-frame message pump).
 
 mod add;
@@ -11,9 +11,12 @@ mod cards;
 mod covers;
 mod edit;
 mod events;
+mod genres;
+mod lyrics;
 mod music;
 mod playback;
 mod testcard;
+mod undo;
 mod writes;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -30,6 +33,9 @@ pub use add::Adding;
 pub use browse::{AlbumRow, SortBy};
 pub use covers::FoundCover;
 pub use edit::{Shared, TagEdit};
+pub use genres::GenreIndex;
+pub use lyrics::LyricsState;
+pub use undo::Undo;
 
 use crate::audio::{self, Audio};
 use crate::card::playlist::{self, Playlist};
@@ -48,6 +54,12 @@ pub enum ThemePref {
     Dark,
 }
 
+/// The text sizes offered, smallest and largest (egui's zoom; Settings steps through them by tenths).
+pub const TEXT_SIZES: (f32, f32) = (0.8, 2.0);
+
+/// Bump when settings saved before should change once, in `Saved::migrate`.
+const SETTINGS_VERSION: u32 = 1;
+
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct Saved {
@@ -63,12 +75,36 @@ pub struct Saved {
     pub volume: f32,
     pub theme: ThemePref,
     pub accent: crate::ui::theme::Accent,
-    /// The library's format warning is collapsed to one line.
-    pub format_note_collapsed: bool,
     /// The library shows a table of albums rather than the list by artist.
     pub album_table: bool,
     /// Searches kept for reuse ("quality:lossless jazz").
     pub searches: Vec<String>,
+    /// The player folded to one line (a click on its cover).
+    pub compact_player: bool,
+    /// The size of everything, 1 being as designed (egui's zoom: ⌘+, ⌘−, ⌘0, or Settings).
+    pub text_size: f32,
+    /// Lists packed tight, their rows 24 apart rather than 32.
+    pub compact: bool,
+    /// No movement: changes at once, the reels still (the system's wish is followed too).
+    pub reduce_motion: bool,
+    /// What `migrate` has brought these settings up to; files from before it have none, so 0.
+    #[serde(default)]
+    settings_version: u32,
+}
+
+impl Saved {
+    /// Settings saved by an older version take up what's changed since, once.
+    /// 1 (0.2.0): the album table comes first, and the accent is teal: brick, 0.1.0's default and
+    /// so saved with everything else, is the colour of warnings now.
+    fn migrate(&mut self) {
+        if self.settings_version < 1 {
+            self.album_table = true;
+            if self.accent == crate::ui::theme::Accent::Brick {
+                self.accent = crate::ui::theme::Accent::Teal;
+            }
+        }
+        self.settings_version = SETTINGS_VERSION;
+    }
 }
 
 impl Default for Saved {
@@ -85,17 +121,24 @@ impl Default for Saved {
             volume: 0.8,
             theme: ThemePref::System,
             accent: Default::default(),
-            format_note_collapsed: false,
-            album_table: false,
+            album_table: true,
             searches: Vec::new(),
+            compact_player: false,
+            text_size: 1.0,
+            compact: false,
+            reduce_motion: false,
+            settings_version: SETTINGS_VERSION,
         }
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
-    Folders,
     Library,
+    /// MusicBrainz suggestions for every album looked up, to go through.
+    Suggestions,
+    /// Every genre, to open one's artists and albums.
+    Genres,
     Card,
     Playlists,
     Settings,
@@ -143,14 +186,26 @@ enum Msg {
     TagsSaved(Vec<(usize, u64, u64)>, Vec<String>),
     /// Loudness of a track, by track id.
     Envelope(PathBuf, Vec<f32>),
+    /// A file whose audio turned out broken while it played (by path), and how.
+    Damaged(PathBuf, String),
     /// Cover for a track path, and the image file it came from if it isn't embedded.
     Cover(PathBuf, Option<egui::ColorImage>, Option<PathBuf>),
+    /// Cover of the album the details panel shows, by its first song's path.
+    DetailCover(PathBuf, Option<egui::ColorImage>),
+    /// A song's lyrics (by track id), none found, or why they couldn't be looked for.
+    Lyrics(PathBuf, Result<Option<crate::lyrics::Lyrics>, String>),
+    /// An album's or selection's lyrics looked for: found, none, failed.
+    LyricsDone(usize, usize, usize),
     /// Covers found for albums without one, and whether the search was stopped.
     CoversFound(Vec<FoundCover>, bool),
     /// The test card's samples written to the card: what each became.
     TestCardWritten(Vec<(card::Sample, Result<(), String>)>),
     /// The test card's files taken off the card, or why not.
     TestCardRemoved(Result<(), String>),
+    /// The card by name ejected, or why not.
+    Ejected(String, Result<(), String>),
+    /// What the card watcher's thread saw.
+    Looked(Box<cards::Look>),
 }
 
 pub struct Busy {
@@ -167,6 +222,11 @@ pub struct Busy {
 impl Busy {
     pub fn new(label: impl Into<String>, total: usize) -> Busy {
         Busy { label: label.into(), done: 0, total, since: None, stop: None }
+    }
+
+    /// Work on files that cutting off halfway would leave half done (not reading or looking up).
+    pub fn changes_files(&self) -> bool {
+        ["writing", "taking", "putting", "copying", "adding", "tidying", "moving"].iter().any(|w| self.label.starts_with(w))
     }
 
     /// The same, with a flag the work checks between files.
@@ -212,6 +272,9 @@ pub struct CardState {
     pub on_card: HashSet<usize>,
     /// Tracks the write puts on the card as chosen now.
     pub planned: HashSet<usize>,
+    /// Tracks copied onto the card by hand, as the last check of the card found them; until
+    /// the card is taken over, Sync doesn't count them as there.
+    pub by_hand: HashSet<usize>,
     /// Albums Sync adds (or completes), swaps for another copy, and takes off.
     pub added: usize,
     pub replaced: usize,
@@ -225,6 +288,17 @@ pub struct CardState {
     pub remove_bytes: u64,
     /// What the chosen music takes on the card, playlist copies included.
     pub planned_bytes: u64,
+}
+
+/// A change that can't be undone, waiting for a yes.
+#[derive(Clone)]
+pub enum Confirm {
+    /// Deleting a card setup, by id: its record of the files it put on the card goes with it.
+    DeleteWrite(String),
+    /// Forgetting the tags the library database keeps, so every file is read again.
+    ForgetTags,
+    /// Closing the window while work on files is running.
+    Quit,
 }
 
 /// Files a card operation couldn't handle, and where the full list was saved.
@@ -246,6 +320,8 @@ pub struct App {
     pub look_alikes_only: bool,
     /// Expanded artists in the library, by artist key.
     pub expanded: HashSet<String>,
+    /// Artists whose links to stores and sites are shown, by cluster key (folded otherwise).
+    pub artist_links_open: HashSet<String>,
     /// Songs chosen in the library (⌘-click), for editing their tags together.
     pub selected: BTreeSet<usize>,
     /// The song last clicked into the selection, where a shift-click run starts.
@@ -277,6 +353,26 @@ pub struct App {
     pub test_card: Option<Vec<(card::Sample, Result<(), String>)>>,
     pub busy: Option<Busy>,
     pub notices: Vec<String>,
+    /// Changes to playlists and to what goes on the card, latest last, for ⌘Z.
+    pub undo_stack: Vec<Undo>,
+    /// The notice about the latest of them, which offers "undo" while it's showing.
+    pub undo_notice: Option<String>,
+    /// The notice of a finished Sync, which offers to eject the card it wrote to while it's the
+    /// latest: (notice, the card's mount point).
+    pub eject_notice: Option<(String, PathBuf)>,
+    /// Told to quit though work is running: the window closes without asking again.
+    pub quit_anyway: bool,
+    /// A dialog asking before a change that can't be undone.
+    pub confirm: Option<Confirm>,
+    /// A folder dropped on the window while other work ran: checked once it's done.
+    pub pending_add: Option<PathBuf>,
+    /// ⌘F was pressed: the open tab's search box takes the keyboard on its next frame.
+    pub focus_search: bool,
+    /// A song or album row (album table position) chosen from the keyboard, to scroll into view.
+    pub scroll_to_song: Option<usize>,
+    pub album_scroll_to: Option<usize>,
+    /// The album table rows drawn last frame, to tell whether one is in view.
+    pub album_rows_shown: std::ops::Range<usize>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     mb: Option<(String, musicbrainz::Client)>,
@@ -284,6 +380,12 @@ pub struct App {
     mb_rx: Receiver<Reply>,
     /// The artist panel's MusicBrainz entry, by cluster key.
     pub artist_info: HashMap<String, ArtistState>,
+    /// Every stored entry has been read from the library database (for the genres view).
+    artists_loaded: bool,
+    /// Every genre with its albums, made again when the library changes (`genre_index`).
+    genre_index: GenreIndex,
+    /// The genres view lists the genres with most albums first, rather than by name.
+    pub genres_by_size: bool,
     pub lookups: HashMap<String, Lookup>,
     /// Plan for tidying the source in place, once previewed.
     pub tidy_plan: Option<Vec<PlanItem>>,
@@ -295,9 +397,12 @@ pub struct App {
     pub card_state: CardState,
     /// The card surveyed for taking over, by setup id.
     pub card_survey: Option<(String, card::adopt::Survey)>,
-    /// The room a running write started with: its new files fill the card before the manifest
-    /// counts them, so the live figure would shrink as it goes.
-    pub room_while_writing: Option<u64>,
+    /// The library songs that check found copied onto the card by hand, by setup id and card
+    /// folder. Kept while the selection changes (the survey isn't), for the card tab's marks.
+    pub card_found: Option<(String, PathBuf, HashSet<usize>)>,
+    /// The room a running write started with, and the setup writing: its new files fill the card
+    /// before the manifest counts them, so the live figure would shrink as it goes.
+    pub room_while_writing: Option<(String, u64)>,
     /// Gather what a take-over doesn't use into one folder on the card.
     pub gather_on_take_over: bool,
     /// Delete clutter (iTunes data, system files, rip logs) when taking over a card.
@@ -309,12 +414,25 @@ pub struct App {
     /// Library A–Z rail: jump to the first artist under this letter on the next frame.
     pub jump_to: Option<char>,
     pub volumes: Vec<Volume>,
-    /// Drives mounted at the last look, and when that was (`cards`).
-    mounted: HashSet<PathBuf>,
+    /// Drives mounted at the last look (`None` before the first), and when that was (`cards`).
+    mounted: Option<HashSet<PathBuf>>,
     last_watch: Option<Instant>,
+    /// The thread that does the looking, so a slow drive can't hold up the window, and whether
+    /// it hasn't answered yet.
+    watcher: Sender<cards::Ask>,
+    looking: bool,
+    /// The active setup's card as of the last look; every frame draws from this, not the card.
+    card_look: Option<cards::CardLook>,
+    /// Which setups' destinations could be reached, and the music folder, at the last look.
+    reachable: HashSet<PathBuf>,
+    source_look: Option<cards::SourceLook>,
     /// The label on the active setup's card, as of the last look.
     pub dest_label: Option<card::Label>,
     pub card_filter: String,
+    /// The card tab lists only the albums the next Sync adds or takes off.
+    pub card_changes_only: bool,
+    /// The card view shows how the card is set up, rather than what's on it.
+    pub card_setup_open: bool,
     pub card_expanded: HashSet<String>,
     /// Inline rename on the card tab: ("artist"/"album", key, text).
     pub card_renaming: Option<(bool, String, String)>,
@@ -330,6 +448,26 @@ pub struct App {
     /// Cover of the playing track; `None` inside once looked up and none was found.
     pub cover: Option<(PathBuf, Option<egui::TextureHandle>, Option<PathBuf>)>,
     pub active_playlist: Option<usize>,
+    /// The cover the details panel shows, by its album's first song (`None` inside while it
+    /// loads, or when there's none).
+    pub detail_cover: Option<(PathBuf, Option<egui::TextureHandle>)>,
+    /// The details of what's selected, as a sheet over the page (when it has no room beside).
+    pub details_sheet: bool,
+    /// The details panel had room beside the library on the last frame.
+    pub details_beside: bool,
+    /// The system asks apps for less motion (read at start).
+    pub system_reduce_motion: bool,
+    /// The first-run welcome (music folder, card) is open.
+    pub welcome_open: bool,
+    /// Songs' lyrics, by track id, as far as they're known (`lyrics_of`).
+    pub lyrics: HashMap<PathBuf, LyricsState>,
+    lyrics_tx: Option<Sender<lyrics::LyricsJob>>,
+    /// The details panel shows lyrics rather than the songs, and of which song.
+    pub details_lyrics: bool,
+    pub lyrics_song: Option<usize>,
+    /// The panel keeps the line being sung in view: until the panel is scrolled by hand, and
+    /// again on *Follow the song*, a click on a line, or the next song.
+    pub lyrics_follow: bool,
     pub renaming: Option<(usize, String)>,
     /// UI-thread connection to the library database (scans open their own).
     pub db: Option<Db>,
@@ -341,14 +479,19 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::ui::theme::install(&cc.egui_ctx);
-        let saved: Saved = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
+        let mut saved: Saved = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
+        saved.migrate();
         let ctx = cc.egui_ctx.clone();
         let wake = ctx.clone();
         let audio = Audio::spawn(move || wake.request_repaint());
         audio.volume(saved.volume);
         let (tx, rx) = unbounded();
+        let (watcher, asks) = unbounded();
+        {
+            let (tx, ctx) = (tx.clone(), ctx.clone());
+            thread::spawn(move || cards::watcher(asks, tx, ctx));
+        }
         let (mb_tx, mb_rx) = unbounded();
-        let mut saved = saved;
         if saved.writes.is_empty() {
             saved.writes.push(WriteProfile::default());
         }
@@ -364,11 +507,18 @@ impl App {
             saved,
             tracks: Vec::new(),
             index: Index::default(),
-            tab: if first_run { Tab::Folders } else { Tab::Library },
+            tab: Tab::Library,
+            welcome_open: first_run,
+            lyrics: HashMap::new(),
+            lyrics_tx: None,
+            details_lyrics: false,
+            lyrics_song: None,
+            lyrics_follow: true,
             filter: String::new(),
             duplicates_only: false,
             look_alikes_only: false,
             expanded: HashSet::new(),
+            artist_links_open: HashSet::new(),
             selected: BTreeSet::new(),
             select_anchor: None,
             tag_edit: None,
@@ -385,17 +535,31 @@ impl App {
             test_card: None,
             busy: None,
             notices: Vec::new(),
+            undo_stack: Vec::new(),
+            undo_notice: None,
+            eject_notice: None,
+            quit_anyway: false,
+            confirm: None,
+            pending_add: None,
+            focus_search: false,
+            scroll_to_song: None,
+            album_scroll_to: None,
+            album_rows_shown: 0..0,
             tx,
             rx,
             mb: None,
             mb_tx,
             mb_rx,
             artist_info: HashMap::new(),
+            artists_loaded: false,
+            genre_index: GenreIndex::default(),
+            genres_by_size: false,
             lookups: HashMap::new(),
             tidy_plan: None,
             in_place: 0,
             write_preview: None,
             card_survey: None,
+            card_found: None,
             room_while_writing: None,
             card_state: CardState::default(),
             gather_on_take_over: true,
@@ -403,11 +567,18 @@ impl App {
             problems: None,
             picker: None,
             jump_to: None,
-            volumes: card::volumes(),
-            mounted: HashSet::new(),
+            volumes: Vec::new(),
+            mounted: None,
             last_watch: None,
+            watcher,
+            looking: false,
+            card_look: None,
+            reachable: HashSet::new(),
+            source_look: None,
             dest_label: None,
             card_filter: String::new(),
+            card_changes_only: false,
+            card_setup_open: false,
             card_expanded: HashSet::new(),
             card_renaming: None,
             audio,
@@ -417,6 +588,10 @@ impl App {
             qpos: 0,
             envelope: None,
             cover: None,
+            detail_cover: None,
+            details_sheet: false,
+            details_beside: false,
+            system_reduce_motion: crate::platform::reduce_motion(),
             renaming: None,
             db: Db::open_default().ok(),
             ctx,
@@ -424,6 +599,7 @@ impl App {
             shooter: crate::ui::screenshots::Shooter::from_env(),
         };
         app.apply_theme();
+        app.ctx.set_zoom_factor(app.saved.text_size.clamp(TEXT_SIZES.0, TEXT_SIZES.1));
         app.load();
         app
     }
@@ -443,7 +619,7 @@ impl App {
         if errors.is_empty() {
             return String::new();
         }
-        let note = format!(" · {} {}, listed in the card tab", errors.len(), if errors.len() == 1 { "problem" } else { "problems" });
+        let note = format!(" · {} {}: see the list at the top of the page", errors.len(), if errors.len() == 1 { "problem" } else { "problems" });
         let log = card::save_problems(what, &errors);
         self.problems = Some(Problems { what: what.into(), list: errors, log });
         note
@@ -471,6 +647,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn settings_saved_by_0_1_0_take_up_what_changed_once() {
+        use crate::ui::theme::Accent;
+        let mut old: Saved = serde_json::from_str(r#"{"accent":"brick","album_table":false,"volume":0.5}"#).unwrap();
+        assert_eq!(old.settings_version, 0, "files from before it don't have it");
+        old.migrate();
+        assert!(old.accent == Accent::Teal && old.album_table);
+        assert_eq!(old.volume, 0.5, "the rest is as it was");
+
+        // Choosing brick or the list by artist afterwards is the user's to keep.
+        (old.accent, old.album_table) = (Accent::Brick, false);
+        let mut later: Saved = serde_json::from_str(&serde_json::to_string(&old).unwrap()).unwrap();
+        later.migrate();
+        assert!(later.accent == Accent::Brick && !later.album_table);
+
+        let mut plum: Saved = serde_json::from_str(r#"{"accent":"plum"}"#).unwrap();
+        plum.migrate();
+        assert!(plum.accent == Accent::Plum, "only the old default moves");
+        assert_eq!(Saved::default().settings_version, SETTINGS_VERSION, "a new install has nothing to catch up on");
+    }
+
+
+    #[test]
+    fn closing_asks_only_about_work_on_files() {
+        for label in ["writing “Echo Mini”", "writing tags", "taking over the card", "putting the card back", "copying music from the card", "adding music to “Added”", "tidying source", "moving to the Trash"] {
+            assert!(Busy::new(label, 0).changes_files(), "{label}");
+        }
+        for label in ["reading tags", "opening the library", "comparing with the card", "checking the card's music", "ejecting “CARD”", "finding covers for 3 albums"] {
+            assert!(!Busy::new(label, 0).changes_files(), "{label}");
+        }
+    }
+    #[test]
     fn time_left_waits_for_a_pace_then_extrapolates() {
         let mut b = Busy::new("writing", 1000);
         b.progress(400, 1000);
@@ -488,10 +695,28 @@ fn plural_files(n: usize) -> String {
     if n == 1 { "1 file".into() } else { format!("{n} files") }
 }
 
+impl App {
+    /// The window asked to close while work on files runs: ask first.
+    fn ask_before_closing(&mut self, ctx: &egui::Context) {
+        #[cfg(debug_assertions)]
+        if self.shooter.is_some() {
+            return;
+        }
+        if !self.quit_anyway && ctx.input(|i| i.viewport().close_requested()) && self.busy.as_ref().is_some_and(Busy::changes_files) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.confirm = Some(Confirm::Quit);
+        }
+    }
+}
+
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll();
+        self.ask_before_closing(ui.ctx());
         self.watch_cards();
+        // The text size as ⌘+ and ⌘− left it, kept for the next start.
+        self.saved.text_size = ui.ctx().zoom_factor();
+        crate::ui::motion::set_reduced(ui.ctx(), self.saved.reduce_motion || self.system_reduce_motion);
         #[cfg(debug_assertions)]
         if let Some(mut s) = self.shooter.take() {
             s.tick(self, ui.ctx());

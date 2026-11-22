@@ -181,7 +181,9 @@ fn finish(root: &Path, raw: Vec<Track>, sheets: &[(PathBuf, Vec<u8>)], edits: &H
                 Some(e) if e.size == t.size && e.mtime == t.mtime => {
                     stats.edits += 1;
                     // What the file holds now, under the corrections.
-                    Track { dirty: true, embedded_cover: t.embedded_cover, ..e.track.clone() }
+                    // A correction from before genres were read leaves the file's genres alone.
+                    // Damage is the file's, and may have been found after the correction.
+                    Track { dirty: true, embedded_cover: t.embedded_cover, genres: e.track.genres.clone().or(t.genres.clone()), damaged: t.damaged, damage: t.damage.clone(), ..e.track.clone() }
                 }
                 Some(_) => {
                     // The file changed since the correction was made; trust the file.
@@ -232,8 +234,9 @@ fn read_track(path: &Path, ext: &str) -> Track {
     if super::dsd::is_dsd(ext) {
         return read_dsd(t);
     }
+    t.damaged = starts_blank(path);
     let Ok(file) = lofty::read_from_path(path) else {
-        t.damaged = starts_blank(path);
+        t.damaged |= cut_short(path);
         return t;
     };
     let props = file.properties();
@@ -253,6 +256,7 @@ fn read_tags(t: &mut Track, file: &lofty::file::TaggedFile) {
         t.disc = tag.disk();
         t.year = tag.date().map(|d| d.year).filter(|&y| y > 0);
         t.compilation = matches!(tag.get_string(ItemKey::FlagCompilation), Some("1" | "true"));
+        t.genres = Some(super::genres::split(tag.get_strings(ItemKey::Genre)));
     }
     t.embedded_cover = file.tags().iter().any(|tag| tag.picture_count() > 0);
 }
@@ -277,6 +281,16 @@ fn starts_blank(path: &Path) -> bool {
     use std::io::Read;
     let mut head = Vec::with_capacity(4096);
     std::fs::File::open(path).and_then(|f| f.take(4096).read_to_end(&mut head)).is_ok_and(|_| head.iter().all(|&b| b == 0))
+}
+
+/// The file ends inside the ID3v2 tag it starts with: the rest of it was never copied.
+fn cut_short(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 10];
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let (Ok(()), Ok(meta)) = (f.read_exact(&mut head), f.metadata()) else { return false };
+    let size = head[6..10].iter().fold(0u64, |n, b| (n << 7) | u64::from(b & 0x7f));
+    &head[..3] == b"ID3" && 10 + size > meta.len()
 }
 
 /// Fill gaps from the file name and folders: "03 - Title.mp3", "1979 - Album.flac",
@@ -427,8 +441,17 @@ mod tests {
         std::fs::write(dir.join("empty.flac"), b"").unwrap();
         // Unreadable, but not blank: not called damaged.
         std::fs::write(dir.join("odd.flac"), b"not really audio").unwrap();
+        // Audio after a blank start reads, but its beginning is lost; 1 KB of zeros is padding.
+        let mut frame = vec![0xff, 0xfb, 0x90, 0xc0];
+        frame.resize(417, 0);
+        std::fs::write(dir.join("fragment.mp3"), [vec![0; 300_000], frame.repeat(40)].concat()).unwrap();
+        std::fs::write(dir.join("padded.mp3"), [vec![0; 1044], frame.repeat(40)].concat()).unwrap();
+        // A tag saying 76 KB in a file of 36 KB: the copy stopped inside it.
+        std::fs::write(dir.join("cut.mp3"), [&b"ID3\x03\x00\x00\x00\x04\x29\x4e"[..], &[0x55; 36_000]].concat()).unwrap();
         let read = |n: &str| read_track(&dir.join(n), n.rsplit('.').next().unwrap());
         assert!(read("blank.ape").damaged && read("empty.flac").damaged && !read("odd.flac").damaged);
+        assert!(read("fragment.mp3").damaged && !read("padded.mp3").damaged && read("cut.mp3").damaged);
+        assert!(!read("padded.mp3").duration.is_zero(), "the padded one reads");
         let t = read("blank.ape");
         assert!(!t.plays_here());
         assert!(crate::card::target(&t, Default::default()).is_err_and(|why| why.contains("damaged")), "left off the card, saying why");

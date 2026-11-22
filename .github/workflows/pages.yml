@@ -1,0 +1,38 @@
+# Publish the website (site/) on GitHub Pages: https://cese04.github.io/pausetape/
+#
+# From `main` only, like the releases it points to (GitHub's `github-pages` environment allows
+# the default branch alone), whenever something under site/ changes, or by hand from the
+# Actions tab. It's plain HTML, CSS and JavaScript: nothing is built. How the site is made and
+# how its screenshots are taken again: docs/WEBSITE.md.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write      # to publish
+  id-token: write   # to prove the publish comes from this workflow
+
+# One publish at a time; one under way is let finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

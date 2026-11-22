@@ -53,11 +53,25 @@ impl App {
     /// or the library is empty. Against an empty library a Sync would take the setup's songs off
     /// the card, and a take-over or import would treat all of the card as new.
     pub fn library_unavailable(&self) -> Option<String> {
+        self.library_problem(self.saved.source.as_ref().is_some_and(|s| s.is_dir()))
+    }
+
+    /// The same as of the last look at the drives, for what's drawn every frame.
+    pub fn library_unavailable_as_seen(&self) -> Option<String> {
+        self.library_problem(self.source_reachable())
+    }
+
+    fn library_problem(&self, reachable: bool) -> Option<String> {
         let Some(src) = &self.saved.source else { return Some("choose your music folder first".into()) };
-        if self.source_missing || !src.is_dir() {
+        if self.source_missing || !reachable {
             return Some(format!("can't reach the music folder ({}): is its drive connected?", src.display()));
         }
         self.tracks.is_empty().then(|| "the library is empty: rescan the music folder first".into())
+    }
+
+    /// A dialog is open over the tab: keys are its own.
+    pub fn dialog_open(&self) -> bool {
+        self.welcome_open || self.tag_edit.is_some() || self.confirm.is_some() || self.sync_confirm.is_some() || self.picker.is_some() || self.take_over_open || self.player_test_open || self.adding.is_some()
     }
 
     pub fn write(&self) -> &WriteProfile {
@@ -88,6 +102,8 @@ impl App {
     /// Put an album on the active write's card, or take it off. Like everything chosen, it
     /// reaches the card at the next Sync.
     pub fn card_album(&mut self, artist: usize, album: usize, on: bool) {
+        let title = self.index.artists[artist].albums[album].title.clone().unwrap_or_else(|| "loose tracks".into());
+        self.remember_chosen(if on { format!("sending “{title}” to the card") } else { format!("taking “{title}” off the card") });
         let a = &self.index.artists[artist];
         let ck = self.index.clusters[a.cluster].key.clone();
         let al = &a.albums[album];
@@ -97,6 +113,8 @@ impl App {
 
     /// Put a whole artist on the card (albums added later too), or take all of it off.
     pub fn card_artist(&mut self, artist: usize, on: bool) {
+        let name = self.index.artists[artist].name.clone();
+        self.remember_chosen(if on { format!("sending all of {name} to the card") } else { format!("taking all of {name} off the card") });
         let a = &self.index.artists[artist];
         let ck = self.index.clusters[a.cluster].key.clone();
         self.saved.writes[self.saved.active_write].custom.set_artist(&ck, &a.albums, on);
@@ -120,20 +138,28 @@ impl App {
         w.id = card::label::new_id();
         w.manifest.clear();
         w.last_written = None;
+        w.card_id = None;
         self.saved.writes.push(w);
         self.select_write(self.saved.writes.len() - 1);
     }
 
-    pub fn delete_write(&mut self) {
+    /// Delete the card setup with this id (asked first: see `Confirm::DeleteWrite`). The last
+    /// one stays.
+    pub fn delete_write(&mut self, id: &str) {
+        let Some(i) = self.saved.writes.iter().position(|w| w.id == id) else { return };
         if self.saved.writes.len() > 1 {
-            self.saved.writes.remove(self.saved.active_write);
-            self.select_write(self.saved.active_write.saturating_sub(1));
+            let name = self.saved.writes.remove(i).name;
+            let active = self.saved.active_write;
+            // The one open stays open; if it was this one, the one before it opens.
+            self.select_write(if active > i || (active == i && i > 0) { active - 1 } else { active });
+            self.notice(format!("deleted the card setup “{name}”"));
         }
     }
 
     pub fn preview_write(&mut self) {
         let w = self.write().clone();
-        let Some(dest) = w.dest.clone() else { return };
+        // No card, nothing to compare with: everything would look as if it had to be copied.
+        let Some(dest) = w.dest.clone().filter(|d| card::connected(d)) else { return };
         let tracks = self.tracks.clone();
         let prefs = self.saved.prefs.clone();
         let playlists = self.saved.playlists.clone();
@@ -151,7 +177,7 @@ impl App {
     pub fn survey_card(&mut self) {
         let w = self.write().clone();
         let Some(dest) = w.dest.clone() else { return };
-        if self.busy.is_some() {
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.
@@ -160,6 +186,8 @@ impl App {
             self.notice(why);
             return;
         }
+        // After the label: a different card has just set this setup's record aside.
+        let w = self.write().clone();
         let plan = w.plan(&self.tracks, &self.index);
         let tracks = self.tracks.clone();
         let ctx = self.ctx.clone();
@@ -177,10 +205,9 @@ impl App {
 
     /// Move the card's copies of library songs into this write's layout (see `card::adopt`).
     pub fn take_over_card(&mut self) {
-        let Some((id, survey)) = self.card_survey.take() else { return };
+        let Some(id) = self.card_survey.as_ref().map(|(id, _)| id.clone()) else { return };
         let Some(dest) = self.write().dest.clone().filter(|_| self.write().id == id) else { return };
-        if self.busy.is_some() {
-            self.card_survey = Some((id, survey));
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         // The label as it is now: the card may have been swapped since the last look.
@@ -189,7 +216,9 @@ impl App {
             self.notice(why);
             return;
         }
-        let label = card::Label::of(self.write());
+        // Taken only now: a refusal leaves the check as it was.
+        let Some((id, survey)) = self.card_survey.take() else { return };
+        let label = card::Label::for_card(self.write(), &dest);
         let (gather, clean, clean_mac) = (self.gather_on_take_over, self.delete_clutter_on_take_over, self.write().options.clean_mac_files);
         let ctx = self.ctx.clone();
         self.busy = Some(Busy::new("taking over the card", 0));
@@ -202,8 +231,9 @@ impl App {
                 }
             });
             // Taken over, the card is this setup's.
-            if let Err(e) = label.save(&dest) {
-                out.errors.push(format!("{e:#}"));
+            match label.save(&dest) {
+                Ok(()) => out.card_id = Some(label.card),
+                Err(e) => out.errors.push(format!("{e:#}")),
             }
             let _ = tx.send(Msg::TookOver(id, Box::new(out)));
         });
@@ -212,20 +242,19 @@ impl App {
     /// Copy the card's music that isn't in the library into the music folder (see
     /// `card::adopt::import`), then rescan so it joins the library.
     pub fn import_from_card(&mut self) {
-        let Some((id, survey)) = self.card_survey.take() else { return };
-        let (Some(dest), Some(music)) = (self.write().dest.clone(), self.saved.source.clone()) else {
-            self.card_survey = Some((id, survey));
+        if self.card_survey.is_none() {
             return;
-        };
-        if self.busy.is_some() {
-            self.card_survey = Some((id, survey));
+        }
+        let (Some(dest), Some(music)) = (self.write().dest.clone(), self.saved.source.clone()) else { return };
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
         if let Some(why) = self.library_unavailable() {
             self.notice(why);
-            self.card_survey = Some((id, survey));
             return;
         }
+        // Taken only now: a refusal leaves the check as it was.
+        let Some((_, survey)) = self.card_survey.take() else { return };
         let ctx = self.ctx.clone();
         let (busy, stop) = Busy::stoppable("copying music from the card", 0);
         self.busy = Some(busy);
@@ -247,6 +276,15 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        if self.card_missing(&dest) {
+            return;
+        }
+        // The label as it is now: the card may have been swapped since the last look.
+        self.refresh_label();
+        if let Some(why) = self.refused_by_label() {
+            self.notice(why);
+            return;
+        }
         self.busy = Some(Busy::new("putting the card back", 0));
         self.problems = None;
         self.spawn(move |tx| {
@@ -260,10 +298,10 @@ impl App {
     /// checked) would move into place.
     pub fn card_room(&self) -> Option<(card::SpaceInfo, u64)> {
         let w = self.write();
-        let info = w.dest.as_deref().and_then(card::space)?;
+        let info = self.card_seen().filter(|l| l.there)?.space?;
         let adoptable = self.card_survey.as_ref().filter(|(n, _)| *n == w.id).map(|(_, s)| s.used_bytes()).unwrap_or(0);
-        let room = self.room_while_writing.unwrap_or(info.free + w.manifest_bytes() + adoptable);
-        Some((info, room))
+        let writing = self.room_while_writing.as_ref().filter(|(id, _)| *id == w.id).map(|(_, room)| *room);
+        Some((info, writing.unwrap_or(info.free + w.manifest_bytes() + adoptable)))
     }
 
     pub fn run_write(&mut self) {
@@ -282,12 +320,17 @@ impl App {
         if self.busy.is_some() {
             return;
         }
+        if self.card_missing(&dest) {
+            return;
+        }
         // The label as it is now: the card may have been swapped since the last look.
         self.refresh_label();
         if let Some(why) = self.refused_by_label().or_else(|| self.library_unavailable()) {
             self.notice(why);
             return;
         }
+        // After the label: a different card has just set this setup's record aside.
+        let w = self.write().clone();
         let plan = w.plan(&self.tracks, &self.index);
         // Taking most of the card off is what a mistake looks like (music left out by accident, a
         // library half read): ask first.
@@ -298,7 +341,7 @@ impl App {
                 return;
             }
         }
-        self.room_while_writing = self.card_room().map(|(_, room)| room);
+        self.room_while_writing = self.card_room().map(|(_, room)| (w.id.clone(), room));
         let (busy, stop) = Busy::stoppable(format!("writing “{}”", w.name), plan.len());
         self.busy = Some(busy);
         self.problems = None;
@@ -319,10 +362,66 @@ impl App {
     }
 
     pub fn add_to_playlist(&mut self, track: usize) {
-        let Some(p) = self.active_playlist.and_then(|i| self.saved.playlists.get_mut(i)) else {
-            self.notice("create a playlist first");
-            return;
+        match self.active_playlist {
+            Some(i) => self.add_songs_to_playlist(i, &[track]),
+            None => self.notice("create a playlist first"),
+        }
+    }
+
+    /// Add songs to the end of a playlist, and say so (undo takes them back out).
+    pub fn add_songs_to_playlist(&mut self, i: usize, songs: &[usize]) {
+        let Some(name) = self.saved.playlists.get(i).map(|p| p.name.clone()) else { return };
+        let what = match songs {
+            [one] => format!("“{}”", self.tracks[*one].display_title()),
+            _ => format!("{} songs", songs.len()),
         };
-        p.tracks.push(self.tracks[track].id());
+        self.remember_playlists(format!("adding {what} to “{name}”"));
+        let ids: Vec<PathBuf> = songs.iter().map(|&t| self.tracks[t].id()).collect();
+        self.saved.playlists[i].tracks.extend(ids);
+        self.notice_undoable(format!("added {what} to “{name}”"));
+    }
+
+    /// A new, empty playlist, named so no other has its name, and open.
+    pub fn new_playlist(&mut self) {
+        self.remember_playlists("making a new playlist");
+        let taken = |n: &str| self.saved.playlists.iter().any(|p| p.name.eq_ignore_ascii_case(n));
+        let name = (1..).map(|n| format!("Playlist {n}")).find(|n| !taken(n)).unwrap_or_default();
+        self.saved.playlists.push(Playlist { name, tracks: Vec::new() });
+        self.active_playlist = Some(self.saved.playlists.len() - 1);
+    }
+
+    /// Delete a playlist; a notice offers to undo it. Card setups stop putting it on their cards.
+    pub fn delete_playlist(&mut self, i: usize) {
+        let Some(name) = self.saved.playlists.get(i).map(|p| p.name.clone()) else { return };
+        self.remember_playlists(format!("deleting the playlist “{name}”"));
+        self.saved.playlists.remove(i);
+        for w in &mut self.saved.writes {
+            w.playlists.remove(&name);
+        }
+        self.active_playlist = self.saved.playlists.len().checked_sub(1).map(|last| i.min(last));
+        self.write_preview = None;
+        self.notice_undoable(format!("deleted the playlist “{name}”"));
+    }
+
+    /// Rename a playlist, and the setups that put it on their cards with it. A name that's empty,
+    /// or another playlist's (card folders ignore case), is refused: the old one stays.
+    pub fn rename_playlist(&mut self, i: usize, new: &str) -> bool {
+        let new = new.trim();
+        let Some(old) = self.saved.playlists.get(i).map(|p| p.name.clone()) else { return false };
+        if new == old {
+            return true;
+        }
+        if new.is_empty() || self.saved.playlists.iter().enumerate().any(|(j, p)| j != i && p.name.eq_ignore_ascii_case(new)) {
+            self.notice(if new.is_empty() { format!("a playlist needs a name; kept “{old}”") } else { format!("there's already a playlist called “{new}”; kept “{old}”") });
+            return false;
+        }
+        self.remember_playlists(format!("renaming “{old}” to “{new}”"));
+        self.saved.playlists[i].name = new.to_string();
+        for w in &mut self.saved.writes {
+            if w.playlists.remove(&old) {
+                w.playlists.insert(new.to_string());
+            }
+        }
+        true
     }
 }

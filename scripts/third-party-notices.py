@@ -1,6 +1,9 @@
 """List every Rust crate compiled into the app with its licence, for the app's Licenses folder.
 
-    python3 scripts/third-party-notices.py > THIRD-PARTY.txt
+    python3 scripts/third-party-notices.py [target] > THIRD-PARTY.txt
+
+The target is the platform built for (default aarch64-apple-darwin; the Windows installer passes
+x86_64-pc-windows-msvc): crates only some platforms use are listed for those.
 
 This is a list of components and licences, not the full licence texts; `cargo about` can
 generate the full texts and is the next step before a 1.0 release (see docs/DISTRIBUTION.md).
@@ -12,9 +15,10 @@ import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
+target = sys.argv[1] if len(sys.argv) > 1 else "aarch64-apple-darwin"
 meta = json.loads(
     subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--locked", "--filter-platform", "aarch64-apple-darwin"],
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--filter-platform", target],
         cwd=root, capture_output=True, text=True, check=True,
     ).stdout
 )
@@ -36,8 +40,9 @@ while stack:
 rows = sorted((packages[p]["name"], packages[p]["version"], packages[p].get("license") or "see crate") for p in seen if p != root_id)
 out = sys.stdout
 out.write("Third-party software in this app\n================================\n\n")
-out.write("FFmpeg: LGPL v2.1 or later, with LAME (MP3 encoder, LGPL). Licence texts and build details in Licenses/FFmpeg.\n")
-out.write("SQLite (via libsqlite3-sys): public domain.\n\n")
+out.write("FFmpeg (optional on Windows): LGPL v2.1 or later, with LAME (MP3 encoder, LGPL). Licence texts and build details in Licenses/FFmpeg.\n")
+out.write("SQLite (via libsqlite3-sys): public domain.\n")
+out.write("Fonts: ET Book (MIT), Courier Prime and Kalam (SIL Open Font Licence 1.1). Licence texts in Licenses/Fonts.\n\n")
 out.write("Rust crates (name, version, licence):\n\n")
 width = max(len(n) for n, _, _ in rows)
 for name, version, lic in rows:

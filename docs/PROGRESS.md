@@ -1,6 +1,6 @@
 # Pausetape: progress and roadmap
 
-*Last updated: 2026-10-30: the roadmap's steps 1–5 and 7 are done, 6 and 8 in a first form (see §2 and the [CHANGELOG](../CHANGELOG.md), sections 23–33). Section 1 below still describes 2026-10-28 in places; the CHANGELOG is the full record.*
+*Last updated: 2026-11-21, for 0.2.0. Section 1 was written before the sidebar replaced the tabs, and still describes them; the [CHANGELOG](../CHANGELOG.md) is the full record.*
 
 Pausetape organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
@@ -34,11 +34,12 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 | **Card tab: saved writes** | A *write* is a named layout for a card: which artists, albums and playlists go on it; folder names just for that card; album order (`1997 - Album`, `Album`, or your own `01 - Album`). *Compare with the card* shows what will be copied and removed; *Write to the card* copies only what changed. Deselected music is removed, but only files that write put there and whose size hasn't changed. |
 | **Layout on the card** | `Artist/1997 - Album/01 - Title.flac`; multi-disc `1-01`; compilations name the track artist. Names made safe for FAT (`AC/DC` → `AC-DC`), case-insensitive collisions avoided, plain byte copies so macOS leaves no `._` files, optional cleanup of existing `._` and `.DS_Store` files. |
 | **Playlists** | Built in the app; written to the card as folders of numbered **copies** (`_Playlists/Road Trip/01 - Artist - Title.flac`) plus an `.m3u8` for future firmware. Symlinks aren't possible on FAT/exFAT (see §4). |
-| **Formats** | Plays FLAC, MP3, WAV, AAC, ALAC, AIFF, Ogg, MP2, MKA, CAF directly. Through ffmpeg (bundled in the Mac app; installed separately elsewhere): Dolby E-AC-3 and AC-3 (e.g. Atmos releases), TrueHD, DTS, Opus, APE, WavPack, WMA, converted once to a temporary stereo WAV. **Not Dolby AC-4**: FFmpeg has no decoder for it. The real codec inside M4A files is detected. Anything RECHO can't play gets a badge ("Dolby E-AC-3 · not on RECHO"), is counted in a collapsible banner, and is left off the card unless you choose otherwise. |
+| **Formats** | Plays FLAC, MP3, WAV, AAC, ALAC, AIFF, Ogg, MP2, MKA, CAF directly. Through ffmpeg (bundled in the Mac app, offered by the Windows installer, installed separately on Linux): Dolby E-AC-3 and AC-3 (e.g. Atmos releases), TrueHD, DTS, Opus, APE, WavPack, WMA, converted once to a temporary stereo WAV. **Not Dolby AC-4**: FFmpeg has no decoder for it. The real codec inside M4A files is detected. Anything RECHO can't play gets a badge ("Dolby E-AC-3 · not on RECHO"), is counted in the card tab, and is converted for the card unless you choose otherwise there. |
 | **Player** | Cover art (embedded, else `cover.jpg`/`folder.jpg`…), a loudness waveform that doubles as the seek bar with a red playhead, round previous/play/next buttons, volume. Keys: space, ←/→ (±10 s), N/P. |
 | **Mac app** | `scripts/package-macos.sh` makes a universal `.app` (47 MB) and `.dmg` (24 MB) for Apple Silicon + Intel, macOS 12+, with a minimal LGPL ffmpeg (8.3 MB) inside, icon, licences, and an ad-hoc signature (no Apple Developer Program yet). `--version` reports which ffmpeg is in use. See [DISTRIBUTION](DISTRIBUTION.md). |
-| **Automated builds** | GitHub Actions: `ci.yml` builds and tests on macOS, Windows and Linux on every push; `macos.yml` packages the DMG and attaches it to releases for `v*` tags. Written, not yet run (no GitHub repository yet). |
-| **Look** | Tufte-inspired: one serif face (Palatino), warm paper or ink theme, no boxes except where a task needs grouping, colour only for warnings (always brick red) and an accent of the user's choosing (seven presets) for what's open, playing or under way. Long names shorten with "…" to fit; the layout holds from 720 px to wide screens. |
+| **Windows installer** | `scripts/package-windows.sh` makes a per-user NSIS installer (11 MB) with a minimal LGPL ffmpeg (5.5 MB, cross-compiled by `scripts/build-ffmpeg-windows.sh`) as an option, ticked by default. See [DISTRIBUTION](DISTRIBUTION.md). |
+| **Automated builds** | GitHub Actions: `ci.yml` builds and tests on macOS, Windows and Linux on every push; `macos.yml` packages the DMG and `windows.yml` the Windows installer, attaching them to releases for `v*` tags. `ci.yml` and `macos.yml` have built releases since 0.1.0; `windows.yml` hasn't run yet. |
+| **Look** | Tufte-inspired: ET Book for the music (album titles in its italic), Courier Prime for figures standing alone, Kalam for the names of cards and playlists, all brought with the app; warm paper or ink theme, no boxes except where a task needs grouping, colour only for warnings (always brick red) and an accent of the user's choosing (seven presets) for what's open, playing or under way. Long names shorten with "…" to fit; the layout holds from 720 px to wide screens. |
 
 ### How it was checked
 
@@ -59,18 +60,24 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 
 ### Not verified yet
 
-- **A real write to the Echo Mini's card.** The write logic is tested on temporary folders, and
-  the *Write to the card* button runs that same code, but nobody has pressed it against a FAT/exFAT
-  card and then browsed the result on the player.
-- **Writing tags into real audio files** (*write corrected tags*, *write … to source files*).
-  The code uses `lofty`, but no test writes to a real FLAC/MP3 and reads it back.
+- **The whole round on the Echo Mini itself, through a card reader:** Sync, Eject, browse on the
+  player. Syncs to FAT32 sticks and disk images are recorded in [CARD_STATES](CARD_STATES.md) §8;
+  a card reader isn't.
+- **Writing tags into real files in other formats.** Real MP3s were checked on 2026-11-06: tags written
+  into copies of the 401 that had failed (two ID3v2 tags, or zeros before the audio; CHANGELOG
+  §96) read back corrected, artist, album and length kept. On 2026-11-08, copies of 15 FLAC and 15
+  M4A (AAC, ALAC, E-AC-3) too, with the audio identical. Ogg, AIFF and the rest are covered
+  only by tests on generated files.
 - **Click-through of the dialogs.** The screenshots open them programmatically.
-- **Windows and Linux: never built or run there.** The code is written to be portable, and two
-  tests that assumed `/` as the path separator were fixed, but an audit found real gaps (no SD
-  card detection on Windows, for one). [TESTING](TESTING.md) lists them with workarounds and is
-  the step-by-step guide for trying it.
-- **The Mac app on Intel** (no Rosetta on the build Mac), the **first-launch approval** of a
-  downloaded copy, and both **GitHub Actions workflows** (no GitHub repository yet).
+- **Windows: first run on Windows 11 (2026-11-01).** It built and passed its tests unchanged;
+  drives, free space, a FAT32 write and rewrite, unticking an album, ffmpeg conversion and the
+  Trash on cards worked. Text sat high and a console opened behind the app; both are fixed.
+  [TESTING](TESTING.md) §3 has the details, and [CARD_STATES](CARD_STATES.md) §8 what's been run
+  on real drives since.
+- **Linux: never built or run there.** The code is written to be portable, but an audit found
+  gaps; [TESTING](TESTING.md) lists them with workarounds and is the step-by-step guide.
+- **The Mac app on Intel** (no Rosetta on the build Mac), and on macOS versions older than the
+  ones it's been run on, though it's built for macOS 12.
 
 ### Known issues and limits
 
@@ -133,7 +140,7 @@ or two, **M** = about a day, **L** = several days.
 | 6 | **Add new music:** pick a folder (e.g. Downloads), see each album as new / edition / better copy / duplicate, copy or move it into the music folder in the organised layout. | Calibre's "Add books"; keeps the library growing without manual sorting. | M |
 | 7 | **Duplicates, actions:** prefer this copy, these are different albums, move covered copies to the Trash with undo. | Frees disk space; search (step 4) makes it quick. | M |
 | 8 | **Saved selections** (virtual libraries): saved searches usable as card selections and smart playlists ("lossless jazz", "gym"). | Builds on step 4. | M |
-| 9 | **Windows and Linux builds:** drive detection, bundled ffmpeg, installers ([DISTRIBUTION](DISTRIBUTION.md)). | Distribution. | M–L |
+| 9 | **Windows and Linux builds:** drive detection, bundled ffmpeg, installers ([DISTRIBUTION](DISTRIBUTION.md)). *Windows installer with optional ffmpeg done 2026-11-14; signing and Linux packages to do.* | Distribution. | M–L |
 
 **Route to the first real write on the test card** (2026-10-28). The card holds 67 GB copied by
 hand: 936 songs are exact copies of what a write needs, 1,840 songs (29.8 GB) aren't in the
@@ -191,7 +198,8 @@ Smaller items, ordered by value.
   names before writing. *M*
 - **Progress with time left, and Cancel**, during long writes (a 30 GB first write takes a
   while). *S*
-- **Eject the card** after a successful write (`diskutil eject`). *S*
+- ~~**Eject the card** after a successful write.~~ *Done 2026-11-06:* the notice of a finished
+  Sync offers *Eject* (CHANGELOG §101).
 - **"On the card" marks in the library**: a quiet dot on albums the active write has put on
   the card, so the library and the card tab tell the same story. *S*
 - **Prefer the best copy.** When the same album exists twice (FLAC and MP3, or Atmos and
@@ -202,8 +210,8 @@ Smaller items, ordered by value.
 
 ### Library
 
-- **Keyboard navigation:** ↑/↓ through tracks, Enter to play, `/` or ⌘F to jump to the filter,
-  Esc to clear it. *S*
+- ~~**Keyboard navigation.**~~ *Done 2026-11-05:* ↑/↓ through songs or albums, Enter to play,
+  ⌘F to the search box, ⌘A, ⌘I, ⌘D, ⌘⇧S, ⌘Z; listed in Settings › Keyboard.
 - **Cover thumbnails** next to album titles; optionally an album grid view. *M*
 - **Remember expanded artists and scroll position** between launches. *S*
 - **Look up every album** in one go, as a queue with progress, then review the suggestions
@@ -224,6 +232,8 @@ Smaller items, ordered by value.
 ### Player
 
 - **Up-next queue** with shuffle and repeat, and *play next* / *add to queue* on any track. *M*
+  *Done 2026-11-05, but shuffle and repeat:* the queue opens from the player; *Play next* and
+  *Add to the queue* are in every right-click menu.
 - **Gapless playback** by queueing the next track in the audio engine ahead of time; matters
   for live albums and *Love* itself. *M*
 - **macOS media keys and Now Playing** (via the `souvlaki` crate). *M*
@@ -260,7 +270,7 @@ Smaller items, ordered by value.
 | **Copy by default, reorganise in place only on request** | The music folder is the user's own; it may be organised for other players or tools. |
 | **Card writes delete only their own files** | The manifest records what each write created and at what size; anything else on the card is never touched. |
 | **Tags cached raw, folder guesses recomputed** | Guesses from folder names depend on which folder is the music root, so caching them would go stale. |
-| **ffmpeg as a separate program, bundled on macOS** | Most libraries are FLAC/MP3/AAC, which play without it. For the rest (Dolby, Opus, APE…) the Mac app ships a minimal LGPL build made from source (8.3 MB, not a 70–100 MB GPL download). It runs as its own program, so the app stays MIT. On Windows/Linux it is still a separate install, for now. |
+| **ffmpeg as a separate program, bundled on macOS** | Most libraries are FLAC/MP3/AAC, which play without it. For the rest (Dolby, Opus, APE…) the Mac app ships a minimal LGPL build made from source (8.3 MB, not a 70–100 MB GPL download). It runs as its own program, so the app stays MIT. On Windows it will be an optional installer component, ticked by default ([DISTRIBUTION](DISTRIBUTION.md) §3); until then, and on Linux, it is a separate install. |
 | **MIT licence** | Simple and compatible with every dependency (Symphonia is MPL-2.0; bundled ffmpeg LGPL as a separate program). Also qualifies for free open-source code signing on Windows (SignPath). |
 | **Mac first, unsigned for now** | No Apple Developer Program yet: builds are ad-hoc signed and users approve the app once in System Settings. |
 
@@ -273,10 +283,11 @@ Smaller items, ordered by value.
 - **Version control.** A git repository exists (`target/` and `dist/` ignored) with nothing
   committed yet; the first commit and a GitHub remote are the next steps. Once pushed, the CI
   workflow gives the first Windows/Linux build results.
-- **Formatting.** The code uses lines up to ~160 characters; plain `cargo fmt` would rewrap every
-  file. Adding a `rustfmt.toml` (`max_width = 160`) first keeps diffs readable.
+- **Formatting.** Done (2026-11-06): the code is formatted by hand, with lines up to ~160
+  characters, and `rustfmt.toml` turns rustfmt off (`disable_all_formatting`), so `cargo fmt`, an
+  editor's format-on-save or Trunk's own rustfmt leave it as it is.
 - **Continuous integration**: `ci.yml` exists; watch its first runs on Windows and Linux.
-- **A tag-writing test** on a real FLAC and MP3 (see *Not verified yet*).
+- **A tag-writing test** on real Ogg and AIFF files (MP3, FLAC and M4A done; see *Not verified yet*).
 - **Upgrade path for saved settings.** Saved state is versioned implicitly through serde
   defaults; a breaking change to `Saved` would need an explicit version.
 

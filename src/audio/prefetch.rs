@@ -58,7 +58,9 @@ impl Prefetch {
                     }
                     continue;
                 }
-                let samples: Vec<Sample> = inner.by_ref().take(chunk_len).collect();
+                // Symphonia panics on some damaged AAC: the song ends there, rather than the
+                // thread mid-chunk. Reading the waveform finds the same and says so.
+                let samples: Vec<Sample> = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| inner.by_ref().take(chunk_len).collect())).unwrap_or_default();
                 finished = samples.len() < chunk_len;
                 // The end is marked by an empty chunk.
                 let end = (finished && !samples.is_empty()).then(|| Chunk { generation, samples: Vec::new() });

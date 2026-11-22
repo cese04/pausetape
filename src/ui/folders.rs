@@ -1,5 +1,5 @@
-//! Folders tab: two steps, each with one clear choice. Choosing happens in a dialog so the tab
-//! itself only ever shows what is set and how to change it.
+//! The music folder and the card: a welcome the first time (two steps, each with one clear
+//! choice), the music folder's section in Settings after that, and the dialogs for choosing.
 
 use std::path::{Path, PathBuf};
 
@@ -13,7 +13,7 @@ use super::widgets::{StrikeIf, button, button_with, caps, icon_link, link, muted
 use super::ROW_H;
 use crate::app::{App, Tab};
 use crate::card::{AlbumOrder, SpaceInfo, Volume};
-use super::layout::{S1, S2, S3, row};
+use super::layout::{S1, S2, S3, row, font};
 
 /// The open folder dialog, if any.
 pub enum Picker {
@@ -23,35 +23,55 @@ pub enum Picker {
     Card { browse: Option<Navigator>, show_all: bool },
 }
 
-pub fn show(app: &mut App, ui: &mut Ui) {
-    ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-        ui.set_max_width(ui.available_width().min(680.0));
-        muted(ui, "Two things to set up once: where your music is, and which SD card it goes to.");
+/// The first time (no music folder yet): what the app needs, in two steps, over the page.
+/// The card can wait; the music folder can't.
+pub fn welcome(app: &mut App, ui: &mut Ui) {
+    if !app.welcome_open {
+        return;
+    }
+    let ink = ink(ui);
+    let frame = super::theme::dialog_frame(ui);
+    egui::Modal::new(egui::Id::unique("welcome")).frame(frame).show(ui.ctx(), |ui| {
+        ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
+        ui.label(RichText::new(format!("Welcome to {}", crate::APP_NAME)).size(font::HEADING).color(ink.text));
+        ui.add_space(S1);
+        muted(ui, "Two things to set up once: where your music is, and which SD card it goes to. Nothing in your music folder changes unless you ask.");
         ui.add_space(S2);
-        source_step(app, ui);
+        source_step(app, ui, Some("1"));
         ui.add_space(S2);
         card_step(app, ui);
         ui.add_space(S3);
-        if app.saved.source.is_some() && app.write().dest.is_some() {
-            row(ui, |ui| {
-                muted(ui, "All set. Next, choose what goes on the card.");
-                if primary_with(ui, Icon::Card, "Go to the card").clicked() {
-                    app.tab = Tab::Card;
+        row(ui, |ui| {
+            let ready = app.saved.source.is_some();
+            let label = if app.write().dest.is_some() { "Start" } else { "Start, and choose the card later" };
+            ui.add_enabled_ui(ready, |ui| {
+                if primary_with(ui, Icon::Check, label).on_disabled_hover_text("choose your music folder first").clicked() {
+                    app.welcome_open = false;
+                    app.tab = Tab::Library;
+                    // Compared again now: music already on the card is explained after this.
+                    if app.write().dest.is_some() {
+                        app.preview_write();
+                    }
                 }
             });
-            ui.add_space(S3);
-        }
-        egui::CollapsingHeader::new(RichText::new("Advanced: reorganise the music folder itself").color(ink(ui).muted))
-            .default_open(app.tidy_plan.is_some())
-            .show(ui, |ui| tidy(app, ui));
+        });
     });
+}
+
+/// Settings › Music folder: the folder, its commands, and reorganising it (advanced).
+pub fn settings_section(app: &mut App, ui: &mut Ui) {
+    source_step(app, ui, None);
+    ui.add_space(S1);
+    egui::CollapsingHeader::new(RichText::new("Advanced: reorganise the music folder itself").color(ink(ui).muted))
+        .default_open(app.tidy_plan.is_some())
+        .show(ui, |ui| tidy(app, ui));
 }
 
 fn step_title(ui: &mut Ui, n: &str, title: &str) {
     let ink = ink(ui);
     row(ui, |ui| {
-        ui.label(RichText::new(n).size(22.0).color(ink.muted));
-        ui.label(RichText::new(title).size(19.0).color(ink.text));
+        ui.label(RichText::new(n).size(font::HEADING).color(ink.muted));
+        ui.label(RichText::new(title).size(font::TITLE).color(ink.text));
     });
 }
 
@@ -59,19 +79,22 @@ fn folder_name(p: &Path) -> String {
     p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string())
 }
 
-fn source_step(app: &mut App, ui: &mut Ui) {
+/// The music folder: what it holds, and its commands. `step`: its number in the welcome.
+fn source_step(app: &mut App, ui: &mut Ui, step: Option<&str>) {
     let ink = ink(ui);
     panel_frame(ui).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        step_title(ui, "1", "Your music");
-        ui.add_space(S1);
+        if let Some(n) = step {
+            step_title(ui, n, "Your music folder");
+            ui.add_space(S1);
+        }
         match app.saved.source.clone() {
             None => {
                 muted(ui, "The folder on this computer that holds your music. It can be messy; Pausetape only reads it.");
             }
             Some(src) => {
-                ui.label(RichText::new(folder_name(&src)).size(20.0).strong());
-                ui.add(egui::Label::new(RichText::new(src.display().to_string()).size(12.0).color(ink.muted)).truncate());
+                ui.label(RichText::new(folder_name(&src)).size(font::HEADING).strong());
+                ui.add(egui::Label::new(RichText::new(src.display().to_string()).size(font::META).color(ink.muted)).truncate());
                 ui.add_space(S1);
                 if app.busy.as_ref().is_some_and(|b| b.label == "reading tags") {
                     muted(ui, "reading your music…");
@@ -88,10 +111,10 @@ fn source_step(app: &mut App, ui: &mut Ui) {
             if button_with(ui, Icon::Folder, label).clicked() {
                 app.picker = Some(Picker::Source(Navigator::new(app.saved.source.as_deref())));
             }
-            if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Rescan, "read again").on_hover_text("pick up files added or changed since").clicked() {
+            if app.saved.source.is_some() && app.busy.is_none() && button_with(ui, Icon::Rescan, "Rescan").on_hover_text("pick up files added, changed or removed since the folder was last read").clicked() {
                 app.scan();
             }
-            if app.saved.source.is_some() && app.busy.is_none() && icon_link(ui, Icon::Add, "add music from a folder…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
+            if app.saved.source.is_some() && app.busy.is_none() && button_with(ui, Icon::Add, "Add music…").on_hover_text("copy new albums from Downloads or another drive into your music folder").clicked() {
                 app.picker = Some(Picker::AddFrom(Navigator::new(dirs_downloads().as_deref())));
             }
         });
@@ -121,12 +144,12 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         ui.set_width(ui.available_width());
         step_title(ui, "2", "Your SD card");
         if app.saved.writes.len() > 1 {
-            muted(ui, format!("for the write “{write_name}”"));
+            muted(ui, format!("for the card setup “{write_name}”"));
         }
         ui.add_space(S1);
         match &dest {
             None => {
-                muted(ui, "Put the Echo Mini's card in a reader (or connect the player as a drive), then choose it.");
+                muted(ui, "Put the player's card in a reader (or connect the player as a drive), then choose it.");
             }
             Some(d) => {
                 let vol = volume_of(&app.volumes, d);
@@ -135,12 +158,12 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                     Some(v) => format!("{} › {}", v.name, d.strip_prefix(&v.path).map(|r| r.display().to_string()).unwrap_or_default()),
                     None => folder_name(d),
                 };
-                ui.label(RichText::new(title).size(20.0).strong());
-                match crate::card::space(d) {
-                    _ if !d.exists() => {
+                ui.label(RichText::new(title).size(font::HEADING).strong());
+                match app.card_seen().filter(|l| l.there).map(|l| l.space) {
+                    None => {
                         ui.label(RichText::new("Not connected right now. Insert the card to write to it.").color(ink.warn));
                     }
-                    Some(info) => {
+                    Some(Some(info)) => {
                         space_bar(ui, &info, 320.0);
                         let fs = info.fs_name().map(|f| format!(" · {f}")).unwrap_or_default();
                         muted(ui, format!("{} free of {}{fs}", text::bytes(info.free), text::bytes(info.total)));
@@ -149,7 +172,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     // Connected, but this OS doesn't report space yet (Windows, for now).
-                    None => {
+                    Some(None) => {
                         muted(ui, "Connected. Free space isn't shown on this system yet.");
                     }
                 }
@@ -158,7 +181,7 @@ fn card_step(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
         let label = if dest.is_some() { "Change card…" } else { "Choose card…" };
         if button_with(ui, Icon::Card, label).clicked() {
-            app.volumes = crate::card::volumes();
+            app.look_soon();
             app.picker = Some(Picker::Card { browse: None, show_all: false });
         }
     });
@@ -178,13 +201,13 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
         match &mut picker {
             Picker::Source(nav) => {
-                ui.label(RichText::new("Choose your music folder").size(20.0));
+                ui.label(RichText::new("Choose your music folder").size(font::HEADING));
                 muted(ui, "Open folders until you're in the one that holds all your music, then use it.");
                 ui.add_space(S2);
                 nav.show(ui);
                 ui.add_space(S2);
                 row(ui, |ui| {
-                    if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
+                    if nav.can_choose() && primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_source = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
@@ -193,13 +216,13 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 });
             }
             Picker::AddFrom(nav) => {
-                ui.label(RichText::new("Add music from a folder").size(20.0));
+                ui.label(RichText::new("Add music from a folder").size(font::HEADING));
                 muted(ui, "Open the folder with the new music (Downloads, a friend's drive…). It's checked against your library first; nothing is copied until you say so, and the folder isn't changed.");
                 ui.add_space(S2);
                 nav.show(ui);
                 ui.add_space(S2);
                 row(ui, |ui| {
-                    if primary_button(ui, format!("Check “{}”", nav.name())).clicked() {
+                    if nav.can_choose() && primary_button(ui, format!("Check “{}”", nav.name())).clicked() {
                         chosen_add = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
@@ -208,13 +231,13 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 });
             }
             Picker::Card { browse: Some(nav), .. } => {
-                ui.label(RichText::new("Choose a folder on the card").size(20.0));
+                ui.label(RichText::new("Choose a folder on the card").size(font::HEADING));
                 muted(ui, "Music will go inside this folder instead of at the top of the card.");
                 ui.add_space(S2);
                 nav.show(ui);
                 ui.add_space(S2);
                 row(ui, |ui| {
-                    if primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
+                    if nav.can_choose() && primary_button(ui, format!("Use “{}”", nav.name())).clicked() {
                         chosen_dest = Some(nav.dir().to_path_buf());
                     }
                     if button(ui, "Cancel").clicked() {
@@ -223,7 +246,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                 });
             }
             Picker::Card { browse, show_all } => {
-                ui.label(RichText::new("Choose the SD card").size(20.0));
+                ui.label(RichText::new("Choose the SD card").size(font::HEADING));
                 ui.add_space(S2);
                 let (cards, others): (Vec<&Volume>, Vec<&Volume>) =
                     app.volumes.iter().partition(|v| v.info.and_then(|i| i.is_fat()).unwrap_or(true));
@@ -236,7 +259,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                         ui.set_width(ui.available_width());
                         row(ui, |ui| {
                             ui.vertical(|ui| {
-                                ui.label(RichText::new(&v.name).size(17.0).strong());
+                                ui.label(RichText::new(&v.name).size(font::TITLE).strong());
                                 if let Some(info) = &v.info {
                                     space_bar(ui, info, 220.0);
                                     let fs = info.fs_name().map(|f| format!(" · {f}")).unwrap_or_default();
@@ -264,8 +287,10 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     if link(ui, "Use a folder on a card…").clicked() {
-                        let start = app.write().dest.clone().unwrap_or_else(|| PathBuf::from("/Volumes"));
-                        *browse = Some(Navigator::new(Some(&start)));
+                        *browse = Some(match &app.write().dest {
+                            Some(dest) => Navigator::new(Some(dest)),
+                            None => Navigator::on_drives(),
+                        });
                     }
                 });
                 ui.add_space(S1);
@@ -279,7 +304,7 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         close = true;
     }
     if refresh {
-        app.volumes = crate::card::volumes();
+        app.look_soon();
     }
     if let Some(dir) = chosen_source {
         app.set_source(dir);
@@ -290,7 +315,11 @@ pub fn pickers(app: &mut App, ui: &mut Ui) {
         close = true;
     }
     if let Some(dir) = chosen_dest {
-        if app.saved.source.as_ref().is_some_and(|s| dir.starts_with(s) || s.starts_with(&dir)) {
+        // Work running now would record what it did on the card against the new one.
+        if let Some(b) = &app.busy {
+            app.notice(format!("the card can be changed once {} is done", b.label));
+            close = true;
+        } else if app.saved.source.as_ref().is_some_and(|s| dir.starts_with(s) || s.starts_with(&dir)) {
             app.notice("the card folder can't be inside your music folder (or the other way round)");
         } else {
             app.write_mut().dest = Some(dir);
@@ -307,7 +336,7 @@ fn tidy(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     muted(
         ui,
-        "You don't need this to use the card: writes read your music wherever it is. Use it only if you want the folder on this computer renamed into Artist / Album / Track as well. It moves files, and can be undone.",
+        "You don't need this to use the card: Sync reads your music wherever it is. Use it only if you want the folder on this computer renamed into Artist / Album / Track as well. It moves files, and can be undone.",
     );
     if app.saved.source.is_none() || app.tracks.is_empty() {
         return;
@@ -331,14 +360,14 @@ fn tidy(app: &mut App, ui: &mut Ui) {
         if app.tidy_plan.is_some() && app.busy.is_none() && button_with(ui, Icon::Folder, "Reorganise now").clicked() {
             app.run_tidy();
         }
-        if crate::card::latest_journal().is_some() && icon_link(ui, Icon::Back, "undo last reorganise").clicked() {
+        if crate::card::latest_journal().is_some() && icon_link(ui, Icon::Back, "Undo last reorganise").clicked() {
             app.undo();
         }
     });
     let Some(plan) = &app.tidy_plan else { return };
     let src = app.saved.source.clone().unwrap_or_default();
     let moving = plan.iter().filter(|p| src.join(&p.rel) != app.tracks[p.track].path).count();
-    ui.label(RichText::new(format!("{moving} of {} files would move. RECHO's resume position may point at a moved file afterwards.", plan.len())).color(ink.warn).size(13.0));
+    ui.label(RichText::new(format!("{moving} of {} files would move. RECHO's resume position may point at a moved file afterwards.", plan.len())).color(ink.warn).size(font::UI));
     plan_list(ui, plan, 320.0);
 }
 
@@ -351,10 +380,10 @@ pub fn plan_list(ui: &mut Ui, plan: &[crate::card::PlanItem], max_height: f32) {
             let (dir, file) = rel.rsplit_once(std::path::MAIN_SEPARATOR).unwrap_or(("", &rel));
             row(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                ui.label(RichText::new(format!("{dir}/")).color(ink.muted).size(13.0));
-                ui.label(RichText::new(file).size(13.0).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
+                ui.label(RichText::new(format!("{dir}{}", std::path::MAIN_SEPARATOR)).color(ink.muted).size(font::UI));
+                ui.label(RichText::new(file).size(font::UI).color(if p.skip.is_some() { ink.muted } else { ink.text }).strikethrough_if(p.skip.is_some()));
                 if let Some(why) = p.skip {
-                    ui.label(RichText::new(format!("   {why}")).size(12.0).color(ink.warn));
+                    ui.label(RichText::new(format!("   {why}")).size(font::META).color(ink.warn));
                 }
             });
         }
@@ -377,15 +406,14 @@ pub fn add_dialog(app: &mut App, ui: &mut Ui) {
     let mut versions_on = a.versions;
     let (mut add, mut close) = (false, false);
     let bytes = app.adding_bytes();
-    let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
-    let fits = room.is_none_or(|free| free > bytes + 1_000_000_000);
+    let fits = app.source_free().is_none_or(|free| free > bytes + 1_000_000_000);
     let frame = super::theme::dialog_frame(ui);
     let modal = egui::Modal::new(egui::Id::unique("add music")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(560.0f32.min(ui.ctx().content_rect().width() - 80.0));
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
             crate::ui::icons::paint(ui.painter(), rect, Icon::Add, ink.text);
-            ui.label(RichText::new(format!("Add music from “{name}”")).size(18.0).color(ink.text));
+            ui.label(RichText::new(format!("Add music from “{name}”")).size(font::TITLE).color(ink.text));
         });
         ui.add_space(S2);
         if new + versions == 0 {

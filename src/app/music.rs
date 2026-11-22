@@ -106,13 +106,17 @@ impl App {
         for &(i, j) in &renamed {
             on_card.entry(plan[j].track).or_insert(w.manifest[i].size);
         }
-        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), renamed: renamed.len(), ..Default::default() };
+        let by_hand = match &self.card_found {
+            Some((id, dest, found)) if *id == w.id && w.dest.as_ref() == Some(dest) => found.iter().copied().filter(|t| !on_card.contains_key(t)).collect(),
+            _ => HashSet::new(),
+        };
+        let mut s = CardState { on_card: on_card.keys().copied().collect(), planned: planned.keys().copied().collect(), by_hand, renamed: renamed.len(), ..Default::default() };
         s.planned_bytes = planned.values().map(|p| card::card_size(&self.tracks[p.track], p.target)).sum();
         let ids: Vec<PathBuf> = self.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&self.tracks).collect();
-        s.planned_bytes += playlist::planned(&w.chosen_playlists(&self.saved.playlists), &by_path, &w.playlists_folder, w.options.rules())
+        s.planned_bytes += playlist::planned(&w.chosen_playlists(&self.saved.playlists), &by_path, &card::organised(&self.tracks, &plan), &w.playlists_dir(), w.options.rules())
             .iter()
-            .flat_map(|(_, copies, _)| copies.iter().map(|c| card::card_size(c.track, c.target)))
+            .flat_map(|(_, copies, _)| copies.iter().filter(|c| c.copy).map(|c| card::card_size(c.track, c.target)))
             .sum::<u64>();
         let (mut adds, mut removes) = (HashSet::new(), HashSet::new());
         for a in &self.index.artists {
@@ -401,6 +405,7 @@ impl App {
                     track: t.track,
                     disc: t.disc,
                     year: t.year,
+                    genres: t.genres.as_deref().unwrap_or_default().join("; "),
                     seconds: t.duration.as_secs_f64(),
                 }
             })
@@ -424,6 +429,7 @@ impl App {
             self.notices.push(format!("couldn't save corrections to the library database: {e:#}"));
         }
         self.write_preview = None;
+        self.covers_changed(&songs);
         let name = image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         // Songs inside an album file (CUE) can't be retagged in place; their card copies can.
         let where_ = if songs.iter().all(|&i| self.tracks[i].cue.is_some()) {
@@ -449,6 +455,7 @@ impl App {
                 Field::Track => t.track = v.parse().ok().or(t.track),
                 Field::Disc => t.disc = v.parse().ok().or(t.disc),
                 Field::Year => t.year = v.parse().ok().or(t.year),
+                Field::Genre => t.genres = Some(crate::library::genres::split([v.as_str()])),
             }
             t.dirty = true;
         }

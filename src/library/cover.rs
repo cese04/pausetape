@@ -60,16 +60,15 @@ fn images_in(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Decoded, downscaled cover for the track at `path`, if it has one, and the image file it came
-/// from when it isn't embedded in the track (so it could be added to the track's tags).
+/// from when it isn't embedded in the track (so it could be added to the track's tags). An
+/// embedded image that can't be decoded (damaged, or a format not read here) gives way to the
+/// image beside the track.
 pub fn load(path: &Path) -> Option<(image::RgbaImage, Option<PathBuf>)> {
-    let (bytes, file) = match embedded(path) {
-        Some(b) => (b, None),
-        None => {
-            let f = beside(path)?;
-            (std::fs::read(&f).ok()?, Some(f))
-        }
-    };
-    Some((decode(&bytes)?, file))
+    if let Some(img) = embedded(path).and_then(|b| decode(&b)) {
+        return Some((img, None));
+    }
+    let f = beside(path)?;
+    Some((decode(&std::fs::read(&f).ok()?)?, Some(f)))
 }
 
 /// An image file decoded and downscaled for the player: a cover waiting to be embedded.
@@ -143,5 +142,18 @@ mod tests {
         image::RgbaImage::from_pixel(10, 10, image::Rgba([0, 0, 0, 255])).save(dir.join("Covers/Front.png")).unwrap();
         assert_eq!(beside(&track), Some(dir.join("Covers/Front.png")));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn decodes_the_formats_taggers_embed() {
+        // BMP (as some taggers embed it), GIF and WebP, besides JPEG and PNG.
+        let img = image::RgbaImage::from_pixel(700, 700, image::Rgba([20, 120, 90, 255]));
+        for format in [image::ImageFormat::Bmp, image::ImageFormat::Gif, image::ImageFormat::WebP, image::ImageFormat::Png] {
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            image::DynamicImage::ImageRgba8(img.clone()).write_to(&mut bytes, format).unwrap();
+            let shown = decode(bytes.get_ref()).unwrap_or_else(|| panic!("{format:?} decodes"));
+            assert_eq!(shown.dimensions(), (MAX_SIDE, MAX_SIDE), "{format:?} is downscaled");
+            assert!(shrink(bytes.get_ref()).is_ok(), "{format:?} can be embedded as JPEG");
+        }
     }
 }

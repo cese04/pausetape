@@ -45,13 +45,14 @@ done
 iconutil -c icns "$iconset" -o "$ROOT/target/AppIcon.icns"
 
 echo "== assembling $APP"
-rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Licenses/FFmpeg"
+rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Licenses/FFmpeg" "$APP/Contents/Resources/Licenses/Fonts"
 lipo -create "target/aarch64-apple-darwin/release/$BIN" "target/x86_64-apple-darwin/release/$BIN" -output "$APP/Contents/MacOS/$BIN"
 # Next to the main executable, where the app looks for it first.
 cp target/ffmpeg-macos/ffmpeg "$APP/Contents/MacOS/ffmpeg"
 cp target/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp LICENSE "$APP/Contents/Resources/Licenses/LICENSE.txt"
 cp target/ffmpeg-macos/COPYING.LGPLv2.1 target/ffmpeg-macos/COPYING.LAME target/ffmpeg-macos/BUILD-INFO.txt "$APP/Contents/Resources/Licenses/FFmpeg/"
+cp assets/fonts/*.txt "$APP/Contents/Resources/Licenses/Fonts/"
 python3 -I scripts/third-party-notices.py > "$APP/Contents/Resources/Licenses/THIRD-PARTY.txt"
 sed -e "s/__APP_NAME__/$APP_NAME/g" -e "s/__BUNDLE_ID__/$BUNDLE_ID/g" -e "s/__VERSION__/$VERSION/g" \
     assets/macos/Info.plist > "$APP/Contents/Info.plist"

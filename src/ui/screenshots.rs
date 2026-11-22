@@ -11,10 +11,10 @@ use std::time::{Duration, Instant};
 use crate::app::{App, Tab};
 use crate::card::playlist::Playlist;
 
-const TABS: [(Tab, &str); 15] = [
-    (Tab::Folders, "folders"),
-    (Tab::Folders, "picker"),
-    (Tab::Folders, "cardpicker"),
+const TABS: [(Tab, &str); 16] = [
+    (Tab::Library, "folders"),
+    (Tab::Library, "picker"),
+    (Tab::Library, "cardpicker"),
     (Tab::Library, "library"),
     (Tab::Library, "tageditor"),
     (Tab::Library, "job"),
@@ -26,6 +26,7 @@ const TABS: [(Tab, &str); 15] = [
     (Tab::Card, "takeover"),
     (Tab::Card, "playertest"),
     (Tab::Playlists, "playlists"),
+    (Tab::Genres, "genres"),
     (Tab::Settings, "settings"),
 ];
 
@@ -85,7 +86,9 @@ impl Shooter {
             let who = std::env::var("PAUSETAPE_SHOT_ARTIST").unwrap_or_else(|_| "Radiohead".into());
             let found = app.index.artists.iter().enumerate().find(|(_, a)| a.name.eq_ignore_ascii_case(&who));
             if let Some((ai, a)) = found {
-                let al = a.albums.iter().position(|al| al.tracks.iter().any(|&i| app.tracks[i].cue.is_some())).unwrap_or(0);
+                // PAUSETAPE_SHOT_ALBUM=<text>: the album whose title holds it, instead.
+                let named = std::env::var("PAUSETAPE_SHOT_ALBUM").ok().and_then(|n| a.albums.iter().position(|al| al.title.as_deref().is_some_and(|t| t.to_lowercase().contains(&n.to_lowercase()))));
+                let al = named.or_else(|| a.albums.iter().position(|al| al.tracks.iter().any(|&i| app.tracks[i].cue.is_some()))).unwrap_or(0);
                 let (queue, cluster) = (a.albums[al].tracks.clone(), a.cluster);
                 app.play(queue, 1);
                 app.lookup_album(ai, al);
@@ -134,18 +137,62 @@ impl Shooter {
                     app.card_album(ai, bi, on);
                 }
             }
-            // PAUSETAPE_SHOT_DEVICE=stock: write for the Echo Mini's stock firmware instead of RECHO.
-            if std::env::var("PAUSETAPE_SHOT_DEVICE").is_ok_and(|d| d == "stock") {
-                app.write_mut().options.device = crate::card::Device::EchoMiniStock;
+            // PAUSETAPE_SHOT_DEVICE=stock|walkman|rockbox|other: write for that player instead of
+            // RECHO, in the music folder it looks in.
+            use crate::card::Device;
+            let device = match std::env::var("PAUSETAPE_SHOT_DEVICE").as_deref() {
+                Ok("stock") => Some(Device::EchoMiniStock),
+                Ok("walkman") => Some(Device::Walkman),
+                Ok("rockbox") => Some(Device::Rockbox),
+                Ok("other") => Some(Device::Other),
+                _ => None,
+            };
+            if let Some(d) = device {
+                let w = app.write_mut();
+                w.options.device = d;
+                w.music_folder = d.music_folder().into();
             }
             // PAUSETAPE_SHOT_PATTERN=<pattern>: name the card's songs by it.
             if let Ok(p) = std::env::var("PAUSETAPE_SHOT_PATTERN") {
                 app.write_mut().options.pattern = Some(p);
                 app.refresh_on_card();
             }
+            // PAUSETAPE_SHOT_QUEUE=1: two songs of another album to play next, and the queue open.
+            if std::env::var_os("PAUSETAPE_SHOT_QUEUE").is_some()
+                && let Some(other) = app.index.artists.iter().flat_map(|a| &a.albums).find(|al| !al.tracks.iter().any(|t| app.queue.contains(t)))
+            {
+                let next: Vec<usize> = other.tracks.iter().take(2).copied().collect();
+                app.play_next(&next);
+            }
+            // PAUSETAPE_SHOT_PROBLEMS=1: a tag write's problems, with long paths, above the library.
+            if std::env::var_os("PAUSETAPE_SHOT_PROBLEMS").is_some() {
+                let long = "writing /Volumes/Elements/Music/Lamp - 東京ユートピア通信 (2011)/03 - Jesus bleibet meine Freude [Herz und Mund und Tat und Leben BWV 147].mp3: Permission denied (os error 13)";
+                app.problems = Some(crate::app::Problems { what: "writing tags".into(), list: vec![long.to_string(); 3], log: None });
+            }
+            // PAUSETAPE_SHOT_LYRICS=1: the details panel on the lyrics (=unfollowed: as if
+            // scrolled by hand, not following the song).
+            app.details_lyrics = std::env::var_os("PAUSETAPE_SHOT_LYRICS").is_some();
+            app.lyrics_follow = std::env::var("PAUSETAPE_SHOT_LYRICS").map_or(true, |v| v != "unfollowed");
+            // PAUSETAPE_SHOT_COMPACT=1: lists packed tight. PAUSETAPE_SHOT_TEXT=<size>: the text size
+            // (1.25: a quarter larger).
+            app.saved.compact = std::env::var_os("PAUSETAPE_SHOT_COMPACT").is_some();
+            if let Some(z) = std::env::var("PAUSETAPE_SHOT_TEXT").ok().and_then(|v| v.parse::<f32>().ok()) {
+                ctx.set_zoom_factor(z);
+            }
+            // PAUSETAPE_SHOT_CARD_SETUP=1: the card's view on its setup rather than its albums.
+            app.card_setup_open = std::env::var_os("PAUSETAPE_SHOT_CARD_SETUP").is_some();
             // PAUSETAPE_SHOT_SELECT=1: three songs of the album that plays chosen for editing.
             if std::env::var_os("PAUSETAPE_SHOT_SELECT").is_some() {
                 app.selected = app.queue.iter().take(3).copied().collect();
+            }
+            // PAUSETAPE_SHOT_CARD=<folder>: the card this write goes to (only read; the website's
+            // shots use an empty FAT32 disk image).
+            if let Some(card) = std::env::var_os("PAUSETAPE_SHOT_CARD") {
+                app.write_mut().dest = Some(card.into());
+            }
+            // PAUSETAPE_SHOT_EMPTY=1: nothing chosen, as in a new setup for a card.
+            if std::env::var_os("PAUSETAPE_SHOT_EMPTY").is_some() {
+                app.write_mut().custom.chosen = Some(Default::default());
             }
             // PAUSETAPE_SHOT_ROOM=<GB>: pretend the card (an empty temporary folder) has this
             // much room, to show what the card tab offers when the choice doesn't fit.
@@ -155,7 +202,7 @@ impl Shooter {
                 let _ = std::fs::create_dir_all(card.join("Hand Copied"));
                 let _ = std::fs::write(card.join("Hand Copied/01 - Song.mp3"), b"not really a song");
                 app.write_mut().dest = Some(card);
-                app.room_while_writing = Some((gb * 1e9) as u64);
+                app.room_while_writing = Some((app.write().id.clone(), (gb * 1e9) as u64));
             }
             // PAUSETAPE_SHOT_WATCH=<a mounted scratch volume>: label it for a second setup,
             // "Road trip", that shares the first one's destination, then look for cards: the
@@ -167,6 +214,15 @@ impl Shooter {
                 let _ = crate::card::Label::of(app.write()).save(&vol);
                 app.select_write(0);
                 self.watch = true;
+            }
+            // PAUSETAPE_SHOT_DONE=<a mounted scratch volume>: as if a Sync to it had just finished,
+            // its notice offering to eject it (nothing is written there, nor ejected).
+            if let Some(vol) = std::env::var_os("PAUSETAPE_SHOT_DONE").map(PathBuf::from) {
+                app.write_mut().dest = Some(vol);
+                app.volumes = crate::card::volumes();
+                app.notice("Done · “Echo Mini”: 412 copied · 0 unchanged · 0 removed · 3 left out · 0 retagged · 12 mac files cleaned");
+                let id = app.write().id.clone();
+                app.offer_eject(&id);
             }
             app.preview_write();
         }
@@ -193,6 +249,8 @@ impl Shooter {
                     app.set_tested(s, Some(a));
                 }
             }
+            // The first-run welcome, and the folder dialogs over it.
+            app.welcome_open = matches!(TABS[n].1, "folders" | "picker" | "cardpicker");
             app.sync_confirm = (TABS[n].1 == "syncconfirm").then(|| (app.write().id.clone(), 4100, 4412));
             if TABS[n].1 == "cardowner" {
                 // Another setup's card where this one writes: the note, and no Sync.
@@ -204,6 +262,10 @@ impl Shooter {
                 app.select_write(0);
                 app.dest_label.get_or_insert(other);
             }
+            // PAUSETAPE_SHOT_QUIET=1: no notice above the page (the scan's "40 songs…").
+            if std::env::var_os("PAUSETAPE_SHOT_QUIET").is_some() {
+                app.notices.clear();
+            }
             app.filter = if TABS[n].1 == "covers" { "cover:no".into() } else { filter };
             if TABS[n].1 == "albums" {
                 app.selected_albums = app.album_rows(&app.query()).iter().skip(2).take(2).map(|r| r.id.clone()).collect();
@@ -213,6 +275,15 @@ impl Shooter {
                 "job" => {
                     app.tag_edit = None;
                     app.busy = Some(crate::app::Busy::pretend("writing “Echo Mini”", 1204, 2466, 300));
+                }
+                "takeover" => {
+                    app.tag_edit = None;
+                    app.busy = None;
+                    // The card's own label again, not the one the "cardowner" shot pretended, and
+                    // the comparison (and check) that switching setups since has dropped.
+                    app.refresh_label();
+                    app.preview_write();
+                    self.survey = std::env::var_os("PAUSETAPE_SHOT_SURVEY").is_some();
                 }
                 _ => {
                     app.tag_edit = None;

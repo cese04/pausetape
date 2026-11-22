@@ -25,6 +25,9 @@ pub struct WriteProfile {
     pub id: String,
     pub name: String,
     pub dest: Option<PathBuf>,
+    /// The folder on the card the music and playlists go in (`MUSIC` for a Walkman), with `/`
+    /// between levels; empty for the card's top level, as setups had before there was a choice.
+    pub music_folder: String,
     pub options: Options,
     pub custom: Custom,
     /// Names of playlists to put on the card.
@@ -37,6 +40,8 @@ pub struct WriteProfile {
     pub last_written: Option<u64>,
     /// The take-over dialog was shown on its own once for this card; later it opens on request.
     pub take_over_offered: bool,
+    /// The id of the card `manifest` describes (`Label::card`). Another card at `dest` is a new one.
+    pub card_id: Option<String>,
 }
 
 impl Default for WriteProfile {
@@ -45,6 +50,7 @@ impl Default for WriteProfile {
             id: super::label::new_id(),
             name: "Echo Mini".into(),
             dest: None,
+            music_folder: String::new(),
             options: Options::default(),
             custom: Custom::default(),
             playlists: BTreeSet::new(),
@@ -53,6 +59,7 @@ impl Default for WriteProfile {
             manifest: Vec::new(),
             last_written: None,
             take_over_offered: false,
+            card_id: None,
         }
     }
 }
@@ -63,14 +70,27 @@ impl WriteProfile {
         // Song folders keep clear of the folders the app keeps for itself on the card (an
         // artist called "_Playlists"): they'd be taken for its playlist copies or test samples.
         let own = [sanitize_component(&self.playlists_folder, 80).to_lowercase(), super::testcard::TEST_FOLDER.to_lowercase()];
+        let root = self.music_root();
         for p in &mut plan {
             let mut parts = p.rel.components();
             let Some(first) = parts.next().map(|c| c.as_os_str().to_string_lossy().into_owned()) else { continue };
             if parts.clone().next().is_some() && own.contains(&first.to_lowercase()) {
                 p.rel = PathBuf::from(format!("{first}_")).join(parts.as_path());
             }
+            p.rel = root.join(&p.rel);
         }
         plan
+    }
+
+    /// `music_folder` as a path on the card, each level made safe for FAT; empty for the top.
+    pub fn music_root(&self) -> PathBuf {
+        // Leading dots go (no hidden folder, no ".."), and a level left with nothing is dropped.
+        self.music_folder.split(['/', '\\']).filter(|c| !c.trim().trim_start_matches('.').trim().is_empty()).map(|c| sanitize_component(c, 80)).collect()
+    }
+
+    /// Where the playlists' folders go on the card, inside `music_root`.
+    pub fn playlists_dir(&self) -> PathBuf {
+        self.music_root().join(sanitize_component(&self.playlists_folder, 80))
     }
 
     pub fn chosen_playlists(&self, all: &[Playlist]) -> Vec<Playlist> {
@@ -81,10 +101,12 @@ impl WriteProfile {
         self.manifest.iter().map(|w| w.size).sum()
     }
 
-    /// A card file of this write that's one of its playlist copies.
+    /// A card file of this write that's one of its playlist copies: in its playlists folder,
+    /// or that folder at the card's top, where it was before the music had a folder.
     fn in_playlists(&self, rel: &Path) -> bool {
-        let dir = sanitize_component(&self.playlists_folder, 80).to_lowercase();
-        Path::new(&rel.to_string_lossy().to_lowercase()).starts_with(&dir)
+        let lower = |p: &Path| PathBuf::from(p.to_string_lossy().to_lowercase());
+        let rel = lower(rel);
+        rel.starts_with(lower(&self.playlists_dir())) || rel.starts_with(sanitize_component(&self.playlists_folder, 80).to_lowercase())
     }
 }
 
@@ -171,6 +193,11 @@ fn relocate(w: &WriteProfile, tracks: &[Track], plan: &[PlanItem], dest: &Path) 
     (manifest, moved, errors)
 }
 
+/// Where the plan puts each song on the card: track id → card path, for playlists.
+pub fn organised(tracks: &[Track], plan: &[PlanItem]) -> HashMap<PathBuf, PathBuf> {
+    plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect()
+}
+
 #[derive(Default)]
 pub struct Preview {
     pub to_copy: usize,
@@ -230,7 +257,8 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     }
     let ids: Vec<PathBuf> = tracks.iter().map(Track::id).collect();
     let by_id: HashMap<&Path, &Track> = ids.iter().map(PathBuf::as_path).zip(tracks).collect();
-    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &w.playlists_folder, w.options.rules()) {
+    for (dir, copies, _) in playlist::planned(&w.chosen_playlists(playlists), &by_id, &organised(tracks, &plan), &w.playlists_dir(), w.options.rules()) {
+        let copies: Vec<_> = copies.into_iter().filter(|c| c.copy).collect();
         p.playlist_files += copies.len();
         for c in copies {
             check(&c.rel, c.track, c.target, &mut p, &mut keep);
@@ -246,6 +274,7 @@ pub fn preview(w: &WriteProfile, tracks: &[Track], index: &Index, playlists: &[P
     p
 }
 
+#[derive(Default)]
 pub struct Outcome {
     pub manifest: Vec<Written>,
     pub copied: usize,
@@ -259,14 +288,20 @@ pub struct Outcome {
     pub errors: Vec<String>,
     /// Stopped by the user before the end: playlists and the last clean-up were left for the next write.
     pub stopped: bool,
+    /// The card wasn't there, or went away: the record keeps what it had, plus what got copied.
+    pub card_gone: bool,
+    /// The card's id, once its label is written.
+    pub card_id: Option<String>,
 }
 
 /// Remove what the previous write left that the plan no longer wants, copy the plan and
-/// playlists to the card, then remove what's left over (playlist files, songs that failed).
+/// playlists to the card, then remove what's left over (old playlist files and the like). A song
+/// the plan still wants stays even if its new copy failed: an old copy beats none.
 ///
 /// Once `stop` is set, the song being copied is finished and the write ends there. Its
 /// manifest then holds what it copied plus the earlier files still on the card, so the next
-/// write carries on from there and can still remove anything of its own.
+/// write carries on from there and can still remove anything of its own. A card that goes away
+/// ends the write the same way, keeping the earlier records, as nothing can be checked.
 #[allow(clippy::too_many_arguments)]
 pub fn write(
     w: &WriteProfile,
@@ -278,8 +313,14 @@ pub fn write(
     stop: &AtomicBool,
     mut progress: impl FnMut(Progress),
 ) -> Outcome {
+    if !super::connected(dest) {
+        return Outcome { manifest: w.manifest.clone(), card_gone: true, ..Default::default() };
+    }
+    let drive = super::copy::drive_of(dest);
     // Labelled first, so a write stopped halfway still says whose card it is.
-    let labelled = super::Label::of(w).save(dest).map_err(|e| format!("{e:#}"));
+    let label = super::Label::for_card(w, dest);
+    let labelled = label.save(dest).map_err(|e| format!("{e:#}"));
+    let card_id = labelled.is_ok().then_some(label.card);
     // Songs that only changed name move on the card instead of being copied again.
     let (manifest, renamed, rename_errors) = relocate(w, tracks, plan, dest);
     let moved = WriteProfile { manifest, ..w.clone() };
@@ -293,30 +334,48 @@ pub fn write(
     } else {
         0
     };
-    // Clean the macOS files once at the end, after playlists too.
+    // The card is tidied once at the end, after playlists too (`tidy_card`): halves of files a
+    // write cut short left behind (the card pulled out mid-copy), Pausetape's own by their name
+    // and no use to anyone, and macOS's files if wanted.
+    let tidy = || super::tidy_card(dest, w.options.clean_mac_files).1;
     let opts = Options { clean_mac_files: false, ..w.options.clone() };
     let mut r = super::execute(tracks, plan, source, dest, Mode::CopyTo, &opts, &w.manifest, stop, &mut progress);
     r.errors.extend(labelled.err());
     r.errors.extend(rename_errors);
-    if r.stopped {
+    if r.stopped || r.card_gone {
         let mut manifest = r.written;
         let mut have: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
-        manifest.extend(w.manifest.iter().filter(|m| have.insert(m.rel.to_string_lossy().to_lowercase()) && dest.join(&m.rel).exists()).cloned());
-        let cleaned = if w.options.clean_mac_files { super::clean_mac_files(dest) } else { 0 };
-        return Outcome { manifest, copied: r.copied, unchanged: r.unchanged, skipped: r.skipped, tagged: r.tagged, removed: early, renamed, cleaned, errors: r.errors, stopped: true };
+        manifest.extend(w.manifest.iter().filter(|m| have.insert(m.rel.to_string_lossy().to_lowercase()) && (r.card_gone || dest.join(&m.rel).exists())).cloned());
+        let cleaned = if r.card_gone { 0 } else { tidy() };
+        return Outcome { manifest, copied: r.copied, unchanged: r.unchanged, skipped: r.skipped, tagged: r.tagged, removed: early, renamed, cleaned, errors: r.errors, stopped: r.stopped, card_gone: r.card_gone, card_id };
     }
 
-    let organised: HashMap<PathBuf, PathBuf> = plan.iter().filter(|p| p.skip.is_none()).map(|p| (tracks[p.track].id(), p.rel.clone())).collect();
-    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_folder, w.options.rules(), &w.manifest, |_, _| {});
+    let organised = organised(tracks, plan);
+    let pl = playlist::export(&w.chosen_playlists(playlists), tracks, &organised, dest, &w.playlists_dir(), w.options.rules(), &w.manifest, |_, _| {});
 
     let mut manifest = r.written;
     manifest.extend(pl.written);
-    let keep: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
+    let mut keep: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
+    keep.extend(plan.iter().filter(|p| p.skip.is_none()).map(|p| p.rel.to_string_lossy().to_lowercase()));
     let removed = if w.prune { super::prune(dest, &w.manifest, &keep) } else { 0 };
-    let cleaned = if w.options.clean_mac_files { super::clean_mac_files(dest) } else { 0 };
+    let card_gone = !super::copy::card_there(dest, drive);
+    let cleaned = if card_gone { 0 } else { tidy() };
+    // What's recorded is what's on the card: earlier files this write neither replaced nor could
+    // remove (a song whose new copy failed, a write-protected card) stay this setup's.
+    if w.prune || card_gone {
+        let mut have: HashSet<String> = manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
+        let earlier: Vec<Written> = w.manifest.iter().filter(|m| have.insert(m.rel.to_string_lossy().to_lowercase()) && (card_gone || std::fs::metadata(dest.join(&m.rel)).is_ok_and(|md| md.len() == m.size))).cloned().collect();
+        manifest.extend(earlier);
+    }
 
     let mut errors = r.errors;
-    errors.extend(pl.errors);
+    if card_gone && !pl.errors.is_empty() {
+        // Pulled out while the playlists were written: one line says so, rather than the system's
+        // answer for each file.
+        errors.push("playlists: the card went away while they were written".into());
+    } else {
+        errors.extend(pl.errors);
+    }
     Outcome {
         manifest,
         copied: r.copied + pl.copied,
@@ -328,6 +387,8 @@ pub fn write(
         cleaned,
         errors,
         stopped: false,
+        card_gone,
+        card_id,
     }
 }
 
@@ -340,6 +401,151 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    /// A song on a "card" from an earlier write, and what a write of it needs.
+    fn earlier(root: &Path) -> (PathBuf, Vec<Track>, Vec<PlanItem>, WriteProfile) {
+        let card = root.join("card");
+        fs::create_dir_all(card.join("A")).unwrap();
+        fs::write(card.join("A/song.mp3"), [1u8; 9]).unwrap();
+        fs::write(card.join("A/old.mp3"), [2u8; 7]).unwrap();
+        // Its source has changed (another size) and, here, can't be read.
+        let tracks = vec![Track { path: root.join("gone.mp3"), ext: "mp3".into(), size: 2000, ..Default::default() }];
+        let plan = vec![PlanItem { track: 0, rel: PathBuf::from("A/song.mp3"), target: Target::Copy, skip: None }];
+        let manifest = vec![Written { rel: PathBuf::from("A/song.mp3"), size: 9, source: None }, Written { rel: PathBuf::from("A/old.mp3"), size: 7, source: None }];
+        (card, tracks, plan, WriteProfile { manifest, ..Default::default() })
+    }
+
+    #[test]
+    fn a_write_gives_the_card_an_id_and_keeps_it() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-card-id-write-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let card = root.join("card");
+        fs::create_dir_all(&card).unwrap();
+        let w = WriteProfile::default();
+        let write_once = || write(&w, &[], &[], &[], &root, &card, &AtomicBool::new(false), |_| {}).card_id;
+        let first = write_once().unwrap();
+        assert_eq!(first.len(), 16);
+        assert_eq!(super::super::Label::read(&card).unwrap().card, first);
+        assert_eq!(write_once().unwrap(), first, "the same card, the same id");
+        fs::remove_dir_all(&card).unwrap();
+        assert_eq!(write_once(), None, "no card, no id");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_card_that_is_gone_keeps_its_record_and_gets_no_folders() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-card-gone-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let (card, tracks, plan, w) = earlier(&root);
+        fs::remove_dir_all(&card).unwrap();
+        let out = write(&w, &tracks, &plan, &[], &root, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.card_gone && !out.stopped);
+        assert_eq!(out.manifest, w.manifest, "nothing can be checked, so nothing is forgotten");
+        assert!(!card.exists(), "no folder made where the card was");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_half_copy_left_by_a_pulled_card_goes_at_the_next_sync() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-half-copy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let card = root.join("card");
+        // The song being copied when the card was pulled out, no longer chosen; and its album's
+        // folder, which held nothing else.
+        let half = super::super::copy::partial_path(&card.join("Band/Album/05 - Song.mp3"));
+        fs::create_dir_all(half.parent().unwrap()).unwrap();
+        fs::write(&half, [0u8; 64]).unwrap();
+        let out = write(&WriteProfile::default(), &[], &[], &[], &root, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert!(!half.exists() && !card.join("Band").exists(), "the half and its folders are gone");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_card_pulled_out_mid_copy_says_so_rather_than_the_systems_answer() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-pulled-mid-copy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let card = root.join("card");
+        fs::create_dir_all(&card).unwrap();
+        // A song that's a pipe: the copy waits on it, and the card goes while it waits.
+        let song = root.join("song.mp3");
+        assert!(std::process::Command::new("mkfifo").arg(&song).status().unwrap().success());
+        let tracks = vec![Track { path: song.clone(), ext: "mp3".into(), size: 4, ..Default::default() }];
+        let plan = vec![PlanItem { track: 0, rel: PathBuf::from("Band/Album/01 - Song.mp3"), target: Target::Copy, skip: None }];
+        let pull = {
+            let (song, card) = (song.clone(), card.clone());
+            // Opening the pipe to write waits until the copy has opened it to read.
+            std::thread::spawn(move || {
+                let mut pipe = fs::OpenOptions::new().write(true).open(&song).unwrap();
+                fs::remove_dir_all(&card).unwrap();
+                std::io::Write::write_all(&mut pipe, b"song").unwrap();
+            })
+        };
+        let out = write(&WriteProfile::default(), &tracks, &plan, &[], &root, &card, &AtomicBool::new(false), |_| {});
+        pull.join().unwrap();
+        assert!(out.card_gone && out.copied == 0);
+        assert_eq!(out.errors, [format!("{}: the card went away while copying it", song.display())]);
+        assert!(!card.exists(), "no folder made where the card was");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_song_whose_new_copy_fails_keeps_its_old_one() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-copy-fails-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let (card, tracks, plan, w) = earlier(&root);
+        let out = write(&w, &tracks, &plan, &[], &root, &card, &AtomicBool::new(false), |_| {});
+        assert!(!out.card_gone && !out.stopped && out.copied == 0 && !out.errors.is_empty());
+        assert!(card.join("A/song.mp3").exists(), "still wanted: an old copy beats none");
+        assert!(!card.join("A/old.mp3").exists(), "no longer wanted: removed as usual");
+        assert_eq!(out.manifest.iter().map(|m| m.rel.clone()).collect::<Vec<_>>(), [PathBuf::from("A/song.mp3")], "the record says what's there");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+
+    /// `PAUSETAPE_FAT_CARD=<a FAT32 card or image, mounted> PAUSETAPE_FAT_SOURCE=<music> cargo test -- --ignored music_folder_on_fat --nocapture`
+    /// Syncs everything to a real FAT32 card for a Walkman, then moves its folder around: MUSIC
+    /// → Music (the same folder on FAT) → Audio/Music → the top. Each step must move, not copy,
+    /// and every playlist line must reach a file. Writes to the card: use a spare or an image.
+    #[test]
+    #[ignore]
+    fn music_folder_on_fat() {
+        let (Some(card), Some(src)) = (std::env::var_os("PAUSETAPE_FAT_CARD").map(PathBuf::from), std::env::var_os("PAUSETAPE_FAT_SOURCE").map(PathBuf::from)) else { return };
+        let (tracks, _) = scan(&src, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        let playlists = vec![Playlist { name: "Mix: Best".into(), tracks: tracks.iter().step_by(7).map(Track::id).collect() }];
+        let mut w = WriteProfile { name: "Walkman".into(), music_folder: "MUSIC".into(), options: Options { device: super::super::Device::Walkman, write_tags: false, ..Default::default() }, ..Default::default() };
+        w.playlists.insert(playlists[0].name.clone());
+        let songs = w.plan(&tracks, &index).iter().filter(|p| p.skip.is_none()).count();
+        for (folder, moves) in [("MUSIC", false), ("Music", false), ("Audio/Music", true), ("", true)] {
+            w.music_folder = folder.into();
+            let started = std::time::Instant::now();
+            let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+            println!("{folder:>12}: {} copied, {} moved, {} unchanged, {} removed, {} errors, {:.1?}", out.copied, out.renamed, out.unchanged, out.removed, out.errors.len(), started.elapsed());
+            assert!(out.errors.is_empty(), "{:?}", out.errors);
+            if w.manifest.is_empty() {
+                assert_eq!(out.copied, songs, "the first Sync copies every song");
+            } else {
+                assert_eq!((out.copied, out.renamed), (0, if moves { songs } else { 0 }), "{folder}: moved, not copied");
+            }
+            w.manifest = out.manifest;
+            let lists = w.playlists_dir();
+            let m3u = fs::read_to_string(card.join(&lists).join("Mix- Best.m3u8")).or_else(|_| fs::read_to_string(card.join(&lists).join("Mix - Best.m3u8"))).unwrap();
+            for l in m3u.lines().filter(|l| !l.starts_with('#')) {
+                assert!(card.join(&lists).join(l).is_file(), "{folder}: {l}");
+            }
+            assert!(super::super::Label::read(&card).is_some(), "the label stays at the top");
+            for m in &w.manifest {
+                assert!(card.join(&m.rel).is_file(), "{folder}: {} recorded but not there", m.rel.display());
+            }
+        }
+        let tops: Vec<String> = fs::read_dir(&card).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| !n.starts_with('.')).collect();
+        println!("top of the card at the end: {tops:?}");
+        assert!(!tops.iter().any(|n| n == "MUSIC" || n == "Music" || n == "Audio"), "the folders emptied by the moves are gone");
+    }
 
     /// `PAUSETAPE_CONVERT=<folder> [PAUSETAPE_CD=1] cargo test -- --ignored convert_write --nocapture`
     /// Writes a folder of songs RECHO can't play (ALAC, AAC, Dolby…) to a temporary "card" with
@@ -431,6 +637,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("pausetape-test-stop-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
+        fs::create_dir_all(&card).unwrap();
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Muse/Absolution/03 - Time Is Running Out.mp3"] {
             fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
             fs::write(src.join(f), f.as_bytes()).unwrap();
@@ -477,6 +684,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("pausetape-test-corrected-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
+        fs::create_dir_all(&card).unwrap();
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3"] {
             fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
             fs::write(src.join(f), f.as_bytes()).unwrap();
@@ -523,6 +731,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("pausetape-test-rename-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
+        fs::create_dir_all(&card).unwrap();
         for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3", "Muse/Absolution/03 - Time Is Running Out.mp3"] {
             fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
             fs::write(src.join(f), f.as_bytes()).unwrap();
@@ -563,10 +772,77 @@ mod tests {
     }
 
     #[test]
+    fn a_music_folder_takes_the_songs_and_playlists_and_moves_what_is_there() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-music-folder-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (src, card) = (root.join("src"), root.join("card"));
+        fs::create_dir_all(&card).unwrap();
+        for f in ["Muse/Absolution/01 - Intro.mp3", "Muse/Absolution/02 - Apocalypse Please.mp3"] {
+            fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
+            fs::write(src.join(f), f.as_bytes()).unwrap();
+        }
+        let (tracks, _) = scan(&src, None, false, |_| {});
+        let index = build(&tracks, &ArtistPrefs::default());
+        let playlists = vec![Playlist { name: "Mix".into(), tracks: vec![tracks[0].id()] }];
+        let mut w = WriteProfile { dest: Some(card.clone()), options: Options { write_tags: false, ..Default::default() }, ..Default::default() };
+        w.playlists.insert("Mix".into());
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert_eq!(out.copied, 3);
+        assert!(card.join("Muse/Absolution/01 - Intro.mp3").is_file() && card.join("_Playlists/Mix.m3u8").is_file(), "no folder: the top, as before");
+        w.manifest = out.manifest;
+
+        // A Walkman's folder: the songs move into it, the playlist is made there afresh.
+        w.music_folder = "MUSIC".into();
+        assert_eq!(preview(&w, &tracks, &index, &playlists, &card).renamed, 2);
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert_eq!((out.renamed, out.copied), (2, 1));
+        assert!(card.join("MUSIC/Muse/Absolution/02 - Apocalypse Please.mp3").is_file());
+        assert!(!card.join("Muse").exists() && !card.join("_Playlists").exists(), "nothing left at the top");
+        let m3u = fs::read_to_string(card.join("MUSIC/_Playlists/Mix.m3u8")).unwrap();
+        assert!(m3u.contains("\n../../MUSIC/Muse/Absolution/0"), "the .m3u8 reaches the song from inside the folder: {m3u}");
+        assert!(super::super::Label::read(&card).is_some(), "the label stays at the top");
+        w.manifest = out.manifest;
+        let out = write(&w, &tracks, &w.plan(&tracks, &index), &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert_eq!((out.renamed, out.copied, out.removed), (0, 0, 0), "settled");
+        w.manifest = out.manifest;
+
+        // A player that reads playlists: the .m3u8 alone, the copy goes. A song of the playlist
+        // not on the card otherwise is still copied beside it.
+        w.options.device = super::super::Device::Walkman;
+        let mut chosen = w.plan(&tracks, &index);
+        chosen.retain(|p| p.track == 0);
+        let playlists = vec![Playlist { name: "Mix".into(), tracks: vec![tracks[0].id(), tracks[1].id()] }];
+        let pv = preview(&w, &tracks, &index, &playlists, &card);
+        assert_eq!(pv.playlist_files, 0, "both songs are on the card in the setup's own plan");
+        let out = write(&w, &tracks, &chosen, &playlists, &src, &card, &AtomicBool::new(false), |_| {});
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert_eq!(out.copied, 1, "only the song the plan leaves out");
+        let copies: Vec<_> = fs::read_dir(card.join("MUSIC/_Playlists/Mix")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(copies, [format!("02 - Muse - {}.mp3", tracks[1].display_title())]);
+        let m3u = fs::read_to_string(card.join("MUSIC/_Playlists/Mix.m3u8")).unwrap();
+        let lines: Vec<&str> = m3u.lines().filter(|l| !l.starts_with('#')).collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].starts_with("../../MUSIC/Muse/Absolution/") && lines[1].starts_with("Mix/02 - "), "{m3u}");
+        for l in lines {
+            assert!(card.join("MUSIC/_Playlists").join(l).is_file(), "{l} is there, as the player will look for it");
+        }
+
+        // What's typed is made safe for the card, a level at a time.
+        let root_of = |f: &str| WriteProfile { music_folder: f.into(), ..Default::default() }.music_root();
+        assert_eq!(root_of(" "), PathBuf::new());
+        assert_eq!(root_of("/MUSIC/"), PathBuf::from("MUSIC"));
+        assert_eq!(root_of("../Music"), PathBuf::from("Music"));
+        assert_eq!(root_of("Audio\\Music: Mine"), PathBuf::from("Audio").join("Music - Mine"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn rewrite_after_deselecting_artist_and_playlist_cleans_up() {
         let root = std::env::temp_dir().join(format!("pausetape-test-card-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (src, card) = (root.join("src"), root.join("card"));
+        fs::create_dir_all(&card).unwrap();
         for f in ["Muse/Absolution/01 - Intro.mp3", "Blur/Parklife/01 - Girls and Boys.mp3"] {
             fs::create_dir_all(src.join(f).parent().unwrap()).unwrap();
             fs::write(src.join(f), f.as_bytes()).unwrap();

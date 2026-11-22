@@ -2,10 +2,14 @@
 //! folders a portable player browses (the Snowsky Echo Mini, with RECHO or its own firmware),
 //! and listen to it on the way.
 
+// Windows: no console window behind the app (debug builds keep it, for errors while developing).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod audio;
 mod card;
 mod library;
+mod lyrics;
 mod musicbrainz;
 mod platform;
 mod ui;
@@ -39,6 +43,7 @@ fn adopt_former_data() {
 }
 
 fn main() -> eframe::Result {
+    platform::attach_console();
     // Headless dry run: `pausetape --plan <music folder>` prints the layout without touching files.
     let args: Vec<String> = std::env::args().collect();
     // `--version`: what's running and which ffmpeg it uses (handy for bug reports).
@@ -60,7 +65,12 @@ fn main() -> eframe::Result {
     adopt_former_data();
     audio::clear_converted();
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title(APP_NAME).with_inner_size([1040.0, 760.0]).with_min_inner_size([720.0, 480.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_title(APP_NAME)
+            .with_inner_size([1040.0, 760.0])
+            .with_min_inner_size([720.0, 480.0])
+            // The cassette (made by build.rs), in the title bar and taskbar rather than egui's.
+            .with_icon(eframe::icon_data::from_png_bytes(include_bytes!(concat!(env!("OUT_DIR"), "/icon-256.png"))).unwrap_or_default()),
         ..Default::default()
     };
     eframe::run_native(APP_ID, options, Box::new(|cc| Ok(Box::new(app::App::new(cc)))))

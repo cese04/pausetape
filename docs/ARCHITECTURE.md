@@ -1,6 +1,7 @@
 # Architecture
 
-How Pausetape's code fits together. For status and plans see [PROGRESS](PROGRESS.md); for
+How Pausetape's code fits together. For status and plans see [PROGRESS](PROGRESS.md); for the
+card as a state machine, [CARD_STATES](CARD_STATES.md); for
 building and releases see [DISTRIBUTION](DISTRIBUTION.md) and [TESTING](TESTING.md).
 
 ## Shape of the app
@@ -17,6 +18,7 @@ channels; the UI thread drains them at the start of each frame (`App::poll`, in 
    scan thread ───┤  library::scan  + db (SQLite cache)
    MusicBrainz ───┤  one worker, ≤ 1 request/second
    writes ────────┤  card::write / card::execute
+   card watcher ──┤  drives, the card's label and space, every 3 s; the UI draws its last answer
    audio thread ──┘  rodio player and the play queue; status shared via Arc<Mutex<Status>>
    helpers: waveform + cover loading per track; ffmpeg conversions (serialised)
 ```
@@ -68,9 +70,10 @@ uses, so call sites read `crate::card::build_plan`, `crate::library::Track`, `cr
 src/
 ├── main.rs            start-up, --version, --plan; APP_NAME / APP_ID
 ├── platform.rs        app data folder; open a folder in Finder/Explorer/file manager; the Trash;
-│                      console programs without a console window (Windows)
+│                      console programs without a console window (Windows); ejecting a card
 ├── musicbrainz.rs     rate-limited API worker; lookups → proposed field changes; covers (Cover Art Archive);
 │                      an artist's entry: genres, years, links sorted into buy / listen / discover
+├── lyrics.rs        lyrics: LRC lines with their times; a song's own (.lrc, tags), else LRCLIB's
 ├── library/           reading and understanding the music folder
 │   ├── track.rs       Track; which formats play on RECHO / here / not at all
 │   ├── scan.rs        incremental scan (database reuse), tag reading, folder-name inference
@@ -83,6 +86,7 @@ src/
 │   ├── cover.rs       embedded or folder cover art (as plain RGBA pixels)
 │   ├── names.rs       artist/title keys, fuzzy matching, file/folder name parsing, FAT-safe names
 │   ├── grouping.rs    clusters, merge suggestions, artist → album → track index
+│   ├── genres.rs      genres: several in one tag, one genre in many spellings, MusicBrainz's in tag style
 │   └── search.rs      the search box: words and field:value terms (format:, card:, cover:…)
 ├── card/              putting music on the SD card (and tidying the music folder)
 │   ├── device.rs      the players a card is for (Echo Mini with RECHO or stock firmware): what each plays and shows,
@@ -98,7 +102,7 @@ src/
 │   ├── volumes.rs     mounted drives (drive letters on Windows), free space, filesystem type
 │   └── playlist.rs    playlists, planned copies, export with .m3u8
 ├── audio/             playing music
-│   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI
+│   ├── player.rs      playback thread (rodio); owns the queue, so songs advance without the UI; edits it without stopping
 │   ├── decode.rs      Symphonia or ffmpeg (conversion cache), loudness envelope
 │   └── prefetch.rs    decoding a few seconds ahead of the output, so a busy disk isn't heard
 ├── app/               state and the glue between background work and the UI
@@ -111,12 +115,20 @@ src/
 │   ├── cards.rs       noticing cards plugged in by their label; refusing another setup's card
 │   ├── testcard.rs    writing the test card in the background, recording what worked
 │   ├── writes.rs      card writes, reorganising, playlist edits
-│   ├── playback.rs    play queue, waveform and cover loading
+│   ├── undo.rs        ⌘Z: taking back changes to playlists and to what goes on the card (not to files)
+│   ├── genres.rs      an album's genres (its songs', else its artist's), every genre with its albums
+│   ├── lyrics.rs      lyrics for the details panel: one worker, the database first, kept once found
+│   ├── playback.rs    play queue (play next, add, move, take out), waveform and cover loading
 │   └── events.rs      per-frame message pump (poll)
 └── ui/                everything drawn on screen
-    ├── mod.rs         panels, tab bar, running job (time left, Stop), message line, tab dispatch
-    ├── theme.rs       palette, fonts, frames; style.spacing on the grid
-    ├── layout.rs      the 8-point grid (S1–S6, row and control heights) and `row`: left-to-right rows, centred
+    ├── mod.rs         panels: top bar (name, search), sidebar, status bar (work, notices), player; view dispatch
+    ├── sidebar.rs     the sidebar: the library's views, Review, saved searches, playlists, the card, settings
+    ├── details.rs     the details of what's selected (cover, songs, card state, commands), beside the library or as a sheet
+    ├── drag.rs        dragging songs and albums onto playlists, and a playlist's songs into order
+    ├── genres.rs      the genres view: every genre, each leading to its artists and albums
+    ├── theme.rs       palette, fonts (assets/fonts, with system fallbacks), frames; style.spacing on the grid
+    ├── layout.rs      the 8-point grid (S1–S6, row and control heights), the type scale (`font`) and `row`: left-to-right rows, centred
+    ├── motion.rs      how long changes take (hover, the player folding, the card's room), none when motion is reduced
     ├── icons.rs       drawn line icons (tabs and commands), no font needed
     ├── widgets.rs     links, icon links, buttons, tab pills, chips, sections, setting rows, help text
     ├── text.rs        durations, sizes, plurals, shortening, format notes and badges
@@ -124,11 +136,14 @@ src/
     ├── library.rs  playlists.rs  settings.rs  folders.rs  card.rs   one per tab
     ├── artist_panel.rs under an open artist: look-alike names, MusicBrainz facts and links, renaming
     ├── cassette.rs    the cassette: the mark beside the name, reels turning for work under way, the player's tape
-    ├── player.rs      player bar
+    ├── player.rs      player bar, full or on one line; the queue it opens
     ├── navigator.rs   in-app folder browser for the pickers
     ├── tag_editor.rs  the tag editing dialog, and the bar for the selected songs
     ├── albums.rs      the library as a sortable table of albums
     ├── player_test.rs the dialog for testing the card's player
+    ├── confirm.rs     asking before a change that can't be undone (deleting a card setup, forgetting stored tags)
+    ├── keys.rs        keyboard shortcuts: the keys, when they're listened for, the list in Settings
+    ├── menu.rs        the right-click menu on music, the same on artists, albums, songs and playlists' songs
     └── screenshots.rs debug-only screenshot demo (PAUSETAPE_SHOT)
 ```
 
@@ -172,14 +187,16 @@ App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
 ## Safety rules the code keeps
 
 - The **music folder is read-only** unless the user runs *Reorganise* (with preview and undo),
-  *write corrected tags to source files*, *add music* (copies into `Added`), or moves extra
+  *write corrected tags to source files*, *Add music…* (copies into `Added`), or moves extra
   copies to the Trash (only while the copy that stays is there; recoverable from the Trash).
 - A **card write never deletes a file it didn't create**, and not even those if the size
   changed since. *Take over the card* only moves files on the card (with an undo record), on
   the user's request.
 - Copies are **plain byte copies** (`card::plain_copy`): `std::fs::copy` on macOS would
   copy extended attributes, which appear as `._` files on FAT cards.
-- Copies go to a `.partial` file first and are renamed when complete.
+- Copies go to a hidden `.<name>.pausetape-partial` file first and are renamed when complete. A
+  card pulled out mid-copy leaves that half behind; each Sync removes any it finds
+  (`card::tidy_card`, in the same walk as the macOS files), and only files named that way.
 - Album files with a CUE sheet are **never moved or retagged**: *Reorganise* skips them, and
   corrections to their songs stay in the app (and in card copies).
 
@@ -189,21 +206,22 @@ App data folder: macOS `~/Library/Application Support/Pausetape`, Windows
 letters, label, filesystem and free space through `windows-sys` on Windows; mount points),
 `card/label.rs` (the label's hidden attribute on Windows), `platform.rs` (data folder;
 `open`/`explorer`/`xdg-open`; no Trash on Windows removable drives; ffmpeg without a console
-window on Windows),
-`ui/theme.rs` (font paths), `audio/decode.rs` (ffmpeg locations, `ffmpeg.exe`),
+window on Windows; ejecting with `diskutil`, Windows' lock-dismount-eject `DeviceIoControl`
+calls, or `gio`),
+`ui/theme.rs` (fallback font paths), `audio/decode.rs` (ffmpeg locations, `ffmpeg.exe`),
 `ui/navigator.rs` (drive shortcuts). The gaps are listed in
 [TESTING §3](TESTING.md#3-known-gaps-found-by-reading-the-code-not-yet-seen-on-a-real-machine).
 
 ## Tests
 
-`cargo test` runs 74 tests, each next to the code it checks: name rules, folder-name reading,
+`cargo test` runs the tests, each next to the code it checks: name rules, folder-name reading,
 MusicBrainz release checks, CUE sheets (parsing, encodings, album file → songs), clustering,
 editions and same-name albums (which edition a write uses, which copies another covers), which formats play where (here, on each player, and as tested), the test card's samples, card labels and which setup a card plugged in brings up, naming patterns, renaming on the card after a pattern change, layout plans, copy/move/undo,
 custom layouts and pruning, card write → deselect → rewrite, database reuse and corrections,
 a stopped write, playlist export, cover lookup, text shortening, the time left, tag edits,
 search terms, MP3 for lossless, moving a covered copy to the Trash, undo never replacing a file,
 song folders keeping clear of the app's own, linked folders, DSD headers and tags, writing every
-tag of a file, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another, artist links sorted for the panel, artist entries kept, renaming an artist in its tags, search links. They use temporary folders and fake audio files,
+tag of a file, MP3s tagged twice or padded with zeros, ffmpeg's errors, opening the library as last scanned, songs at different rates one after another, artist links sorted for the panel, artist entries kept, renaming an artist in its tags, search links. They use temporary folders and fake audio files,
 so they need no music and no network. Ignored tests (`cargo test -- --ignored <name>`): `musicbrainz`
 (live API; `musicbrainz_cover` also fetches a cover), `scan_speed` (`PAUSETAPE_BENCH=<dir>`), `decodes_formats`
 (`PAUSETAPE_FORMATS=<dir>`), `section_matches_cut` (`PAUSETAPE_SECTION=…`, see the test),
@@ -214,6 +232,6 @@ so they need no music and no network. Ignored tests (`cargo test -- --ignored <n
 ## Conventions
 
 - Comments explain *why*, not what.
-- Long lines (~160 characters); see PROGRESS §6 about `rustfmt.toml` before running `cargo fmt`.
+- Long lines (~160 characters), formatted by hand; `rustfmt.toml` keeps rustfmt (`cargo fmt`, editors) from rewriting them.
 - UI copy uses plain words ("Write to the card", "songs") and avoids file-system jargon where
   possible.

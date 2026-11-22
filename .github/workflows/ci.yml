@@ -4,27 +4,48 @@
 #
 # What's kept (see CONTRIBUTING.md): a build of `main` stays 90 days, the most GitHub allows;
 # one of `develop` or a feature branch 7 days; pull requests keep none. A version tag (`v*`)
-# attaches each platform's binary to its GitHub Release, which is kept for good.
+# attaches the Windows and Linux binaries to its GitHub Release, which is kept for good (macOS's
+# disk image comes from macos.yml).
+#
+# The dependencies are checked with cargo-deny (deny.toml) on every run, and every Monday too:
+# advisories appear whether or not anything is pushed. That weekly run only checks them.
 name: CI
 
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
+  workflow_dispatch:
 
 permissions:
   contents: write   # to attach binaries to the release of a version tag
 
 jobs:
+  # Known vulnerabilities (RustSec), licences, where crates come from, and duplicates (only
+  # warned of); what passes is set out in deny.toml.
+  deny:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny --locked check
+
   test:
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false   # see every platform's result, not just the first failure
       matrix:
-        os: [macos-14, windows-latest, ubuntu-22.04]
+        os: [macos-15, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: actions/cache@v4
         with:
@@ -41,6 +62,9 @@ jobs:
           sudo apt-get install -y pkg-config libasound2-dev libxkbcommon-dev libwayland-dev
 
       - run: cargo build --locked --release
+      # Each platform has its own `unsafe` (system calls), so each checks that every block
+      # says why it's sound. Clippy's other suggestions don't fail the build.
+      - run: cargo clippy --locked --all-targets -- -D clippy::undocumented_unsafe_blocks
       - run: cargo test --locked
 
       # The release binary, for trying on a machine without a Rust toolchain.
@@ -54,8 +78,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: ${{ github.ref == 'refs/heads/main' && 90 || 7 }}
 
-      # A version: the binary goes on its release, named for its platform.
-      - if: startsWith(github.ref, 'refs/tags/v')
+      # A version: the binary goes on its release, named for its platform. Not macOS's: its
+      # release file is the app in a disk image (macos.yml), and a bare binary there would only
+      # open in Terminal.
+      - if: startsWith(github.ref, 'refs/tags/v') && runner.os != 'macOS'
         shell: bash
         run: |
           mkdir -p dist
@@ -64,7 +90,7 @@ jobs:
           else
             cp target/release/pausetape "dist/pausetape-${{ github.ref_name }}-${{ runner.os }}"
           fi
-      - if: startsWith(github.ref, 'refs/tags/v')
+      - if: startsWith(github.ref, 'refs/tags/v') && runner.os != 'macOS'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/pausetape-*

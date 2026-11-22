@@ -4,12 +4,14 @@ use super::*;
 use crate::card::testcard;
 
 impl App {
-    /// Write the test folder to the active write's card, in the background.
+    /// Write the test folder to the active write's card, in the background: in its music folder,
+    /// where the player looks.
     pub fn write_test_card(&mut self) {
-        let Some(dest) = self.write().dest.clone().filter(|d| d.is_dir()) else {
+        let Some(card) = self.write().dest.clone().filter(|d| card::connected(d)) else {
             self.notice("choose the card first, and put it in");
             return;
         };
+        let dest = card.join(self.write().music_root());
         if self.busy.is_some() {
             return;
         }
@@ -23,19 +25,17 @@ impl App {
         });
     }
 
-    /// The test folder is on the active write's card.
-    pub fn test_card_on_card(&self) -> bool {
-        self.write().dest.as_ref().is_some_and(|d| d.join(testcard::TEST_FOLDER).is_dir() || d.join(testcard::TEST_PLAYLIST).is_file())
-    }
-
     pub fn remove_test_card(&mut self) {
         let Some(dest) = self.write().dest.clone() else { return };
-        if self.busy.is_some() {
+        if self.busy.is_some() || self.card_missing(&dest) {
             return;
         }
+        let music = dest.join(self.write().music_root());
         self.busy = Some(Busy::new("taking the test folder off the card", 0));
         self.spawn(move |tx| {
-            let _ = tx.send(Msg::TestCardRemoved(testcard::remove(&dest).map_err(|e| format!("{e:#}"))));
+            // From the music folder, and from the top, where it went before the folder changed.
+            let removed = testcard::remove(&music).and_then(|()| if music == dest { Ok(()) } else { testcard::remove(&dest) });
+            let _ = tx.send(Msg::TestCardRemoved(removed.map_err(|e| format!("{e:#}"))));
         });
     }
 

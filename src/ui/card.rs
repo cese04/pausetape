@@ -11,20 +11,22 @@ use super::navigator::describe_space;
 use super::text::{self, ago, plural};
 use super::theme::{self, ink};
 use super::icons::Icon;
+use super::library::{Mark, album_status};
 use super::widgets::{self, caps, link, muted};
 use crate::app::App;
 use crate::card::adopt::{IMPORT_FOLDER, Survey, gather_folder};
 use crate::card::pattern::{Field, Pattern, default_for};
 use crate::card::{AlbumOrder, Device, Rules, Target, Unplayable, card_size, song_path, target};
 use crate::library::Track;
-use super::layout::{S1, S2, S3, row, row_wrapped};
+use crate::library::search::fold;
+use super::layout::{ICON, ROW, S1, S2, S3, row, row_wrapped, font};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     if app.tracks.is_empty() {
         writes_bar(app, ui);
         ui.add_space(S2);
         let why = if app.saved.source.is_none() {
-            "Choose your music folder in the folders tab first."
+            "Choose your music folder first: Settings › Music folder."
         } else if app.source_missing {
             "Can't reach the music folder: is its drive connected? The card waits until it's back."
         } else if app.busy.is_some() {
@@ -44,21 +46,68 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ui.add_space(S1);
         sync_row(app, ui);
     });
-    ui.add_space(S1);
-    ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+    ui.add_space(S2);
+    // What's on the card, as the library shows albums; or how this card is set up.
+    row(ui, |ui| {
+        if widgets::tab(ui, "On the card", !app.card_setup_open).on_hover_text("the albums on the card, or going on or off at the next Sync").clicked() {
+            app.card_setup_open = false;
+        }
         ui.add_space(S2);
-        writes_bar(app, ui);
-        ui.add_space(S2);
-        problems(app, ui);
-        comparison(app, ui);
-        ui.add_space(S3);
-        selection(app, ui, &sizes);
-        ui.add_space(S3);
-        playlists(app, ui);
-        ui.add_space(S3);
-        layout_options(app, ui);
-        ui.add_space(S2);
+        if widgets::tab(ui, "Setup", app.card_setup_open).on_hover_text("where it is, what player, names and order, formats, playlists").clicked() {
+            app.card_setup_open = true;
+        }
     });
+    ui.add_space(S1);
+    if app.card_setup_open {
+        ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+            ui.add_space(S1);
+            writes_bar(app, ui);
+            ui.add_space(S3);
+            playlists(app, ui);
+            ui.add_space(S3);
+            layout_options(app, ui);
+            ui.add_space(S3);
+            egui::CollapsingHeader::new(RichText::new("Folder names and order on the card, artist by artist").color(ink(ui).text)).id_salt("card tree").show(ui, |ui| selection(app, ui, &sizes));
+            ui.add_space(S2);
+        });
+    } else {
+        on_card(app, ui);
+    }
+}
+
+/// The albums on the card, or going on or off at the next Sync, in the library's table (the
+/// search box narrows them too); or only what the next Sync changes.
+fn on_card(app: &mut App, ui: &mut Ui) {
+    problems(app, ui);
+    comparison(app, ui);
+    let changes = app.card_state.added + app.card_state.replaced + app.card_state.removed;
+    if changes == 0 {
+        app.card_changes_only = false;
+    }
+    row(ui, |ui| {
+        if widgets::tab(ui, "Everything", !app.card_changes_only).clicked() {
+            app.card_changes_only = false;
+        }
+        ui.add_space(S2);
+        let label = format!("What the next Sync changes ({changes})");
+        if changes > 0 && widgets::tab(ui, &label, app.card_changes_only).on_hover_text("Only the albums Sync adds or takes off, to look over before it runs.").clicked() {
+            app.card_changes_only = true;
+        } else if changes == 0 {
+            muted(ui, "no album changes at the next Sync");
+        }
+    });
+    ui.add_space(S1);
+    let scope = if app.card_changes_only { "card:sync" } else { "card:all" };
+    let query = crate::library::search::Query::parse(&format!("{scope} {}", app.filter));
+    if app.album_rows(&query).is_empty() && app.filter.trim().is_empty() {
+        ui.add_space(S2);
+        let keys = ui.ctx().format_shortcut(&super::keys::CARD);
+        muted(ui, format!("Nothing chosen for the card yet. In the library, select albums and press {keys}, or right-click › Send to the card."));
+        return;
+    }
+    let mut actions = Vec::new();
+    super::albums::show(app, ui, &query, &mut actions);
+    super::actions::apply(app, actions);
 }
 
 /// What Sync changes on the card, in words, or None if nothing.
@@ -87,31 +136,60 @@ fn room(app: &App) -> Option<(crate::card::SpaceInfo, u64)> {
     app.card_room()
 }
 
-/// A hairline as long as the room, and over it a bar as long as what's needed; red past the end.
-fn space_bar(ui: &mut Ui, need: u64, room: u64, width: f32) {
+/// The card as the next Sync leaves it, in one flat bar as long as the room: what stays (ink),
+/// what Sync adds (accent), what it takes off (an outline in the warning colour: that space
+/// comes free), then what's free. Past the room's end, what doesn't fit, in the warning colour.
+/// The figures show on hover.
+fn space_bar(app: &App, ui: &mut Ui, need: u64, room: u64, width: f32) {
     let ink = ink(ui);
-    let (rect, _) = ui.allocate_exact_size(vec2(width, 12.0), Sense::hover());
+    let (adding, removing) = (app.card_state.add_bytes.min(need), app.card_state.remove_bytes);
+    let staying = need - adding;
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW), Sense::hover());
+    let bar = egui::Rect::from_center_size(rect.center(), vec2(width, 6.0));
     let scale = width / room.max(need).max(1) as f32;
-    let y = rect.center().y;
-    ui.painter().hline(rect.left()..=rect.left() + room as f32 * scale, y, Stroke::new(1.0, ink.faint));
-    let used = rect.left() + need.min(room) as f32 * scale;
-    ui.painter().hline(rect.left()..=used, y, Stroke::new(3.0, ink.accent));
-    if need > room {
-        ui.painter().hline(used..=rect.left() + need as f32 * scale, y, Stroke::new(3.0, ink.warn));
+    // Each edge goes to where it now is (after a Sync, what was added becomes what's there),
+    // rather than jumping.
+    let at = |bytes: u64| bar.left() + bytes as f32 * scale;
+    let time = super::motion::time(ui.ctx(), super::motion::SETTLE);
+    let (staying_at, need_at) = (staying.min(room), need.min(room));
+    let staying_x = ui.ctx().animate_value_with_time(resp.id.with("staying"), at(staying_at), time);
+    let need_x = ui.ctx().animate_value_with_time(resp.id.with("chosen"), at(need_at), time);
+    let x = |bytes: u64| if bytes == staying_at { staying_x } else if bytes == need_at { need_x } else { at(bytes) };
+    let p = ui.painter();
+    let span = |from: u64, to: u64| egui::Rect::from_x_y_ranges(x(from)..=x(to), bar.y_range());
+    p.rect_filled(span(0, room), 3.0, ink.faint);
+    p.rect_filled(span(0, staying.min(room)), 3.0, ink.text);
+    if adding > 0 {
+        p.rect_filled(span(staying.min(room), need.min(room)), 0.0, ink.accent);
     }
+    if removing > 0 && need < room {
+        p.rect_stroke(span(need, (need + removing).min(room)), 0.0, Stroke::new(1.0, ink.warn), egui::StrokeKind::Inside);
+    }
+    if need > room {
+        p.rect_filled(span(room, need), 3.0, ink.warn);
+    }
+    let mut parts = vec![format!("{} on the card and staying", text::bytes(staying))];
+    if adding > 0 {
+        parts.push(format!("{} added at the next Sync", text::bytes(adding)));
+    }
+    if removing > 0 {
+        parts.push(format!("{} taken off", text::bytes(removing)));
+    }
+    parts.push(if need > room { format!("{} over", text::bytes(need - room)) } else { format!("{} free after Sync", text::bytes(room - need)) });
+    resp.on_hover_text(parts.join("\n"));
 }
 
 /// Changes since the last write, and the buttons that compare and sync.
 fn sync_row(app: &mut App, ui: &mut Ui) {
     let w = app.write();
     let ready = w.dest.is_some() && app.saved.source.is_some();
-    let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+    let connected = app.card_connected();
     let state = match pending_text(app) {
-        Some(t) => format!("at the next sync: {t}"),
+        Some(t) => format!("At the next Sync: {t}"),
         None if w.last_written.is_none() && w.manifest.is_empty() => "nothing written to the card yet".into(),
         None => "the card has what you chose".into(),
     };
-    let unavailable = ready.then(|| app.library_unavailable()).flatten();
+    let unavailable = ready.then(|| app.library_unavailable_as_seen()).flatten();
     row(ui, |ui| {
         if !ready {
             muted(ui, "choose a destination below to sync");
@@ -130,7 +208,7 @@ fn sync_row(app: &mut App, ui: &mut Ui) {
                 muted(ui, "card not connected");
                 return;
             }
-            if app.busy.is_none() && app.refused_by_label().is_none() && widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text("copy what you added, take off what you removed, update what changed").clicked() {
+            if app.busy.is_none() && app.refused_by_label().is_none() && widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text(format!("copy what you added, take off what you removed, update what changed ({})", ui.ctx().format_shortcut(&super::keys::SYNC))).clicked() {
                 app.run_write();
             }
             if app.busy.is_none() && widgets::button_with(ui, Icon::Compare, "Compare").on_hover_text("look at the card: what would be copied and removed; changes nothing").clicked() {
@@ -149,11 +227,11 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     }
     let ink = ink(ui);
     let name = w.name.clone();
-    let connected = w.dest.as_deref().is_some_and(|d| d.exists());
+    let connected = app.card_connected();
     let need = app.card_state.planned_bytes;
     let pending = pending_text(app);
-    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable().is_none();
-    let frame = egui::Frame::new().stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
+    let can_sync = connected && pending.is_some() && app.busy.is_none() && app.refused_by_label().is_none() && app.library_unavailable_as_seen().is_none();
+    let frame = super::theme::panel_frame(ui).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8));
     frame.show(ui, |ui| {
         row(ui, |ui| {
             let button_w = if can_sync { 100.0 } else { 0.0 };
@@ -162,12 +240,12 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
                     row_wrapped(ui, |ui| {
                         let (rect, _) = ui.allocate_exact_size(vec2(15.0, 15.0), Sense::hover());
                         super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-                        ui.label(RichText::new(&name).color(ink.text));
+                        ui.label(RichText::new(&name).family(super::theme::hand()).color(ink.text));
                         match room(app) {
                             Some((_, room)) => {
-                                space_bar(ui, need, room, 120.0);
+                                space_bar(app, ui, need, room, 160.0);
                                 muted(ui, format!("{} chosen of {} room", text::bytes(need), text::bytes(room)))
-                                    .on_hover_text("Room: what's free on the card plus what this write's own files take there.");
+                                    .on_hover_text("Room: what's free on the card plus what this setup's own files take there.");
                                 if need > room {
                                     ui.label(RichText::new(format!("{} over", text::bytes(need - room))).color(ink.warn));
                                 }
@@ -178,13 +256,13 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
                         }
                     });
                     if let Some(p) = &pending {
-                        widgets::help(ui, format!("At the next sync: {p}."));
+                        widgets::help(ui, format!("At the next Sync: {p}."));
                     }
                 });
             });
             if can_sync {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::button_with(ui, Icon::Sync, "Sync").on_hover_text("copy what you added, take off what you removed").clicked() {
+                    if widgets::primary_with(ui, Icon::Sync, "Sync").on_hover_text(format!("copy what you added, take off what you removed ({})", ui.ctx().format_shortcut(&super::keys::SYNC))).clicked() {
                         app.run_write();
                     }
                 });
@@ -193,33 +271,34 @@ pub fn strip(app: &mut App, ui: &mut Ui) {
     });
 }
 
-/// What the last card operation couldn't do, one line per file, with the saved full list.
-fn problems(app: &mut App, ui: &mut Ui) {
+/// What the last card operation (or tag write) couldn't do, one line per file, with the
+/// saved full list; above the library and the card's albums.
+pub fn problems(app: &mut App, ui: &mut Ui) {
     let Some(p) = &app.problems else { return };
     let ink = ink(ui);
     let mut dismiss = false;
     theme::panel_frame(ui).show(ui, |ui| {
-        ui.set_max_width(760.0);
+        ui.set_max_width(ui.available_width().min(760.0));
         let n = p.list.len();
         ui.label(RichText::new(format!("{}: {}", p.what, plural(n, "problem"))).color(ink.warn));
         const SHOWN: usize = 8;
         for e in p.list.iter().take(SHOWN) {
-            ui.add(egui::Label::new(RichText::new(e).size(12.5).color(ink.muted)).truncate());
+            ui.add(egui::Label::new(RichText::new(e).size(font::META).color(ink.muted)).truncate());
         }
         if n > SHOWN {
-            ui.collapsing(RichText::new(format!("{} more", n - SHOWN)).size(12.5).color(ink.muted), |ui| {
+            ui.collapsing(RichText::new(format!("{} more", n - SHOWN)).size(font::META).color(ink.muted), |ui| {
                 for e in p.list.iter().skip(SHOWN).take(500) {
-                    ui.add(egui::Label::new(RichText::new(e).size(12.5).color(ink.muted)).truncate());
+                    ui.add(egui::Label::new(RichText::new(e).size(font::META).color(ink.muted)).truncate());
                 }
             });
         }
         row(ui, |ui| {
             if let Some(log) = &p.log
-                && widgets::icon_link(ui, Icon::Folder, "open the full list").on_hover_text(log.display().to_string()).clicked()
+                && widgets::icon_link(ui, Icon::Folder, "Open the full list").on_hover_text(log.display().to_string()).clicked()
             {
                 crate::platform::reveal(log);
             }
-            dismiss = widgets::icon_link(ui, Icon::Close, "dismiss").clicked();
+            dismiss = widgets::icon_link(ui, Icon::Close, "Dismiss").clicked();
         });
     });
     if dismiss {
@@ -230,8 +309,11 @@ fn problems(app: &mut App, ui: &mut Ui) {
 
 fn writes_bar(app: &mut App, ui: &mut Ui) {
     let mut select = None;
+    // With one card, its setups are only its setup: the list shows from two (also in the sidebar).
+    let several = app.saved.writes.len() > 1;
+    if several {
     row_wrapped(ui, |ui| {
-        caps(ui, "writes");
+        caps(ui, "card setups");
         for (i, w) in app.saved.writes.iter().enumerate() {
             if widgets::tab(ui, &w.name, i == app.saved.active_write).clicked() {
                 select = Some(i);
@@ -239,16 +321,17 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
             ui.add_space(S1);
         }
         ui.add_space(S2);
-        if widgets::icon_link(ui, Icon::Add, "new").on_hover_text("a fresh layout with everything selected").clicked() {
+        if widgets::icon_link(ui, Icon::Add, "New").on_hover_text("a fresh layout with everything selected").clicked() {
             app.new_write(false);
         }
-        if widgets::icon_link(ui, Icon::Copy, "duplicate").on_hover_text("same choices, e.g. for a second card").clicked() {
+        if widgets::icon_link(ui, Icon::Copy, "Duplicate").on_hover_text("same choices, e.g. for a second card").clicked() {
             app.new_write(true);
         }
-        if app.saved.writes.len() > 1 && widgets::icon_link(ui, Icon::Trash, "delete").on_hover_text("forgets the layout; files on the card stay").clicked() {
-            app.delete_write();
+        if app.saved.writes.len() > 1 && widgets::icon_link(ui, Icon::Trash, "Delete").on_hover_text("forgets this setup; asks first").clicked() {
+            app.confirm = Some(crate::app::Confirm::DeleteWrite(app.write().id.clone()));
         }
     });
+    }
     if let Some(i) = select {
         app.select_write(i);
     }
@@ -256,15 +339,28 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     row(ui, |ui| {
         let w = &mut app.saved.writes[app.saved.active_write];
         let old = w.name.clone();
-        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::proportional(22.0)).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0));
+        let r = ui.add(egui::TextEdit::singleline(&mut w.name).align(egui::Align2::LEFT_CENTER).font(egui::FontId::new(font::HEADING, super::theme::hand())).text_color(ink.text).frame(egui::Frame::NONE).desired_width(360.0)).on_hover_text("click to rename this card");
         // Names identify writes for background replies; keep them unique and non-empty.
         if r.lost_focus() && (w.name.trim().is_empty() || app.saved.writes.iter().filter(|x| x.name == app.saved.writes[app.saved.active_write].name).count() > 1) {
             app.saved.writes[app.saved.active_write].name = old;
         }
+        if !several {
+            let button = ui.add(egui::Button::new(RichText::new("Another card setup… ▾").color(ink.muted)).frame(false)).on_hover_text("for a second card, or another selection for this one");
+            egui::Popup::menu(&button).show(|ui| {
+                if widgets::icon_link(ui, Icon::Add, "New, with nothing chosen").clicked() {
+                    app.new_write(false);
+                    ui.close();
+                }
+                if widgets::icon_link(ui, Icon::Copy, "A copy of this one").clicked() {
+                    app.new_write(true);
+                    ui.close();
+                }
+            });
+        }
     });
     let w = app.write();
     let last = match w.last_written {
-        Some(t) => format!("last written {} · {} on the card from this write ({})", ago(t), plural(w.manifest.len(), "file"), text::bytes(w.manifest_bytes())),
+        Some(t) => format!("last written {} · {} on the card from this setup ({})", ago(t), plural(w.manifest.len(), "file"), text::bytes(w.manifest_bytes())),
         None if !w.manifest.is_empty() => format!("not written yet · {} on the card from taking it over ({})", plural(w.manifest.len(), "file"), text::bytes(w.manifest_bytes())),
         None => "never written".into(),
     };
@@ -273,9 +369,11 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
     let has_dest = w.dest.is_some();
     row(ui, |ui| {
         caps(ui, "destination");
-        ui.add(egui::Label::new(shown).truncate());
-        if widgets::icon_link(ui, Icon::Card, if has_dest { "change card" } else { "choose a card" }).clicked() {
-            app.volumes = crate::card::volumes();
+        // The path gives way to the button, shortened with "…"; all of it shows on hover.
+        let button_w = widgets::text_width(ui, "Change card…", font::UI) + ICON + S1 + 2.0 * S2 + S1;
+        widgets::fitted(ui, RichText::new(&shown), ui.available_width() - button_w, Sense::hover()).on_hover_text(&shown);
+        if widgets::button_with(ui, Icon::Card, if has_dest { "Change card…" } else { "Choose card…" }).clicked() {
+            app.look_soon();
             app.picker = Some(crate::ui::folders::Picker::Card { browse: None, show_all: false });
         }
     });
@@ -291,13 +389,24 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         });
         muted(ui, device.about());
         let answered = app.write().options.tested.get(&app.write().options.device).map_or(0, |r| r.len());
-        let test = if answered > 0 { format!("tested ({answered} answers)") } else { "test it on the player".into() };
+        let test = if answered > 0 { format!("Tested ({answered} answers)") } else { "Test it on the player".into() };
         if widgets::icon_link(ui, Icon::Check, test).on_hover_text("write a folder of samples to the card, try them, and tick what works").clicked() {
             app.player_test_open = true;
         }
     });
     if device != app.write().options.device {
-        app.write_mut().options.device = device;
+        // The setup's name and folder follow the player, unless they were set by hand.
+        let was = app.write().options.device;
+        let renamed = app.write().name == was.setup_name() && !app.saved.writes.iter().any(|o| o.name == device.setup_name());
+        let w = app.write_mut();
+        if renamed {
+            w.name = device.setup_name().into();
+        }
+        if w.music_folder.trim().eq_ignore_ascii_case(was.music_folder()) {
+            w.music_folder = device.music_folder().into();
+        }
+        w.options.device = device;
+        app.write_preview = None;
         app.refresh_on_card();
     }
 }
@@ -314,7 +423,7 @@ pub fn sync_confirm_dialog(app: &mut App, ui: &mut Ui) {
     let mut answer = None;
     let r = egui::Modal::new(egui::Id::unique("sync confirm")).frame(frame).show(ui.ctx(), |ui| {
         ui.set_width(520.0f32.min(ui.ctx().content_rect().width() - 80.0));
-        ui.label(RichText::new(format!("Take {removing} of {songs} songs off the card?")).size(18.0).color(ink.text));
+        ui.label(RichText::new(format!("Take {removing} of {songs} songs off the card?")).size(font::TITLE).color(ink.text));
         ui.add_space(S1);
         widgets::help(
             ui,
@@ -352,10 +461,11 @@ fn label_note(app: &mut App, ui: &mut Ui) {
         Some(i) => {
             ui.label(RichText::new(format!("This card belongs to “{}” (written {}), so “{this}” won't sync to it or take it over.", l.name, ago(l.written))).color(ink.warn));
             row_wrapped(ui, |ui| {
-                if widgets::icon_link(ui, Icon::Card, format!("switch to “{}”", l.name)).clicked() {
+                if widgets::icon_link(ui, Icon::Card, format!("Switch to “{}”", l.name)).clicked() {
                     app.select_write(i);
                 }
-                if widgets::icon_link(ui, Icon::Check, "use it for this setup")
+                if app.busy.is_none()
+                    && widgets::icon_link(ui, Icon::Check, "Use it for this setup")
                     .on_hover_text(format!("relabels the card for “{this}”; “{}” won't sync to it any more, and the files it put there stay", l.name))
                     .clicked()
                 {
@@ -366,7 +476,7 @@ fn label_note(app: &mut App, ui: &mut Ui) {
         None => {
             widgets::help(
                 ui,
-                format!("Last written by Pausetape for “{}”, a card setup not on this Mac ({}). Sync makes it “{this}”'s; it only ever removes files “{this}” put there.", l.name, l.device.name()),
+                format!("Last written by Pausetape for “{}”, a card setup not on this computer ({}). Sync makes it “{this}”'s; it only ever removes files “{this}” put there.", l.name, l.device.name()),
             );
         }
     }
@@ -379,7 +489,7 @@ fn pattern_example(index: &crate::library::grouping::Index, tracks: &[crate::lib
     let ck = &index.clusters[artist.cluster].key;
     let t = &tracks[*album.tracks.get(1)?];
     let name = w.custom.artist_names.get(ck).unwrap_or(&artist.name);
-    let rel = song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext);
+    let rel = w.music_root().join(song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext));
     Some(rel.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join(" / "))
 }
 
@@ -409,7 +519,7 @@ impl Sizes {
         let w = app.write();
         let mut h = std::collections::hash_map::DefaultHasher::new();
         app.library_generation.hash(&mut h);
-        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder)).unwrap_or_default().hash(&mut h);
+        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder, &w.music_folder)).unwrap_or_default().hash(&mut h);
         for p in &app.saved.playlists {
             (&p.name, &p.tracks).hash(&mut h);
         }
@@ -461,9 +571,10 @@ impl Sizes {
         s.largest.sort_by_key(|&(_, _, bytes)| std::cmp::Reverse(bytes));
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules);
-        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target))).sum();
-        s.songs += planned.iter().map(|(_, copies, _)| copies.len()).sum::<usize>();
+        let organised = crate::card::organised(&app.tracks, &w.plan(&app.tracks, &app.index));
+        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &organised, &w.playlists_dir(), rules);
+        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().filter(|c| c.copy).map(|c| card_size(c.track, c.target))).sum();
+        s.songs += planned.iter().map(|(_, copies, _)| copies.iter().filter(|c| c.copy).count()).sum::<usize>();
         s
     }
 }
@@ -476,7 +587,7 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     row_wrapped(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-        ui.label(RichText::new(&w.name).size(17.0).color(ink.text));
+        ui.label(RichText::new(&w.name).size(font::TITLE).family(super::theme::hand()).color(ink.text));
         let mut s = format!("{} chosen", text::bytes(need));
         if sizes.playlists > 0 {
             s.push_str(&format!(" (playlist copies {})", text::bytes(sizes.playlists)));
@@ -491,14 +602,14 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         && sizes.songs > max
     {
         let copies = if sizes.playlists > 0 { ", playlist copies included" } else { "" };
-        ui.label(RichText::new(format!("{} chosen{copies}, but {} lists at most {}: the rest won't show up on the player.", plural(sizes.songs, "song"), device.name(), text::count(max))).color(ink.warn).size(13.0));
+        ui.label(RichText::new(format!("{} chosen{copies}, but {} lists at most {}: the rest won't show up on the player.", plural(sizes.songs, "song"), device.name(), text::count(max))).color(ink.warn).size(font::UI));
     }
     let Some((_, room)) = space else { return };
     let adoptable = app.card_survey.as_ref().filter(|(n, _)| *n == w.id).map(|(_, s)| s.used_bytes()).unwrap_or(0);
     if adoptable > 0 {
         muted(ui, format!("counting the {} a take-over moves into place as already there", text::bytes(adoptable)));
     }
-    space_bar(ui, need, room, ui.available_width().min(560.0));
+    space_bar(app, ui, need, room, ui.available_width().min(560.0));
     if need > room {
         fit(app, ui, sizes, need - room);
     }
@@ -508,13 +619,13 @@ fn capacity(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
 /// choose again), then the artists taking most room.
 fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
     let ink = ink(ui);
-    ui.label(RichText::new(format!("doesn't fit: {} over. Some ways to make it fit:", text::bytes(over))).color(ink.warn).size(13.0));
+    ui.label(RichText::new(format!("doesn't fit: {} over. Some ways to make it fit:", text::bytes(over))).color(ink.warn).size(font::UI));
     let enough = |saving: u64| if saving >= over { ", enough to fit" } else { "" };
     let mut set = None;
     if sizes.cd_saving > 0 {
         row_wrapped(ui, |ui| {
             muted(ui, format!("Write hi-res FLAC at CD quality: saves about {}{}.", text::bytes(sizes.cd_saving), enough(sizes.cd_saving)));
-            if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
+            if widgets::icon_link(ui, Icon::Check, "Do that").on_hover_text("16-bit, 44.1 or 48 kHz FLAC for songs above that; through earbuds on a portable player the difference isn't audible").clicked() {
                 set = Some(false);
             }
         });
@@ -522,7 +633,7 @@ fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
     if sizes.mp3_saving > 0 {
         row_wrapped(ui, |ui| {
             muted(ui, format!("Write lossless songs as MP3 320: saves about {}{}.", text::bytes(sizes.mp3_saving), enough(sizes.mp3_saving)));
-            if widgets::icon_link(ui, Icon::Check, "do that").on_hover_text("Hard to tell apart from the original on a portable player; your music folder keeps the lossless files, so this can be undone at any sync").clicked() {
+            if widgets::icon_link(ui, Icon::Check, "Do that").on_hover_text("Hard to tell apart from the original on a portable player; your music folder keeps the lossless files, so this can be undone at any sync").clicked() {
                 set = Some(true);
             }
         });
@@ -558,7 +669,7 @@ fn fit(app: &mut App, ui: &mut Ui, sizes: &Sizes, over: u64) {
             ui.add_space(S2);
             widgets::fitted(ui, RichText::new(&a.name).color(ink.text), 280.0, Sense::hover()).on_hover_text(&a.name);
             muted(ui, format!("{} · {}", plural(albums, "album"), text::bytes(bytes)));
-            if widgets::icon_link(ui, Icon::Remove, "leave out").on_hover_text("or untick some of their albums below").clicked() {
+            if widgets::icon_link(ui, Icon::Remove, "Leave out").on_hover_text("or untick some of their albums below").clicked() {
                 leave = Some(ai);
             }
         });
@@ -590,9 +701,9 @@ fn comparison(app: &mut App, ui: &mut Ui) {
         take_over(app, ui);
         let Some((_, p)) = &app.write_preview else { return };
         if !p.to_remove.is_empty() {
-            ui.collapsing(RichText::new("files that will be removed").color(ink.muted).size(13.0), |ui| {
+            ui.collapsing(RichText::new("files that will be removed").color(ink.muted).size(font::UI), |ui| {
                 for r in p.to_remove.iter().take(200) {
-                    ui.label(RichText::new(r.display().to_string()).size(12.5).color(ink.muted));
+                    ui.label(RichText::new(r.display().to_string()).size(font::META).color(ink.muted));
                 }
             });
         }
@@ -609,12 +720,12 @@ fn take_over(app: &mut App, ui: &mut Ui) {
     }
     row_wrapped(ui, |ui| {
         if foreign > 0 {
-            muted(ui, format!("The card also has {} this write didn't put there ({}).", plural(foreign, "file"), text::bytes(foreign_bytes)));
-            if widgets::icon_link(ui, Icon::Card, "go through them").on_hover_text("songs you copied by hand can be moved into this layout instead of copied again").clicked() {
+            muted(ui, format!("The card also has {} this setup didn't put there ({}).", plural(foreign, "file"), text::bytes(foreign_bytes)));
+            if widgets::icon_link(ui, Icon::Card, "Go through them").on_hover_text("songs you copied by hand can be moved into place on the card instead of copied again").clicked() {
                 app.take_over_open = true;
             }
         }
-        if can_undo && app.busy.is_none() && widgets::icon_link(ui, Icon::Back, "undo taking over the card").on_hover_text("move the files back to where they were").clicked() {
+        if can_undo && app.busy.is_none() && widgets::icon_link(ui, Icon::Back, "Undo taking over the card").on_hover_text("move the files back to where they were").clicked() {
             app.undo_take_over();
         }
     });
@@ -627,7 +738,7 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
         return;
     }
     // The comparison it rests on went stale (options changed, another write chosen).
-    if app.write_preview.is_none() && app.busy.is_none() {
+    if app.write_preview.is_none() && app.card_survey.is_none() && app.busy.is_none() {
         app.take_over_open = false;
         return;
     }
@@ -638,7 +749,7 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Card, ink.text);
-            ui.label(RichText::new("Music already on the card").size(18.0).color(ink.text));
+            ui.label(RichText::new("Music already on the card").size(font::TITLE).color(ink.text));
         });
         ui.add_space(S2);
         if let Some(b) = &app.busy {
@@ -657,8 +768,8 @@ pub fn take_over_dialog(app: &mut App, ui: &mut Ui) {
 
 fn take_over_steps(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
-    let Some((id, p)) = &app.write_preview else { return };
-    let (foreign, foreign_bytes) = (p.foreign, p.foreign_bytes);
+    let id = &app.write().id;
+    let (foreign, foreign_bytes) = app.write_preview.as_ref().map_or((0, 0), |(_, p)| (p.foreign, p.foreign_bytes));
     // Counts and sizes, copied out so the buttons below can change the app.
     let surveyed = app.card_survey.as_ref().filter(|(n, _)| n == id).map(|(_, s)| {
         let c = |l: &[(PathBuf, u64)]| (l.len(), Survey::bytes(l));
@@ -667,12 +778,12 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
     let clutter = app.card_survey.as_ref().filter(|(n, _)| n == id).map(|(_, s)| s.clutter()).unwrap_or_default();
     match surveyed {
         None if foreign > 0 => {
-            ui.label(RichText::new(format!("The card has {} that this write didn't put there ({}): music copied by hand, perhaps.", plural(foreign, "file"), text::bytes(foreign_bytes))).color(ink.text));
+            ui.label(RichText::new(format!("The card has {} that this setup didn't put there ({}): music copied by hand, perhaps.", plural(foreign, "file"), text::bytes(foreign_bytes))).color(ink.text));
             ui.add_space(S1);
             for (n, step) in [
                 "Check them against your library. This reads a little of each file and changes nothing.",
-                "See what they are: exact copies of songs this write needs, other versions, music your library doesn't have, and other files.",
-                "Take over the card: the copies are moved into this write's layout (renamed on the card, instantly) instead of copied again. Nothing else is deleted unless you say so, and undo puts everything back.",
+                "See what they are: exact copies of songs this setup needs, other versions, music your library doesn't have, and other files.",
+                "Take over the card: the copies are moved into this setup's layout (renamed on the card, instantly) instead of copied again. Nothing else is deleted unless you say so, and undo puts everything back.",
             ]
             .iter()
             .enumerate()
@@ -687,19 +798,47 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && widgets::primary_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
                     app.survey_card();
                 }
-                if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card's view offers it again").clicked() {
                     app.take_over_open = false;
                 }
             });
         }
         None => {}
         Some(((used, used_bytes), (spare, spare_bytes), (versions, versions_bytes), (unknown, unknown_bytes), (other, other_bytes))) => {
-            let what = if used == 1 { "is an exact copy of a song" } else { "are exact copies of songs" };
-            ui.label(RichText::new(format!("{} on the card {what} this write needs ({}).", plural(used, "song"), text::bytes(used_bytes))).color(ink.text));
-            muted(ui, "They're moved into place (renamed on the card, instant) instead of copied again.");
+            // Albums the card has (some songs of, at least) that this write doesn't choose: one
+            // click chooses them, so the write starts from what the card holds.
+            let found: Vec<(usize, usize)> = app
+                .index
+                .artists
+                .iter()
+                .enumerate()
+                .flat_map(|(ai, a)| a.albums.iter().enumerate().map(move |(bi, al)| (ai, bi, al)))
+                .filter(|(_, _, al)| al.tracks.iter().any(|t| app.card_state.by_hand.contains(t)) && !al.tracks.iter().any(|t| app.card_state.planned.contains(t)))
+                .map(|(ai, bi, _)| (ai, bi))
+                .collect();
+            let to_tick = !found.is_empty();
+            if to_tick {
+                ui.label(RichText::new(format!("{} from your library {} on the card, not ticked in this setup.", plural(found.len(), "album"), if found.len() == 1 { "is" } else { "are" })).color(ink.text));
+                muted(ui, "Tick them, and this setup starts from what the card holds: taking the card over then moves their songs into place instead of copying them again.");
+                ui.add_space(S1);
+                row(ui, |ui| {
+                    if app.busy.is_none() && widgets::primary_with(ui, Icon::Check, "Tick them").clicked() {
+                        for (ai, bi) in found {
+                            app.card_album(ai, bi, true);
+                        }
+                        app.survey_card();
+                    }
+                });
+                ui.add_space(S1);
+            }
+            if used > 0 || !to_tick {
+                let what = if used == 1 { "is an exact copy of a song" } else { "are exact copies of songs" };
+                ui.label(RichText::new(format!("{} on the card {what} this setup needs ({}).", plural(used, "song"), text::bytes(used_bytes))).color(ink.text));
+                muted(ui, "They're moved into place (renamed on the card, instant) instead of copied again.");
+            }
             if spare > 0 {
                 let what = if spare == 1 { "is a copy of a library song" } else { "are copies of library songs" };
-                muted(ui, format!("{} {what} this write leaves out or converts ({}).", plural(spare, "file"), text::bytes(spare_bytes)));
+                muted(ui, format!("{} {what} this setup leaves out or converts ({}).", plural(spare, "file"), text::bytes(spare_bytes)));
             }
             if versions > 0 {
                 let what = if versions == 1 { "is another version of a song" } else { "are other versions of songs" };
@@ -714,18 +853,17 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                     ui.label(RichText::new(format!("{} aren't in your library at all ({}).", plural(unknown, "song"), text::bytes(unknown_bytes))).color(ink.text))
                         .on_hover_text("Kept on the card either way. To keep them for good, copy them into your music folder first.");
                     // Room on the music folder's drive, so the copy can't fill it up.
-                    let room = app.saved.source.as_deref().and_then(crate::card::space).map(|s| s.free);
-                    let fits = room.is_none_or(|free| free > unknown_bytes + 1_000_000_000);
+                    let fits = app.source_free().is_none_or(|free| free > unknown_bytes + 1_000_000_000);
                     if app.busy.is_none() && fits {
                         let hint = format!(
                             "Copies them, with their covers, into “{}” in your music folder, keeping the card's folder names; the card isn't changed. Then the library is rescanned, and checking the card again lets a take-over move them into place too.",
                             IMPORT_FOLDER
                         );
-                        if link(ui, "copy them into your music folder").on_hover_text(hint).clicked() {
+                        if link(ui, "Copy them into your music folder").on_hover_text(hint).clicked() {
                             app.import_from_card();
                         }
                     } else if !fits {
-                        ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(12.5).color(ink.warn));
+                        ui.label(RichText::new("not enough room in your music folder's drive to copy them").size(font::META).color(ink.warn));
                     }
                 });
             }
@@ -735,22 +873,24 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
             ui.add_space(S1);
             let gather = format!("move everything else into one folder, “{}” (nothing is deleted)", gather_folder());
             ui.checkbox(&mut app.gather_on_take_over, gather)
-                .on_hover_text("Keeps the player's top level to this write's artists. Delete the folder yourself once you're happy; or untick to leave those files where they are.");
+                .on_hover_text("Keeps the player's top level to this setup's artists. Delete the folder yourself once you're happy; or untick to leave those files where they are.");
             if !clutter.is_empty() {
                 let (n, bytes): (usize, u64) = clutter.iter().fold((0, 0), |(a, b), (_, n, s)| (a + n, b + s));
                 let kinds: Vec<String> = clutter.iter().map(|(k, n, s)| format!("{k}: {} ({})", plural(*n, "file"), text::bytes(*s))).collect();
                 ui.checkbox(&mut app.delete_clutter_on_take_over, format!("delete clutter: {} ({}) of iTunes data, system files and rip logs; can't be undone", plural(n, "file"), text::bytes(bytes)))
                     .on_hover_text(format!(
-                        "{}\n\nThe Echo Mini can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
+                        "{}\n\nThe player can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
                         kinds.join("\n")
                     ));
             }
             ui.add_space(S1);
             row(ui, |ui| {
-                if app.busy.is_none() && used + spare + versions + unknown + other > 0 && widgets::primary_with(ui, Icon::Card, "Take over the card").on_hover_text("only moves files on the card; undo puts everything back").clicked() {
+                // With albums still to tick, ticking them is the step to take first.
+                let take_over = |ui: &mut Ui| if to_tick { widgets::button_with(ui, Icon::Card, "Take over the card") } else { widgets::primary_with(ui, Icon::Card, "Take over the card") };
+                if app.busy.is_none() && used + spare + versions + unknown + other > 0 && take_over(ui).on_hover_text("only moves files on the card; undo puts everything back").clicked() {
                     app.take_over_card();
                 }
-                if widgets::icon_link(ui, Icon::Close, "not now").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card's view offers it again").clicked() {
                     app.card_survey = None;
                     app.take_over_open = false;
                 }
@@ -767,6 +907,18 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     let w = &mut app.saved.writes[app.saved.active_write];
     widgets::section(ui, Icon::Settings, "Folders and options");
     ui.add_space(S1);
+    widgets::setting(ui, "Music folder on the card", |ui| {
+        changed |= ui.add(egui::TextEdit::singleline(&mut w.music_folder).hint_text("the top of the card").align(egui::Align2::LEFT_CENTER).desired_width(160.0)).changed();
+        widgets::help(ui, "Where the songs and playlists go. A Walkman finds music only in MUSIC; most other players and phones look in Music. Left empty, they go at the top of the card. Songs already on the card move there at the next Sync, not copied again.");
+        let wanted = device.device.music_folder();
+        if !w.music_folder.trim().eq_ignore_ascii_case(wanted) {
+            let back = if wanted.is_empty() { "Back to the top of the card".to_string() } else { format!("Back to “{wanted}”, where {} looks", device.short()) };
+            if widgets::icon_link(ui, Icon::Back, back).clicked() {
+                w.music_folder = wanted.into();
+                changed = true;
+            }
+        }
+    });
     widgets::setting(ui, "Album folders", |ui| {
         row(ui, |ui| {
             for (order, label) in [(AlbumOrder::Year, "1997 - Album"), (AlbumOrder::Title, "Album"), (AlbumOrder::Custom, "01 - Album")] {
@@ -779,7 +931,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                 }
             }
         });
-        widgets::help(ui, "By year (oldest first), by title, or numbered in your own order: use the arrows in the list above.");
+        widgets::help(ui, "By year (oldest first), by title, or numbered in your own order: use the arrows in “Folder names and order on the card”, below.");
     });
     widgets::setting(ui, "Names on the card", |ui| {
         let mut text = app.pattern_draft.clone().unwrap_or_else(|| w.options.pattern_text().to_string());
@@ -795,7 +947,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         }
         match &parsed {
             Err(why) => {
-                ui.label(RichText::new(format!("{why}; the names stay as they were")).size(13.0).color(ink.warn));
+                ui.label(RichText::new(format!("{why}; the names stay as they were")).size(font::UI).color(ink.warn));
             }
             Ok(p) => {
                 if let Some(e) = pattern_example(&app.index, &app.tracks, w, p) {
@@ -806,11 +958,11 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         row_wrapped(ui, |ui| {
             muted(ui, "fields:");
             for f in Field::ALL {
-                ui.label(RichText::new(format!("{{{}}}", f.name())).monospace().size(12.5).color(ink.text)).on_hover_text(f.about());
+                ui.label(RichText::new(format!("{{{}}}", f.name())).monospace().size(font::META).color(ink.text)).on_hover_text(f.about());
             }
         });
-        widgets::help(ui, "/ makes a folder. A [part] is left out when a field in it is empty. Songs already on the card are renamed there at the next sync, not copied again.");
-        if w.options.pattern.is_some() && widgets::icon_link(ui, Icon::Back, "back to the album folders above").clicked() {
+        widgets::help(ui, "/ makes a folder. A [part] is left out when a field in it is empty. Songs already on the card are renamed there at the next Sync, not copied again.");
+        if w.options.pattern.is_some() && widgets::icon_link(ui, Icon::Back, "Back to the album folders above").clicked() {
             w.options.pattern = None;
             app.pattern_draft = None;
             changed = true;
@@ -829,9 +981,21 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     if let Some((n, formats)) = &unplayable {
         widgets::setting(ui, &format!("Formats {} can't play", device.short()), |ui| {
             ui.label(RichText::new(format!("{}: {formats}", plural(*n, "song"))).color(ink.text));
+            widgets::help(
+                ui,
+                format!(
+                    "{} In this app, AAC, ALAC, AIFF and Ogg play as they are; {}; Dolby AC-4 has no decoder yet.",
+                    device.plays_text(),
+                    if crate::audio::ffmpeg().is_some() {
+                        "Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA through ffmpeg, in stereo".to_string()
+                    } else {
+                        format!("Dolby (E-AC-3, AC-3), Opus, APE, WavPack and WMA need ffmpeg ({})", crate::platform::FFMPEG_INSTALL)
+                    }
+                ),
+            );
             changed |= ui
                 .radio_value(&mut w.options.unplayable, Unplayable::Convert, "convert them")
-                .on_hover_text("Takes a while the first time; later writes keep what's already on the card.")
+                .on_hover_text("Takes a while the first time; later Syncs keep what's already on the card.")
                 .changed();
             if w.options.unplayable == Unplayable::Convert {
                 // What converting would make of them, and what still can't go (no ffmpeg, AC-4…).
@@ -860,7 +1024,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
                             widgets::help(ui, m);
                         }
                         for (why, n) in left {
-                            ui.label(RichText::new(format!("{} left out: {why}.", plural(n, "song"))).color(ink.warn).size(13.0));
+                            ui.label(RichText::new(format!("{} left out: {why}.", plural(n, "song"))).color(ink.warn).size(font::UI));
                         }
                     });
                 });
@@ -890,7 +1054,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
         ui.radio_value(&mut quality, (true, false), "hi-res songs at CD quality");
         widgets::help(ui, "16-bit, 44.1 or 48 kHz FLAC instead of 24-bit at 96 or 192 kHz: a third to a sixth of the space. Through earbuds the difference isn't audible.");
         ui.radio_value(&mut quality, (true, true), "all lossless songs as MP3 320");
-        widgets::help(ui, "About a quarter of the space of CD-quality FLAC. Your music folder keeps the originals either way, and choosing again re-makes the card's copies at the next sync.");
+        widgets::help(ui, "About a quarter of the space of CD-quality FLAC. Your music folder keeps the originals either way, and choosing again re-makes the card's copies at the next Sync.");
         if quality != before {
             (w.options.cd_quality, w.options.lossless_mp3) = quality;
             changed = true;
@@ -898,7 +1062,7 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     });
     widgets::setting(ui, "Housekeeping", |ui| {
         changed |= ui.checkbox(&mut w.options.write_tags, "write corrected tags into the copies").changed();
-        changed |= ui.checkbox(&mut w.prune, "remove what this write put on the card that's no longer chosen").changed();
+        changed |= ui.checkbox(&mut w.prune, "remove what this setup put on the card that's no longer chosen").changed();
         changed |= ui.checkbox(&mut w.options.clean_mac_files, "delete macOS ._ and .DS_Store files on the card").changed();
     });
     if changed {
@@ -911,17 +1075,19 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
 fn playlists(app: &mut App, ui: &mut Ui) {
     widgets::section(ui, Icon::Playlists, "Playlists on this card");
     if app.saved.playlists.is_empty() {
-        widgets::help(ui, "None yet; make some in the playlists tab.");
+        widgets::help(ui, "None yet; New playlist, in the sidebar, makes one.");
         return;
     }
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
     let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
     let mut changed = false;
+    // A player that reads playlists gets a small .m3u8, not copies: the size would mislead.
+    let lists = app.player().reads_playlists();
     let w = &mut app.saved.writes[app.saved.active_write];
     row_wrapped(ui, |ui| {
         for p in &app.saved.playlists {
             let mut on = w.playlists.contains(&p.name);
-            let label = format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path)));
+            let label = if lists { format!("{} ({})", p.name, plural(p.tracks.len(), "song")) } else { format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path))) };
             if ui.checkbox(&mut on, label).changed() {
                 changed = true;
                 if on {
@@ -952,30 +1118,60 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     let ink = ink(ui);
     let mut edits = Vec::new();
     widgets::section(ui, Icon::Library, "What goes on the card");
-    widgets::help(ui, "Tick what goes on the card, here or in the library; Sync copies it. On the right, the folder names on the card; rename changes them for this write only.");
+    widgets::help(ui, "A tick means it's on the card after the next Sync; the mark beside it says what Sync does to get there. On the right, the folder names on the card; rename changes them for this setup only.");
+    ui.add_space(S1);
+    legend(ui, !app.card_state.by_hand.is_empty());
+    ui.add_space(S1);
+    let changes = app.card_state.added + app.card_state.replaced + app.card_state.removed;
+    if changes == 0 {
+        app.card_changes_only = false;
+    }
+    row(ui, |ui| {
+        if widgets::tab(ui, "Everything", !app.card_changes_only).clicked() {
+            app.card_changes_only = false;
+        }
+        ui.add_space(S2);
+        let label = format!("What the next Sync changes ({changes})");
+        if changes > 0 && widgets::tab(ui, &label, app.card_changes_only).on_hover_text("Only the albums Sync adds or takes off, to look over before it runs.").clicked() {
+            app.card_changes_only = true;
+        } else if changes == 0 {
+            muted(ui, "no album changes at the next Sync");
+        }
+    });
     ui.add_space(S1);
     row(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
         super::icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
-        widgets::search_field(ui, &mut app.card_filter, "filter", 200.0);
-        if widgets::icon_link(ui, Icon::Add, "tick all").clicked() {
+        let r = widgets::search_field(ui, &mut app.card_filter, "filter", 200.0);
+        if app.focus_search && app.tab == crate::app::Tab::Card {
+            app.focus_search = false;
+            r.request_focus();
+        }
+        if widgets::icon_link(ui, Icon::Add, "Tick all").clicked() {
             edits.push(Edit::All(true));
         }
-        if widgets::icon_link(ui, Icon::Remove, "untick all").clicked() {
+        if widgets::icon_link(ui, Icon::Remove, "Untick all").clicked() {
             edits.push(Edit::All(false));
         }
     });
     ui.add_space(S1);
     let w = app.write();
-    let needle = app.card_filter.to_lowercase();
+    let needle = fold(&app.card_filter);
     let pattern = w.options.pattern();
     let custom_order = pattern.uses(Field::Position);
     for (ai, artist) in app.index.artists.iter().enumerate() {
         let ck = &app.index.clusters[artist.cluster].key;
         if !needle.is_empty()
-            && !artist.name.to_lowercase().contains(&needle)
-            && !artist.albums.iter().any(|a| a.title.as_deref().is_some_and(|t| t.to_lowercase().contains(&needle)))
+            && !fold(&artist.name).contains(&needle)
+            && !artist.albums.iter().any(|a| a.title.as_deref().is_some_and(|t| fold(t).contains(&needle)))
         {
+            continue;
+        }
+        // Where each album stands with the card: the mark beside its tick, and in the artist's row
+        // how many are where.
+        let status: Vec<(Option<Mark>, String)> = artist.albums.iter().map(|al| album_status(app, ck, artist, al)).collect();
+        let changing = |m: &Option<Mark>| matches!(m, Some(Mark::Adding | Mark::Removing));
+        if app.card_changes_only && !status.iter().any(|(m, _)| changing(m)) {
             continue;
         }
         // Ticked when everything goes, half when some does.
@@ -983,20 +1179,28 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
         let (any, all) = (chosen.iter().any(|&c| c), chosen.iter().all(|&c| c));
         let whole = w.custom.whole_artist(ck);
         let card_name = w.custom.artist_names.get(ck).cloned().unwrap_or_else(|| artist.name.clone());
-        let open = app.card_expanded.contains(ck);
+        let open = app.card_changes_only || app.card_expanded.contains(ck);
         row(ui, |ui| {
             let mut on = all && any;
             let hint = if whole { "the whole artist goes on the card, albums added later too" } else { "tick to put the whole artist on the card, albums added later too" };
             if ui.add(egui::Checkbox::without_text(&mut on).indeterminate(any && !all)).on_hover_text(hint).changed() {
                 edits.push(Edit::Artist(ai, on));
             }
-            let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(16.0).color(if any { ink.text } else { ink.muted });
+            let name = RichText::new(format!("{} {}", if open { "▾" } else { "▸" }, artist.name)).size(font::BODY).color(if any { ink.text } else { ink.muted });
             // Leave room for the size and the "rename" link on the right.
             let r = widgets::fitted(ui, name, ui.available_width() - 200.0, Sense::click()).on_hover_text(&artist.name);
+            widgets::focus_ring(ui, &r, r.rect, 2.0);
             if r.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 edits.push(Edit::Expand(ck.clone()));
             }
             muted(ui, text::bytes(sizes.artist.get(ck).copied().unwrap_or(0)));
+            for (kind, words) in [(Mark::On, "on the card"), (Mark::ByHand, "copied by hand"), (Mark::Adding, "added"), (Mark::Removing, "taken off")] {
+                let n = status.iter().filter(|(m, _)| *m == Some(kind)).count();
+                if n > 0 {
+                    ui.add_space(S1);
+                    mark_words(ui, kind, &format!("{n} {words}"));
+                }
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 // Clear of the scrollbar.
                 ui.add_space(S2);
@@ -1021,6 +1225,10 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             let mut on = w.custom.includes(ck, al, &artist.albums);
             let on_card = on;
             let bi = artist.albums.iter().position(|a| std::ptr::eq(a, *al)).unwrap_or_default();
+            let (mark, said) = &status[bi];
+            if app.card_changes_only && !changing(mark) {
+                continue;
+            }
             row(ui, |ui| {
                 ui.add_space(S3);
                 let hint = if al.edition.is_some() { "One edition of this album goes on the card; ticking this one replaces the other." } else { "" };
@@ -1029,15 +1237,21 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     edits.push(Edit::Album(ai, bi, on));
                 }
                 let shown = al.title.as_deref().unwrap_or("Loose tracks");
-                let title_text = RichText::new(shown).italics().color(if on_card { ink.text } else { ink.muted });
-                let title_w = ui.available_width() * if al.edition.is_some() { 0.25 } else { 0.45 };
+                let mut title_text = RichText::new(shown).family(super::theme::italic()).color(if on_card { ink.text } else { ink.muted });
+                if *mark == Some(Mark::Removing) {
+                    title_text = title_text.strikethrough();
+                }
+                let title_w = ui.available_width() * if al.edition.is_some() { 0.25 } else { 0.4 };
                 widgets::fitted(ui, title_text, title_w, Sense::hover()).on_hover_text(shown);
+                if let Some(m) = mark {
+                    mark_words(ui, *m, said);
+                }
                 if let Some(e) = &al.edition {
                     let mut hover = format!("edition {} of {}: {} · {}", e.rank + 1, e.count, e.label, e.format);
                     if let Some(s) = &e.superseded {
                         hover.push_str(&format!("\nEdition {} has all these songs in {} quality.", s.rank + 1, if s.higher { "higher" } else { "the same" }));
                     }
-                    ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(12.5).color(ink.muted)).on_hover_text(hover);
+                    ui.label(RichText::new(format!("{} · {}", text::shorten(&e.label, 30), e.format)).size(font::META).color(ink.muted)).on_hover_text(hover);
                 }
                 muted(ui, format!("{} · {}", plural(al.tracks.len(), "track"), text::bytes(sizes.album.get(id).copied().unwrap_or(0))));
                 // Songs the player can't read as they are: converted, copied anyway, or left out.
@@ -1050,18 +1264,18 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     muted(ui, format!("{converted} converted")).on_hover_text(format!("{} These are converted on the way (lossless to FLAC, the rest to MP3 320).", device.plays_text()));
                 }
                 if copied > 0 {
-                    ui.label(RichText::new(format!("{copied} won't play")).size(12.5).color(ink.warn)).on_hover_text(format!("copied as they are, though they won't play on {}; change this under options below", device.short()));
+                    ui.label(RichText::new(format!("{copied} won't play")).size(font::META).color(ink.warn)).on_hover_text(format!("copied as they are, though they won't play on {}; change this under options below", device.short()));
                 }
                 if let Some(why) = left.first() {
-                    ui.label(RichText::new(format!("{} left out", left.len())).size(12.5).color(ink.warn)).on_hover_text(*why);
+                    ui.label(RichText::new(format!("{} left out", left.len())).size(font::META).color(ink.warn)).on_hover_text(*why);
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.add_space(S2);
                     if custom_order && al.title.is_some() {
-                        if widgets::icon_button(ui, Icon::Down).on_hover_text("move down").clicked() {
+                        if widgets::icon_button(ui, Icon::Down, "Move down").clicked() {
                             edits.push(Edit::Move(ck.clone(), order_ids.clone(), n, 1));
                         }
-                        if widgets::icon_button(ui, Icon::Up).on_hover_text("move up").clicked() {
+                        if widgets::icon_button(ui, Icon::Up, "Move up").clicked() {
                             edits.push(Edit::Move(ck.clone(), order_ids.clone(), n, -1));
                         }
                     }
@@ -1070,7 +1284,7 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
                     }
                     let path = folder.clone().unwrap_or_default();
                     // Whatever space is left between the album and the links, and no more.
-                    ui.add(egui::Label::new(RichText::new(text::shorten(&path, 50)).size(12.5).color(ink.muted)).truncate()).on_hover_text(path);
+                    ui.add(egui::Label::new(RichText::new(text::shorten(&path, 50)).size(font::META).color(ink.muted)).truncate()).on_hover_text(path);
                 });
             });
         }
@@ -1081,7 +1295,6 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     }
     let mut touched_layout = false;
     for e in edits {
-        let w = &mut app.saved.writes[app.saved.active_write];
         match e {
             Edit::Expand(k) => {
                 if !app.card_expanded.remove(&k) {
@@ -1090,6 +1303,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             }
             Edit::StartRename(is_artist, key, current) => app.card_renaming = Some((is_artist, key, current)),
             Edit::Rename(is_artist, key, name) => {
+                app.remember_chosen(if name.trim().is_empty() { "going back to the library's name on the card".to_string() } else { format!("renaming to “{}” on the card", name.trim()) });
+                let w = &mut app.saved.writes[app.saved.active_write];
                 let map = if is_artist { &mut w.custom.artist_names } else { &mut w.custom.album_names };
                 if name.trim().is_empty() {
                     map.remove(&key);
@@ -1102,6 +1317,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             Edit::Artist(ai, on) => app.card_artist(ai, on),
             Edit::Album(ai, bi, on) => app.card_album(ai, bi, on),
             Edit::All(on) => {
+                app.remember_chosen(if on { "ticking everything" } else { "unticking everything" });
+                let w = &mut app.saved.writes[app.saved.active_write];
                 for a in &app.index.artists {
                     w.custom.set_artist(&app.index.clusters[a.cluster].key, &a.albums, on);
                 }
@@ -1110,6 +1327,8 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
             Edit::Move(ck, mut ids, n, d) => {
                 let m = n as isize + d;
                 if m >= 0 && (m as usize) < ids.len() {
+                    app.remember_chosen("changing the order of albums");
+                    let w = &mut app.saved.writes[app.saved.active_write];
                     ids.swap(n, m as usize);
                     w.custom.album_order.insert(ck, ids);
                     touched_layout = true;
@@ -1122,12 +1341,41 @@ fn selection(app: &mut App, ui: &mut Ui, sizes: &Sizes) {
     }
 }
 
+/// What the marks mean, as in the library: there already, coming, going.
+fn legend(ui: &mut Ui, by_hand: bool) {
+    row_wrapped(ui, |ui| {
+        mark_words(ui, Mark::On, "on the card");
+        ui.add_space(S2);
+        if by_hand {
+            mark_words(ui, Mark::ByHand, "on the card, copied by hand");
+            ui.add_space(S2);
+        }
+        mark_words(ui, Mark::Adding, "added at the next Sync");
+        ui.add_space(S2);
+        mark_words(ui, Mark::Removing, "taken off at the next Sync");
+    });
+}
+
+/// A card mark and its words, coloured by what it says: muted for what stays, ink for what's
+/// coming, the warning colour for what goes.
+fn mark_words(ui: &mut Ui, m: Mark, words: &str) {
+    let ink = ink(ui);
+    let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+    m.paint(ui.painter(), rect.center(), 3.5, &ink);
+    let color = match m {
+        Mark::On => ink.muted,
+        Mark::Adding | Mark::ByHand => ink.text,
+        Mark::Removing => ink.warn,
+    };
+    ui.label(RichText::new(words).size(font::UI).color(color));
+}
+
 /// "rename" link, or the inline editor when this row is being renamed.
 fn rename_widget(ui: &mut Ui, renaming: &Option<(bool, String, String)>, is_artist: bool, key: &str, current: &str, edits: &mut Vec<Edit>) {
     match renaming {
         Some((a, k, buf)) if *a == is_artist && k == key => {
             let mut text = buf.clone();
-            if widgets::icon_link(ui, Icon::Check, "save").clicked() {
+            if widgets::icon_link(ui, Icon::Check, "Save").clicked() {
                 edits.push(Edit::Rename(is_artist, key.to_string(), text.clone()));
             }
             let r = ui.add(egui::TextEdit::singleline(&mut text).align(egui::Align2::LEFT_CENTER).desired_width(200.0));
@@ -1139,9 +1387,15 @@ fn rename_widget(ui: &mut Ui, renaming: &Option<(bool, String, String)>, is_arti
             }
         }
         _ => {
-            if widgets::icon_link(ui, Icon::Rename, "rename").on_hover_text("folder name on this card only; empty resets").clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "Rename").on_hover_text("folder name on this card only; empty resets").clicked() {
                 edits.push(Edit::StartRename(is_artist, key.to_string(), current.to_string()));
             }
         }
     }
+}
+
+/// How many albums the next Sync adds, swaps or takes off, for the sidebar.
+pub fn pending_count(app: &App) -> usize {
+    let s = &app.card_state;
+    s.added + s.replaced + s.removed
 }

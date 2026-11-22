@@ -67,16 +67,16 @@ card step no longer says "not connected" where free space can't be read.
 
 | # | Issue | Affects | Fix | Effort |
 |---|---|---|---|---|
-| 1 | ~~**No drives found.**~~ *Done 2026-10-31 (type-checked, not yet run on Windows):* drive letters with label, filesystem and free space through `windows-sys`, skipping Windows' own drive and network/CD drives. | Windows | — | — |
+| 1 | ~~**No drives found.**~~ *Done 2026-10-31, seen working on Windows 11 2026-11-01:* drive letters with label, filesystem and free space through `windows-sys`, skipping Windows' own drive and network/CD drives. | Windows | — | — |
 | 2 | ~~**No free space or filesystem type.**~~ *Done with #1.* | Windows | — | — |
 | 3 | **Filesystem type unknown**, so the "not FAT32/exFAT" warning never shows. | Linux | `statfs` gives `f_type`: `0x4d44` = FAT, `0x2011BAB0` = exFAT. | S |
-| 4 | **A console window opens behind the app.** | Windows | `#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]`; for `--plan`, attach to the parent console (`AttachConsole`). | S |
+| 4 | ~~**A console window opens behind the app.**~~ *Done 2026-11-01, run on Windows 11:* release builds are a windowed program and attach to the terminal they were started from. Shells don't wait for a windowed program, so `--version` and `--plan` need `\| Out-Host` (PowerShell); `cargo run` waits by itself. | Windows | — | — |
 | 5 | **Reserved names.** Windows can't open files or folders named `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9` (with any extension). An artist called "Aux" would break the card write. | Windows (and cards later read on Windows) | `sanitize_component` appends `_` to those names. Add a test. | S |
 | 6 | **Long paths.** Card paths can reach ~305 characters (80 + 100 + 120 per part), above Windows' traditional 260. Rust's file functions already handle long paths, but Explorer and other tools may not. | Windows | Make the per-write name-length cap from PROGRESS.md §3 #2 the default (e.g. 60/60/80). | S |
-| 7 | **Fonts differ per OS.** The look depends on Palatino (macOS), Palatino Linotype (Windows) or DejaVu Serif (Linux). | All | Embed one serif font in the binary (`include_bytes!`): ET Book (check its licence) or an OFL face such as EB Garamond or Source Serif 4. Keep system fonts only as fallbacks for Chinese/Japanese/Korean, adding Windows (Yu Gothic, Malgun Gothic) and more Linux Noto paths, or evaluate eframe's `system_fonts` feature. | S |
-| 8 | **Folder shortcuts assume macOS.** "Drives" and the card-folder browser start at `/Volumes`. | Windows, Linux | Per-OS start points: drive list on Windows, `/media`/`/run/media` on Linux. | S |
+| 7 | **Fonts differ per OS.** The look depends on Palatino (macOS), Palatino Linotype (Windows) or DejaVu Serif (Linux). | All | **Done** (CHANGELOG §93): ET Book (MIT), Courier Prime and Kalam (OFL) are in the binary. System faces remain as fallbacks, for letters ET Book lacks (ł, ş, ž) and for Chinese/Japanese/Korean; still to add: Windows (Yu Gothic, Malgun Gothic) and more Linux Noto paths. | S |
+| 8 | **Folder shortcuts assume macOS.** "Drives" and the card-folder browser start at `/Volumes`. *Windows done 2026-11-02:* both open "Computer", the list of drives. Linux goes to `/media`, not yet `/media/$USER` or `/run/media/$USER`. | Linux | `/media/$USER`, then `/run/media/$USER`. | S |
 | 9 | **Unused microphone code.** rodio's default `recording` feature links audio-input code that is never used. | All | `rodio = { default-features = false, features = ["playback", "symphonia-all", …] }`. | S |
-| 10 | **Install hints for ffmpeg** mention only `brew`. | Windows, Linux | Per-OS hint: `winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`, etc. | S |
+| 10 | ~~**Install hints for ffmpeg** mention only `brew`.~~ *Done 2026-11-01:* `platform::FFMPEG_INSTALL` names `winget install Gyan.FFmpeg` on Windows and `sudo apt install ffmpeg` on Linux. | Windows, Linux | — | — |
 
 macOS-specific additions to the app bundle (no code changes):
 
@@ -132,8 +132,15 @@ Per platform:
 - **macOS.** Build `aarch64-apple-darwin` and `x86_64-apple-darwin`, merge them with `lipo` into
   one universal binary, then package. A DMG with the usual "drag to Applications" window.
 - **Windows.** NSIS installer: per-user install (no admin rights), Start-menu shortcut,
-  uninstaller. Icon and version info embedded in the .exe (`winresource` or
-  `embed-resource`). MSI only if someone asks for it.
+  uninstaller. MSI only if someone asks for it. *Done 2026-11-02:* the icon and version info
+  are built into the .exe (`build.rs`, with `winresource`). *Done 2026-11-14:*
+  `scripts/package-windows.sh` makes `dist/Pausetape-<version>-setup.exe` (11 MB; 35 MB
+  installed) from its own NSIS script, `assets/windows/installer.nsi`, as default templates have
+  no components page: per-user in `%LOCALAPPDATA%\Programs`, Start-menu shortcut, listed in
+  Settings › Apps with its version and size, uninstaller; ffmpeg optional (§3). Settings and the
+  library in `%APPDATA%` stay when it's uninstalled. Run on Windows 11, silently: installed,
+  installed again keeping ffmpeg out, uninstalled leaving nothing behind; the components page
+  was looked at, not clicked through.
 - **Linux.** Build on Ubuntu 22.04 so the binary runs on older distributions too (glibc
   2.35). The AppImage bundles everything except system audio (ALSA/PipeWire) and graphics
   drivers. The .deb declares its dependencies. A `.desktop` file and icons go in both. The
@@ -142,8 +149,10 @@ Per platform:
   dependency. **Flatpak/Flathub later:** its sandbox needs explicit access to `/media` and
   `/run/media` for SD cards, and ffmpeg via the `org.freedesktop.Platform.ffmpeg-full` extension.
 
-**App icon:** one 1024×1024 master turned into `.icns`, `.ico` and PNG sizes. In keeping with
-the look: a serif "N" or a small folder on warm paper.
+**App icon:** a cassette with "Pausetape" written on its label, on warm paper. One 1024×1024
+master (`assets/icon/icon-1024.png`, from `scripts/make-icon.py`) is turned into the Mac's
+`.icns` by `scripts/package-macos.sh`, and into the window's PNG and the Windows `.ico` by
+`build.rs`. Linux's `.desktop` icons are still to do.
 
 ---
 
@@ -162,6 +171,28 @@ both shipped.
 Both licences (`COPYING.LGPLv2.1`, `COPYING.LAME`) and the source URLs and checksums ship in
 the app. Windows and Linux need the same script adapted; until then their users install an
 ffmpeg that includes LAME (the usual `winget` and distribution builds do).
+
+**Windows: optional, ticked by default** (decided 2026-11-14).
+
+- **Where it goes.** The installer has a components page. *Pausetape* is required. *FFmpeg
+  (conversion)* is ticked, and its description says what it's for: Dolby, Opus, APE and WMA files,
+  cutting CUE albums, converting what the player can't read; and to untick it to use one's own.
+- **Who unticks it.** Someone who already has their own ffmpeg, or doesn't want third-party
+  programs. Unticked, neither `ffmpeg.exe` nor its licences are installed, and a copy from an
+  earlier install is removed. Installing again starts with it unticked, keeping that choice;
+  ticking it adds it back. The uninstaller removes whatever was installed.
+- **The app needs no change.** It looks for `ffmpeg.exe` beside its own .exe first, then in the
+  usual places and the `PATH` (`audio::ffmpeg`). With none found, it gives the install hint, and
+  songs it can't convert or cut are listed with the reason.
+- **Precedence.** If the component stays ticked while another ffmpeg is installed, the bundled one
+  is used. `PAUSETAPE_FFMPEG` overrides both.
+- **The build.** `scripts/build-ffmpeg-windows.sh`: the macOS script's configure flags,
+  cross-compiled on Linux with mingw-w64 and linked statically. **5.5 MB**, needing only Windows'
+  own DLLs (`bcrypt`, `kernel32`, `msvcrt`, `shell32`; the script fails on any other). Built in an
+  Ubuntu 24.04 container in about 3 minutes, and cached in CI like the macOS build
+  (`windows.yml`). Run on Windows 11 against real files: AC-3 and AAC to WAV, AC-3 to FLAC, AAC
+  to MP3 320, a 30-second cut from a CUE album's FLAC, and paths in Japanese and with accents.
+  If Windows signing is set up, `ffmpeg.exe` is signed too.
 
 ---
 
@@ -197,8 +228,11 @@ GitHub Actions, triggered by pushing a tag like `v0.1.0`:
 
 Every push (not just tags) also runs `cargo test` and a release build on all three platforms,
 so portability breaks are caught early. **This part exists:** `.github/workflows/ci.yml`
-(build + test on macOS, Windows, Linux, uploading each binary) and
-`.github/workflows/macos.yml` (DMG, attached to `v*` releases). Neither has run yet.
+(build + test on macOS, Windows, Linux, uploading each binary),
+`.github/workflows/macos.yml` (DMG, attached to `v*` releases) and
+`.github/workflows/windows.yml` (ffmpeg cross-compiled on Linux, then the installer on Windows,
+attached to `v*` releases). The release text of a tag is added to by both packaging workflows
+(`append_body`), so neither replaces the other's.
 
 Sketch (to be fleshed out in Phase 3):
 

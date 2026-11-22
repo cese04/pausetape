@@ -9,6 +9,8 @@ A desktop app that organises your music for the **Snowsky Echo Mini** running th
 [RECHO](https://recho.atzkey.workers.dev/) firmware, and plays it on your computer in a quiet,
 Tufte-inspired player.
 
+**Website, with a step-by-step tour and downloads:** <https://cese04.github.io/pausetape/>
+
 RECHO is fast, but it reads the SD card as it is: it browses folders sorted by name, has no
 playlists, and plays only FLAC, MP3 and WAV. Pausetape turns a music folder (organised or not)
 into exactly the layout RECHO browses well:
@@ -33,11 +35,15 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 - **Leads to more of an artist's music.** Open an artist for their genres and years and links
   to buy it (Bandcamp, Qobuz, Discogs…), hear it first (Spotify, Tidal…) and find what's
   related (last.fm, Rate Your Music), from MusicBrainz.
-- **Writes to the card the way you want it.** Saved *writes* choose which artists, albums and
-  playlists go on a card, what they're called there and in what order. Rewrites copy only what
-  changed and remove only files they put there themselves.
+- **Writes to the card the way you want it.** Saved *card setups* choose which artists, albums
+  and playlists go on a card, what they're called there and in what order. Each Sync copies only
+  what changed and removes only files it put there itself.
+- **Other players too:** Sony Walkmans (NW-A, NW-ZX), Rockbox (iPods, Sansas…) and any other
+  player or phone, each with what it plays and the folder it looks in (`MUSIC` on a Walkman),
+  set per card setup. Only the Echo Mini has been checked on the player; the test card checks
+  the rest.
 - **Playlists for a player without playlists:** folders of numbered copies (FAT/exFAT cards
-  can't hold symlinks).
+  can't hold symlinks). A player that reads playlists gets an .m3u8 instead.
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks
   clearly what the Echo Mini can't play.
 - **Converts for the card** what the Echo Mini can't play: ALAC, AIFF, APE and other lossless
@@ -49,29 +55,63 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
   are pointed out, so you can remove them if you like.
 - **Cover art in the songs:** when a cover is only an image in the folder, the player offers to
   embed it, so the Echo Mini shows it.
+- **Listens with you:** a queue to see and edit, a view by genre, and lyrics in the details panel,
+  in time with the song: the song's own, or found on [LRCLIB](https://lrclib.net) and kept.
+- **Careful with the card:** a card has its own identity, a Sync that loses the card keeps its
+  record and leaves no half-copied song behind, and a finished Sync offers to eject it.
 
 ## Status
 
-Early, unreleased (0.1.0). Developed and tested on **macOS**; **Windows and Linux have not been
-tried yet**. Details: [docs/PROGRESS.md](docs/PROGRESS.md).
+Early, and moving fast. Developed and used most on **macOS**, tested by hand on **Windows 11**;
+**Linux** builds and passes its tests, but hasn't been run on a desktop yet.
+Details: [docs/PROGRESS.md](docs/PROGRESS.md).
 
-| Platform | How to get it | State |
+Downloads are on [Releases](https://github.com/cese04/pausetape/releases) (or the
+[website](https://cese04.github.io/pausetape/), which picks the right one). None is signed yet,
+so each system asks once whether to trust it.
+
+| Platform | Download | State |
 |---|---|---|
-| macOS 12+ (Apple Silicon + Intel) | Build the DMG (below), or download from [Releases](https://github.com/cese04/pausetape/releases) once published | Works; not signed by a registered Apple developer yet |
-| Windows 10/11 | Build from source | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) |
-| Linux | Build from source | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) |
+| macOS 12+ (Apple Silicon + Intel) | `Pausetape-<version>.dmg`, ffmpeg included | Works |
+| Windows 10/11 (x64) | `Pausetape-<version>-setup.exe`, ffmpeg included as an option; or `pausetape-v<version>-Windows.exe`, one file, nothing installed | Works on Windows 11; what was checked is in [docs/TESTING.md](docs/TESTING.md) §3 |
+| Linux (x86-64) | `pausetape-v<version>-Linux`, one file | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) §3 |
 
-## Install on macOS
+## Install
+
+**macOS**
 
 1. Open `Pausetape-<version>.dmg` and drag the app to Applications.
 2. Open it once; macOS says it can't verify the developer. Click **Done**.
 3. System Settings › Privacy & Security › **Open Anyway**. Only needed the first time.
 
-To build the DMG yourself (needs Xcode Command Line Tools and
-`rustup target add x86_64-apple-darwin`; the first run also compiles the bundled ffmpeg):
+**Windows:** run `Pausetape-<version>-setup.exe`. If Windows says it protected your PC, click
+**More info**, then **Run anyway**. It installs for you alone, without administrator rights, with
+ffmpeg ticked; untick it if you have your own. The portable `pausetape-v<version>-Windows.exe`
+asks the same, and for Dolby, Opus, APE, WavPack and WMA files needs ffmpeg:
+`winget install Gyan.FFmpeg`.
+
+**Linux:** `chmod +x pausetape-v<version>-Linux`, then run it. For the same rarer formats,
+install ffmpeg from your distribution (`sudo apt install ffmpeg`).
+
+### Build the Mac app
+
+Needs Xcode Command Line Tools and `rustup target add x86_64-apple-darwin`; the first run also
+compiles the bundled ffmpeg:
 
 ```sh
 scripts/package-macos.sh      # → dist/Pausetape.app and dist/Pausetape-<version>.dmg
+```
+
+### Build the Windows installer
+
+The minimal ffmpeg is cross-compiled on Linux (Debian or Ubuntu with `mingw-w64` and
+`libz-mingw-w64-dev`; WSL or a container will do), then the installer is made on Windows, in Git
+Bash, with NSIS (`winget install NSIS.NSIS`) and Python 3. The CI does both
+([windows.yml](.github/workflows/windows.yml)).
+
+```sh
+scripts/build-ffmpeg-windows.sh   # on Linux → target/ffmpeg-windows; copy it over
+scripts/package-windows.sh        # on Windows → dist/Pausetape-<version>-setup.exe
 ```
 
 ## Build from source (any platform)
@@ -84,10 +124,10 @@ Linux the audio/windowing headers (exact commands per distribution in
 cargo run --release                          # the app
 cargo run --release -- --version             # version, and which ffmpeg it uses
 cargo run --release -- --plan ~/Music        # dry run: print the planned layout, change nothing
-cargo test                                   # 40 offline tests
+cargo test                                   # offline tests
 ```
 
-ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
+ffmpeg is optional outside the Mac app and the Windows installer (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
 `brew install ffmpeg`). Without it, everything except Dolby, Opus, APE, WavPack and WMA plays.
 
 ## Documentation
@@ -99,10 +139,13 @@ ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt 
 | [docs/TESTING.md](docs/TESTING.md) | Testing on Windows and Linux, step by step, and how to report results |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging, signing and releases for macOS, Windows and Linux |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How work is done: git flow branches, versions, what the CI keeps, open feature branches |
+| [docs/WEBSITE.md](docs/WEBSITE.md) | The website (`site/`): its screenshots, the tour, publishing it |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the code fits together, where data is stored |
 | [CHANGELOG.md](CHANGELOG.md) | Everything done so far, in order |
 
 ## License
 
 [MIT](LICENSE). The macOS app bundles a minimal build of [FFmpeg](https://ffmpeg.org) (LGPL v2.1),
-whose licence and build details are inside the app under `Contents/Resources/Licenses`.
+whose licence and build details are inside the app under `Contents/Resources/Licenses`. The app
+brings its fonts, in [assets/fonts](assets/fonts) with their licences: ET Book (MIT), Courier
+Prime and Kalam (SIL Open Font Licence).

@@ -255,27 +255,92 @@ fn ffmpeg_error(stderr: &[u8]) -> String {
     if first.is_empty() { "ffmpeg couldn't convert it".into() } else { format!("ffmpeg couldn't convert it: {first}") }
 }
 
-/// RMS loudness in 100 ms windows, normalised to 0..=1. Decodes the whole file (or song), so
-/// call it off the UI thread.
-pub fn envelope(path: &Path, span: Option<Span>) -> Option<Vec<f32>> {
+/// What reading a song through found.
+pub enum Envelope {
+    /// RMS loudness in 100 ms windows, normalised to 0..=1.
+    Loudness(Vec<f32>),
+    /// Its audio is broken, and how ("its audio stops making sense at 0:04").
+    Damaged(String),
+}
+
+/// Read the whole file (or song) through, so call it off the UI thread. `expected` is how long
+/// its tags say it is: much less audio than that means part of it was lost. `None` if it
+/// doesn't open.
+pub fn envelope(path: &Path, span: Option<Span>, expected: Duration) -> Option<Envelope> {
     let src = open_span(path, span, || {}).ok()?;
-    let window = (src.sample_rate().get() as usize * src.channels().get() as usize / 10).max(1);
+    let per_sec = src.sample_rate().get() as usize * src.channels().get() as usize;
+    let window = (per_sec / 10).max(1);
     let mut out = Vec::new();
-    let (mut sum, mut n) = (0.0f64, 0usize);
-    for s in src {
-        sum += (s as f64) * (s as f64);
-        n += 1;
-        if n == window {
-            out.push((sum / n as f64).sqrt() as f32);
-            (sum, n) = (0.0, 0);
+    let (mut sum, mut n, mut read) = (0.0f64, 0usize, 0usize);
+    // Symphonia panics on some damaged AAC (a section that never ends runs off its table)
+    // rather than saying so; what was read up to there tells where.
+    let whole = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        for s in src {
+            sum += (s as f64) * (s as f64);
+            (n, read) = (n + 1, read + 1);
+            if n == window {
+                out.push((sum / n as f64).sqrt() as f32);
+                (sum, n) = (0.0, 0);
+            }
         }
+    }));
+    let heard = Duration::from_secs_f64(read as f64 / per_sec.max(1) as f64);
+    let clock = |d: Duration| format!("{}:{:02}", d.as_secs() / 60, d.as_secs() % 60);
+    if whole.is_err() {
+        return Some(Envelope::Damaged(format!("its audio stops making sense at {}", clock(heard))));
+    }
+    // Half: a length worked out from the bitrate (an MP3 without a header saying it) can be
+    // somewhat off, but not by that much.
+    if expected >= Duration::from_secs(5) && heard < expected / 2 {
+        return Some(Envelope::Damaged(if heard < Duration::from_secs(1) {
+            format!("none of its audio can be read, though it should last {}", clock(expected))
+        } else {
+            format!("only {} of its audio can be read, of the {} it should last", clock(heard), clock(expected))
+        }));
     }
     let max = out.iter().cloned().fold(f32::EPSILON, f32::max);
-    Some(out.into_iter().map(|v| v / max).collect())
+    Some(Envelope::Loudness(out.into_iter().map(|v| v / max).collect()))
 }
 
 #[cfg(test)]
 mod tests {
+    /// A mono 8 kHz WAV, `secs` long, of a tone.
+    fn tone(path: &std::path::Path, secs: u32) {
+        let samples: Vec<u8> = (0..8000 * secs).flat_map(|i| (((i as f32 * 0.3).sin() * 8000.0) as i16).to_le_bytes()).collect();
+        let mut b = b"RIFF".to_vec();
+        b.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+        b.extend_from_slice(b"WAVEfmt ");
+        b.extend_from_slice(&16u32.to_le_bytes());
+        b.extend_from_slice(&[1, 0, 1, 0, 0x40, 0x1f, 0, 0, 0x80, 0x3e, 0, 0, 2, 0, 16, 0]);
+        b.extend_from_slice(b"data");
+        b.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+        b.extend_from_slice(&samples);
+        std::fs::write(path, b).unwrap();
+    }
+
+    #[test]
+    fn audio_far_shorter_than_its_tags_say_is_damage() {
+        use super::Envelope;
+        let dir = std::env::temp_dir().join(format!("pausetape-test-envelope-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (song, empty) = (dir.join("song.wav"), dir.join("empty.wav"));
+        tone(&song, 3);
+        tone(&empty, 0);
+        let secs = std::time::Duration::from_secs;
+        // As long as it says, or near enough: loudness, every 100 ms.
+        assert!(matches!(super::envelope(&song, None, secs(3)), Some(Envelope::Loudness(e)) if e.len() == 30));
+        assert!(matches!(super::envelope(&song, None, secs(5)), Some(Envelope::Loudness(_))));
+        match super::envelope(&song, None, secs(60)) {
+            Some(Envelope::Damaged(why)) => assert_eq!(why, "only 0:03 of its audio can be read, of the 1:00 it should last"),
+            _ => panic!("3 s of the 60 its tags say is damage"),
+        }
+        match super::envelope(&empty, None, secs(158)) {
+            Some(Envelope::Damaged(why)) => assert_eq!(why, "none of its audio can be read, though it should last 2:38"),
+            _ => panic!("no audio at all is damage"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn ffmpeg_errors_name_the_cause() {
         let damaged = b"[in#0 @ 0x7ce2c18000] Error opening input: Invalid data found when processing input\nError opening input file bad.ape.\nError opening input files: Invalid data found when processing input\n";
@@ -316,11 +381,12 @@ mod tests {
         files.sort();
         for f in files {
             let t = std::time::Instant::now();
-            let env = super::envelope(&f, None);
+            let env = super::envelope(&f, None, std::time::Duration::ZERO);
             let codec = crate::library::mp4::mp4_audio_codec(&f).map(|c| format!(" [{}]", crate::library::mp4::codec_name(&c))).unwrap_or_default();
             print!("{:<28}{codec} in {:.2?}: ", f.file_name().unwrap().to_string_lossy(), t.elapsed());
             println!("{}", match env {
-                Some(e) if !e.is_empty() => format!("decoded ({:.1} s)", e.len() as f32 / 10.0),
+                Some(super::Envelope::Loudness(e)) if !e.is_empty() => format!("decoded ({:.1} s)", e.len() as f32 / 10.0),
+                Some(super::Envelope::Damaged(why)) => format!("damaged: {why}"),
                 _ => "cannot decode".into(),
             });
         }

@@ -49,12 +49,34 @@ A hotfix goes the same way, from `main` (`hotfix/0.2.1`), back into both `main` 
 
 Every push and pull request is built and tested on macOS, Windows and Linux
 ([ci.yml](.github/workflows/ci.yml)); `main`, version tags and pull requests also get the
-packaged Mac app ([macos.yml](.github/workflows/macos.yml)).
+packaged Mac app ([macos.yml](.github/workflows/macos.yml)) and the Windows installer
+([windows.yml](.github/workflows/windows.yml)). The website in `site/` is published from `main`
+([pages.yml](.github/workflows/pages.yml); see [WEBSITE](docs/WEBSITE.md)).
+
+The dependencies are checked with [cargo-deny](https://embarkstudios.github.io/cargo-deny/) on
+every run, and every Monday on `main` (GitHub runs scheduled workflows from the default branch),
+against the rules in [deny.toml](deny.toml):
+
+- a known vulnerability ([RustSec](https://rustsec.org)) fails the build; so does a crate no
+  longer maintained if it's one of ours, not one further down the tree;
+- so does a licence outside the list (permissive ones, MPL-2.0, and the fonts' licences), or a
+  crate from anywhere but crates.io;
+- the same crate in two versions is only a warning.
+
+To check locally: `cargo install cargo-deny`, then `cargo deny check`.
+
+Every `unsafe` block (they're all system calls: free space, drive letters, unlocking a file on
+the card) starts with a `// SAFETY:` comment saying why it's sound; the CI runs clippy's
+`undocumented_unsafe_blocks` on each platform and fails without one. For a fuller picture of the
+`unsafe` in the dependencies, `cargo install cargo-geiger` and `cargo geiger` now and then: it's
+slow and has no pass or fail, so it isn't part of the CI (its closing "Found … warnings" is
+about data files it can't read, not a problem).
 
 | Pushed to | Kept | For |
 |---|---|---|
-| a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image and each platform's binary | Versions people download |
-| `main` | 90 days (GitHub's most): binaries and the disk image, as artifacts | The latest release build |
+| a version tag `v*` | **for good**, on its GitHub Release: the Mac disk image, the Windows installer, and the Windows and Linux binaries | Versions people download |
+| `main` | 90 days (GitHub's most): binaries, the disk image and the installer, as artifacts | The latest release build |
+| `release/*` | 90 days: the disk image and the installer; binaries 7 days | Testers trying the version before it's tagged |
 | `develop`, `feature/*` | 7 days: binaries, as artifacts | Trying a build out |
 | a pull request | nothing; it's only checked | — |
 

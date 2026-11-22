@@ -1,0 +1,44 @@
+# What `cargo deny check` accepts in the dependency tree. CI runs it on every push and every
+# Monday (see CONTRIBUTING.md); to run it locally: `cargo install cargo-deny`, then
+# `cargo deny check`.
+
+# Known vulnerabilities (RustSec) always fail. A crate no longer maintained fails only when it's
+# one of our own dependencies: those further down (paste via lofty, ttf-parser and zbus via
+# egui's Linux support) have no replacement we could choose.
+[advisories]
+unmaintained = "workspace"
+yanked = "deny"
+
+# Permissive licences, plus MPL-2.0 (symphonia, the decoders: copyleft per file, fine to ship
+# unmodified) and the fonts' licences (OFL, Ubuntu Font Licence) for the ones egui embeds.
+# A crate under anything else fails the check until someone has looked at it.
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unlicense",
+    "BSL-1.0",
+    "0BSD",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+confidence-threshold = 0.8
+
+# The same crate in two versions only warns: egui, wgpu and winit bring several (windows-sys,
+# hashbrown, objc2…) and it isn't ours to settle.
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+# Only crates.io.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

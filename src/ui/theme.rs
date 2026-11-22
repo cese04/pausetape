@@ -8,14 +8,22 @@ use std::sync::Arc;
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle, Theme, Ui, vec2};
 use serde::{Deserialize, Serialize};
 
-use super::layout::{ICON, ROW, S1, S2, S3, S5};
+use super::layout::{ICON, ROW, S1, S2, S3, S5, font};
 
 pub struct Ink {
     pub bg: Color32,
     pub text: Color32,
     pub muted: Color32,
     pub faint: Color32,
+    /// The edge of a control (a field, a checkbox, an outlined button) where only the edge says
+    /// it's there: 3:1 or more against the page, as `faint` (for rules and dividers) isn't.
+    pub line: Color32,
     pub hover: Color32,
+    /// A song or album row under the pointer: a step darker than `hover`, so the row shows.
+    pub row_hover: Color32,
+    /// A selected row: a tint of the accent, light enough for `muted` text to stay at 4.5:1;
+    /// a bar of the accent at its left edge says it more plainly.
+    pub selected: Color32,
     /// The chosen accent: what's open, playing or under way, and the main button.
     pub accent: Color32,
     /// Warnings and problems, whatever the accent.
@@ -31,10 +39,10 @@ pub struct Ink {
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Accent {
-    #[default]
     Brick,
     Ochre,
     Moss,
+    #[default]
     Teal,
     Blue,
     Plum,
@@ -54,6 +62,11 @@ impl Accent {
             Accent::Plum => "plum",
             Accent::Graphite => "graphite",
         }
+    }
+
+    /// How much of the accent a selected row takes: graphite, nearly the ink, takes less.
+    fn tint(self) -> f32 {
+        if self == Accent::Graphite { 0.07 } else { 0.10 }
     }
 
     pub fn colour(self, dark: bool) -> Color32 {
@@ -96,7 +109,10 @@ fn palette(dark: bool, accent: Accent) -> Ink {
             text: Color32::from_rgb(0xe4, 0xe0, 0xd8),
             muted: Color32::from_rgb(0x92, 0x8d, 0x84),
             faint: Color32::from_rgb(0x3b, 0x38, 0x33),
+            line: Color32::from_rgb(0x73, 0x6e, 0x65),
             hover: Color32::from_rgb(0x22, 0x1f, 0x1c),
+            row_hover: Color32::from_rgb(0x2a, 0x27, 0x23),
+            selected: Color32::from_rgb(0x18, 0x17, 0x15).lerp_to_gamma(accent.colour(true), accent.tint()),
             accent: accent.colour(true),
             warn: Color32::from_rgb(0xe4, 0x82, 0x70),
             bar: Color32::from_rgb(0x1f, 0x1d, 0x1a),
@@ -108,7 +124,10 @@ fn palette(dark: bool, accent: Accent) -> Ink {
             text: Color32::from_rgb(0x33, 0x30, 0x2b),
             muted: Color32::from_rgb(0x6b, 0x67, 0x5f),
             faint: Color32::from_rgb(0xe0, 0xdb, 0xcf),
+            line: Color32::from_rgb(0x8f, 0x89, 0x7e),
             hover: Color32::from_rgb(0xf2, 0xef, 0xe7),
+            row_hover: Color32::from_rgb(0xec, 0xe8, 0xde),
+            selected: Color32::from_rgb(0xfa, 0xf8, 0xf2).lerp_to_gamma(accent.colour(false), accent.tint()),
             accent: accent.colour(false),
             warn: Color32::from_rgb(0xa5, 0x40, 0x2f),
             bar: Color32::from_rgb(0xf0, 0xec, 0xe2),
@@ -117,8 +136,27 @@ fn palette(dark: bool, accent: Accent) -> Ink {
     }
 }
 
-/// System serif faces close in spirit to ET Book, then CJK fallbacks (music libraries are rarely
-/// all-Latin). Missing files are skipped, so this degrades to egui's defaults anywhere.
+/// The faces the app brings, so it reads the same on every system (§4.3 of the design notes):
+/// ET Book (Tufte's, MIT) for the music, Courier Prime (OFL) typed for the facts, Kalam (OFL)
+/// handwritten for the names of cards and playlists, as on a tape's label.
+const ET_BOOK: &[u8] = include_bytes!("../../assets/fonts/et-book-roman-line-figures.ttf");
+const ET_BOOK_ITALIC: &[u8] = include_bytes!("../../assets/fonts/et-book-display-italic-old-style-figures.ttf");
+const COURIER_PRIME: &[u8] = include_bytes!("../../assets/fonts/CourierPrime-Regular.ttf");
+const KALAM: &[u8] = include_bytes!("../../assets/fonts/Kalam-Regular.ttf");
+
+/// Album titles: ET Book's own italic (egui's `italics()` only slants the roman).
+pub fn italic() -> FontFamily {
+    FontFamily::Name("italic".into())
+}
+
+/// The names of cards and playlists, written by hand.
+pub fn hand() -> FontFamily {
+    FontFamily::Name("hand".into())
+}
+
+/// After ET Book, for what it lacks (ł, ş, ž…): a system serif close in spirit, then CJK faces
+/// (music libraries are rarely all-Latin). Missing files are skipped, so this degrades to egui's
+/// defaults anywhere.
 const SERIF: &[(&str, u32)] = &[
     ("/System/Library/Fonts/Palatino.ttc", 0),
     ("/System/Library/Fonts/Supplemental/Georgia.ttf", 0),
@@ -134,6 +172,25 @@ const FALLBACK: &[(&str, u32)] = &[
     ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
 ];
 
+/// egui puts a font's line gap below each line, so text sits that much above the middle of its
+/// row, and above the icons beside it. Windows' Palatino Linotype has a gap of a third of its
+/// size; without it, text is centred as on macOS. Only plain font files: collections are left
+/// as they are.
+fn without_line_gap(mut font: Vec<u8>) -> Vec<u8> {
+    let at = |b: &[u8], i: usize, n: usize| b.get(i..i + n).map(|s| s.iter().fold(0usize, |v, &x| v << 8 | x as usize));
+    if !matches!(font.get(..4), Some([0, 1, 0, 0] | b"true" | b"OTTO")) {
+        return font;
+    }
+    let tables = at(&font, 4, 2).unwrap_or(0);
+    let hhea = (0..tables).map(|t| 12 + 16 * t).find(|&r| font.get(r..r + 4) == Some(b"hhea"));
+    if let Some(gap) = hhea.and_then(|r| at(&font, r + 8, 4)).map(|offset| offset + 8)
+        && let Some(b) = font.get_mut(gap..gap + 2)
+    {
+        b.fill(0);
+    }
+    font
+}
+
 pub fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     let mut load = |list: &[(&str, u32)], first_only: bool| -> Vec<String> {
@@ -141,7 +198,7 @@ pub fn install(ctx: &egui::Context) {
         for (path, index) in list {
             if let Ok(bytes) = std::fs::read(path) {
                 let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_string();
-                fonts.font_data.insert(name.clone(), Arc::new(FontData::from_blob(Arc::new(bytes), *index)));
+                fonts.font_data.insert(name.clone(), Arc::new(FontData::from_blob(Arc::new(without_line_gap(bytes)), *index)));
                 names.push(name);
                 if first_only {
                     break;
@@ -152,22 +209,29 @@ pub fn install(ctx: &egui::Context) {
     };
     let serif = load(SERIF, true);
     let fallback = load(FALLBACK, false);
-    let prop = fonts.families.entry(FontFamily::Proportional).or_default();
-    for (i, name) in serif.into_iter().enumerate() {
-        prop.insert(i, name);
+    for (name, bytes) in [("ET Book", ET_BOOK), ("ET Book Italic", ET_BOOK_ITALIC), ("Courier Prime", COURIER_PRIME), ("Kalam", KALAM)] {
+        fonts.font_data.insert(name.into(), Arc::new(FontData::from_static(bytes)));
     }
-    prop.extend(fallback.iter().cloned());
-    fonts.families.entry(FontFamily::Monospace).or_default().extend(fallback);
+    // Each family: its face, then the serif's fallbacks, then egui's own (symbols, emoji).
+    let defaults = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    let then: Vec<String> = serif.into_iter().chain(fallback.iter().cloned()).chain(defaults).collect();
+    let family = |first: &str| std::iter::once(first.to_string()).chain(then.iter().cloned()).collect::<Vec<_>>();
+    fonts.families.insert(FontFamily::Proportional, family("ET Book"));
+    fonts.families.insert(italic(), family("ET Book Italic"));
+    fonts.families.insert(hand(), family("Kalam"));
+    let mono = fonts.families.entry(FontFamily::Monospace).or_default();
+    mono.insert(0, "Courier Prime".into());
+    mono.extend(fallback);
     ctx.set_fonts(fonts);
 
     for theme in [Theme::Light, Theme::Dark] {
         ctx.style_mut_of(theme, |style| {
             style.text_styles = [
-                (TextStyle::Heading, FontId::proportional(26.0)),
-                (TextStyle::Body, FontId::proportional(15.5)),
-                (TextStyle::Button, FontId::proportional(15.0)),
-                (TextStyle::Small, FontId::proportional(12.0)),
-                (TextStyle::Monospace, FontId::monospace(13.0)),
+                (TextStyle::Heading, FontId::proportional(font::DISPLAY)),
+                (TextStyle::Body, FontId::proportional(font::BODY)),
+                (TextStyle::Button, FontId::proportional(font::UI)),
+                (TextStyle::Small, FontId::proportional(font::META)),
+                (TextStyle::Monospace, FontId::monospace(font::META)),
             ]
             .into();
             // The 8-point grid (`layout`): gaps of 8, controls a row of 24 tall, insets of 16.
@@ -200,7 +264,7 @@ pub fn install(ctx: &egui::Context) {
             ] {
                 w.bg_fill = Color32::TRANSPARENT;
                 w.weak_bg_fill = Color32::TRANSPARENT;
-                w.bg_stroke = Stroke::new(1.0, ink.faint);
+                w.bg_stroke = Stroke::new(1.0, ink.line);
                 w.fg_stroke = Stroke::new(1.0, fg);
                 w.corner_radius = CornerRadius::ZERO;
                 w.expansion = 0.0;
@@ -210,10 +274,11 @@ pub fn install(ctx: &egui::Context) {
     }
 }
 
-/// A softly outlined panel used to group one step of a task.
+/// A panel grouping one step of a task, or what belongs to one thing: set apart by its
+/// background alone (the tint of the tab bar), with no outline, as the design is flat.
 pub fn panel_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().fill(ink.hover).stroke(Stroke::new(1.0, ink.faint)).corner_radius(8.0).inner_margin(egui::Margin::same(S2 as i8))
+    egui::Frame::new().fill(ink.bar).corner_radius(4.0).inner_margin(egui::Margin::same(S2 as i8))
 }
 
 /// A dialog over the app: the paper, with a grid's breadth of room inside.
@@ -225,5 +290,24 @@ pub fn dialog_frame(ui: &Ui) -> egui::Frame {
 /// Outlined in the warning colour: something the user should know before it surprises them.
 pub fn warning_frame(ui: &Ui) -> egui::Frame {
     let ink = ink(ui);
-    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
+    egui::Frame::new().stroke(Stroke::new(1.0, ink.warn)).corner_radius(4.0).inner_margin(egui::Margin::symmetric(S2 as i8, S1 as i8))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn line_gap_is_dropped_from_plain_fonts_only() {
+        // A font file with one table, `hhea`: ascender 1499, descender -582, line gap 682.
+        let mut font = vec![0, 1, 0, 0, 0, 1, 0, 16, 0, 0, 0, 0];
+        font.extend(b"hhea");
+        font.extend([0, 0, 0, 0, 0, 0, 0, 28, 0, 0, 0, 36]);
+        font.extend([0, 1, 0, 0, 0x05, 0xdb, 0xfd, 0xba, 0x02, 0xaa]);
+        font.resize(28 + 36, 0);
+        let fixed = super::without_line_gap(font.clone());
+        assert_eq!(fixed[28 + 4..28 + 10], [0x05, 0xdb, 0xfd, 0xba, 0, 0], "ascender and descender kept, gap gone");
+        let mut collection = font;
+        collection[..4].copy_from_slice(b"ttcf");
+        assert_eq!(super::without_line_gap(collection.clone()), collection);
+        assert!(super::without_line_gap(vec![0, 1, 0, 0, 0, 9]).len() == 6, "a truncated file is left alone");
+    }
 }

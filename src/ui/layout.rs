@@ -25,6 +25,35 @@ pub const CONTROL: f32 = 32.0;
 /// Icons drawn beside words.
 pub const ICON: f32 = 16.0;
 
+/// The type scale, each a fifth or so above the last, in points. ET Book has a small eye for its
+/// size, so nothing read is under 13.
+pub mod font {
+    /// Section labels, in capitals.
+    pub const CAPS: f32 = 12.0;
+    /// Lesser facts: paths, notes, badges.
+    pub const META: f32 = 13.0;
+    /// The interface: links, help, compact rows.
+    pub const UI: f32 = 14.0;
+    /// Rows and reading: songs, albums, lyrics.
+    pub const BODY: f32 = 16.0;
+    /// A row's or a dialog's title, the song playing.
+    pub const TITLE: f32 = 20.0;
+    /// A page's title.
+    pub const HEADING: f32 = 24.0;
+    /// The album in the details panel.
+    pub const DISPLAY: f32 = 28.0;
+}
+
+/// A list's rows (songs, albums): `compact`, packed with no gap between them, 24 apart as in
+/// Calibre; else a step apart, 32.
+pub fn list_rows<R>(ui: &mut Ui, compact: bool, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let gap = ui.spacing().item_spacing.y;
+    ui.spacing_mut().item_spacing.y = if compact { 0.0 } else { S1 };
+    let r = add(ui);
+    ui.spacing_mut().item_spacing.y = gap;
+    r
+}
+
 /// A frame's margins: `x` left and right, `y` top and bottom (both on the grid).
 pub fn margin(x: f32, y: f32) -> Margin {
     Margin::symmetric(x as i8, y as i8)

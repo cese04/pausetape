@@ -18,7 +18,9 @@ use crate::musicbrainz::ArtistInfo;
 
 /// Bump when `Track` gains information older rows lack (2: MP4 codec; 3: bitrate, sample rate
 /// and bit depth; 4: embedded cover; 5: damaged files), so files get re-read.
-const SCHEMA_VERSION: i64 = 5;
+/// 6: tracks hold their genres (read again once). 7: damaged also when blank but readable, or cut
+/// short inside the tag.
+const SCHEMA_VERSION: i64 = 7;
 /// Corrections saved since this version stay valid: the fields they change haven't changed.
 const EDITS_SINCE: i64 = 3;
 
@@ -80,6 +82,11 @@ impl Db {
              CREATE TABLE IF NOT EXISTS artists (
                  key     TEXT PRIMARY KEY, -- the artist as the library groups it: \"flyinglotus\"
                  info    TEXT NOT NULL,    -- ArtistInfo as JSON: the MusicBrainz entry, links
+                 fetched INTEGER NOT NULL  -- seconds since 1970
+             );
+             CREATE TABLE IF NOT EXISTS lyrics (
+                 id      TEXT PRIMARY KEY, -- the song (Track::id)
+                 data    TEXT,             -- Lyrics as JSON; NULL: looked for, none found
                  fetched INTEGER NOT NULL  -- seconds since 1970
              );
              CREATE TABLE IF NOT EXISTS sheets (
@@ -146,6 +153,17 @@ impl Db {
         Ok(())
     }
 
+    /// A file found damaged when played: its row says so, and why, until the file changes and
+    /// is read again (a fresh copy is sound until found otherwise).
+    pub fn mark_damaged(&mut self, path: &Path, why: &str) -> Result<()> {
+        let key = path.to_string_lossy();
+        let data: String = self.conn.query_row("SELECT data FROM tracks WHERE path = ?1", params![key], |r| r.get(0))?;
+        let mut t: Track = serde_json::from_str(&data)?;
+        t.damage = Some(why.to_string());
+        self.conn.execute("UPDATE tracks SET data = ?2 WHERE path = ?1", params![key, serde_json::to_string(&t)?])?;
+        Ok(())
+    }
+
     /// When `root` was last read through, if it was (with this layout of the database).
     pub fn scanned(&self, root: &Path) -> Result<Option<u64>> {
         let at = self.conn.query_row("SELECT scanned FROM folders WHERE root = ?1", params![root.to_string_lossy()], |r| r.get::<_, i64>(0));
@@ -203,6 +221,29 @@ impl Db {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Every artist MusicBrainz was asked about, by key, with when (for the genres view).
+    pub fn all_artist_info(&self) -> Result<Vec<(String, ArtistInfo, u64)>> {
+        let mut q = self.conn.prepare("SELECT key, info, fetched FROM artists")?;
+        let rows = q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?;
+        Ok(rows.flatten().filter_map(|(k, info, at)| serde_json::from_str(&info).ok().map(|i| (k, i, at as u64))).collect())
+    }
+
+    /// A song's lyrics as kept: `Some(None)` when they were looked for and none found.
+    pub fn lyrics(&self, id: &Path) -> Result<Option<Option<crate::lyrics::Lyrics>>> {
+        let row = self.conn.query_row("SELECT data FROM lyrics WHERE id = ?1", params![id.to_string_lossy()], |r| r.get::<_, Option<String>>(0));
+        match row {
+            Ok(data) => Ok(Some(data.and_then(|d| serde_json::from_str(&d).ok()))),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn save_lyrics(&mut self, id: &Path, lyrics: Option<&crate::lyrics::Lyrics>, at: u64) -> Result<()> {
+        let data = lyrics.map(serde_json::to_string).transpose()?;
+        self.conn.execute("INSERT OR REPLACE INTO lyrics (id, data, fetched) VALUES (?1, ?2, ?3)", params![id.to_string_lossy(), data, at as i64])?;
+        Ok(())
     }
 
     pub fn save_artist_info(&mut self, key: &str, info: &ArtistInfo, at: u64) -> Result<()> {
@@ -297,6 +338,34 @@ mod tests {
         assert!(inside >= low && inside < high);
         assert!(!(sibling >= low && sibling < high));
         assert!(!(sibling2 >= low && sibling2 < high));
+    }
+
+    #[test]
+    fn damage_found_in_play_lasts_until_the_file_changes() {
+        use crate::library::scan;
+        let root = std::env::temp_dir().join(format!("pausetape-test-db-damage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let song = root.join("music/GNX/04 - man at the garden.mp3");
+        std::fs::create_dir_all(song.parent().unwrap()).unwrap();
+        std::fs::write(&song, b"some audio").unwrap();
+        let mut db = Db::open(&root.join("library.sqlite3")).unwrap();
+        let music = root.join("music");
+        // Marked by the path the scan gave it, as the app does.
+        let found = scan(&music, Some(&mut db), false, |_| {}).0.remove(0).path;
+        db.mark_damaged(&found, "its audio stops making sense at 0:03").unwrap();
+        // A rescan keeps it; so does a correction saved since.
+        let mut edited = scan(&music, Some(&mut db), false, |_| {}).0.remove(0);
+        assert!(edited.harmed() && !edited.damaged && edited.damage.as_deref() == Some("its audio stops making sense at 0:03"), "noted, still copied");
+        (edited.title, edited.dirty, edited.damage) = (Some("man at the garden".into()), true, None);
+        db.save_edits([&edited]).unwrap();
+        let t = scan(&music, Some(&mut db), false, |_| {}).0.remove(0);
+        assert!(t.dirty && t.harmed() && t.damage_note().unwrap().contains("0:03"));
+
+        // A fresh copy is read again, and is sound until found otherwise.
+        std::fs::write(&song, b"a fresh copy of the audio").unwrap();
+        let t = scan(&music, Some(&mut db), false, |_| {}).0.remove(0);
+        assert!(!t.harmed());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

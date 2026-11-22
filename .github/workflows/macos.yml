@@ -1,11 +1,12 @@
-# Test and package the macOS app for `main`, version tags and pull requests. The disk image of
-# a version tag (`v*`) goes on its GitHub Release, kept for good; that of `main` is kept 90
-# days, the most GitHub allows; pull requests are checked, not kept.
+# Test and package the macOS app for `main`, release branches, version tags and pull requests.
+# The disk image of a version tag (`v*`) goes on its GitHub Release, kept for good; that of
+# `main` or a `release/*` branch (to try before the release) is kept 90 days, the most GitHub
+# allows; pull requests are checked, not kept.
 name: macOS
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
 
@@ -14,7 +15,7 @@ permissions:
 
 jobs:
   package:
-    runs-on: macos-14   # Apple Silicon; the Intel half is cross-compiled
+    runs-on: macos-15   # Apple Silicon; the Intel half is cross-compiled
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +52,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.dmg*
+          # windows.yml writes to the same release: each adds its part.
+          append_body: true
           body: |
             macOS 12 or later, Apple Silicon and Intel.
 

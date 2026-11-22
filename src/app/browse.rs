@@ -50,6 +50,44 @@ impl App {
         CardFacts { on, changing, better, chosen: chosen || planned }
     }
 
+    /// The album (artist, album) with this id (`AlbumNode::id`).
+    pub fn album_by_id(&self, id: &str) -> Option<(usize, usize)> {
+        self.index.artists.iter().enumerate().find_map(|(ai, a)| {
+            let ck = &self.index.clusters[a.cluster].key;
+            a.albums.iter().position(|al| al.id(ck) == id).map(|bi| (ai, bi))
+        })
+    }
+
+    /// The albums (artist, album) these songs belong to, in library order.
+    pub fn albums_of(&self, songs: &BTreeSet<usize>) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        for (ai, a) in self.index.artists.iter().enumerate() {
+            for (bi, al) in a.albums.iter().enumerate() {
+                if al.tracks.iter().any(|t| songs.contains(t)) {
+                    out.push((ai, bi));
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether all these albums are chosen for the active setup's card.
+    pub fn all_on_card(&self, albums: &[(usize, usize)]) -> bool {
+        albums.iter().all(|&(ai, bi)| {
+            let a = &self.index.artists[ai];
+            self.write().custom.includes(&self.index.clusters[a.cluster].key, &a.albums[bi], &a.albums)
+        })
+    }
+
+    /// Send these albums to the card, or take them off if they're all there already (⌘D).
+    pub fn toggle_on_card(&mut self, albums: Vec<(usize, usize)>) {
+        if albums.is_empty() {
+            return;
+        }
+        let on = !self.all_on_card(&albums);
+        self.card_albums(&albums, on);
+    }
+
     /// What the search box looks at in album `bi` of artist `ai`.
     pub fn album_facts(&self, ai: usize, bi: usize) -> AlbumFacts<'_> {
         let a = &self.index.artists[ai];
@@ -62,6 +100,7 @@ impl App {
             tracks: al.tracks.iter().map(|&i| &self.tracks[i]).collect(),
             card: self.card_facts(ck, a, al),
             cover: !self.lacks_cover(al),
+            genres: self.album_genres(ai, bi).names.iter().map(|g| crate::library::genres::key(g)).collect(),
         }
     }
 
@@ -135,6 +174,9 @@ impl App {
 
     /// Put the selected albums on the card, or take them off.
     pub fn card_albums(&mut self, albums: &[(usize, usize)], on: bool) {
+        let n = albums.len();
+        let what = if n == 1 { "1 album".to_string() } else { format!("{n} albums") };
+        self.remember_chosen(if on { format!("sending {what} to the card") } else { format!("taking {what} off the card") });
         for &(ai, bi) in albums {
             let a = &self.index.artists[ai];
             let ck = self.index.clusters[a.cluster].key.clone();

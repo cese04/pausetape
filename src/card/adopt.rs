@@ -52,6 +52,9 @@ pub struct Survey {
     pub unknown: Vec<(PathBuf, u64)>,
     /// Everything else: covers, logs, playlists, other devices' data…
     pub other: Vec<(PathBuf, u64)>,
+    /// The library songs found among `used` and `spare`, by index: what the card has already,
+    /// put there by hand.
+    pub found: Vec<usize>,
 }
 
 impl Survey {
@@ -103,8 +106,8 @@ fn system_file(name: &str, ext: &str) -> bool {
 }
 
 /// Files on the card this write didn't create (by its manifest), relative to the card, with
-/// sizes. Hidden files, system folders, an earlier gather folder and the test card's files are
-/// not looked at.
+/// sizes. Hidden files, system folders, an earlier gather folder and the test card's files (at
+/// the top, or in a music folder) are not looked at.
 pub fn foreign_files(dest: &Path, manifest: &[Written]) -> Vec<(PathBuf, u64)> {
     let ours: HashSet<String> = manifest.iter().map(|w| w.rel.to_string_lossy().to_lowercase()).collect();
     WalkDir::new(dest)
@@ -112,7 +115,7 @@ pub fn foreign_files(dest: &Path, manifest: &[Written]) -> Vec<(PathBuf, u64)> {
         .into_iter()
         .filter_entry(|e| {
             let n = e.file_name().to_string_lossy();
-            !n.starts_with('.') && !(e.depth() == 1 && (n == "System Volume Information" || n == "$RECYCLE.BIN" || is_gather_folder(&n) || super::testcard::is_test_name(&n)))
+            !n.starts_with('.') && !(e.depth() == 1 && (n == "System Volume Information" || n == "$RECYCLE.BIN" || is_gather_folder(&n))) && !(e.depth() <= 3 && super::testcard::is_test_name(&n))
         })
         .flatten()
         .filter(|e| e.file_type().is_file())
@@ -169,6 +172,7 @@ pub fn survey(tracks: &[Track], plan: &[PlanItem], manifest: &[Written], dest: &
             elsewhere(&mut s, rel);
             continue;
         }
+        s.found.extend(&copies);
         // Several identical library files (the same song kept twice): any the write still needs.
         match copies.iter().find_map(|i| wanted.remove(i)) {
             Some(to) => s.used.push((rel, to, size)),
@@ -234,6 +238,8 @@ pub struct Outcome {
     /// macOS "._" and ".DS_Store" files deleted afterwards.
     pub cleaned: usize,
     pub errors: Vec<String>,
+    /// The card's id, once it's labelled for the setup that took it over.
+    pub card_id: Option<String>,
 }
 
 /// Carry out a survey: optionally delete clutter, then optionally move spare copies and other
@@ -244,6 +250,7 @@ pub struct Outcome {
 pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: bool, clean_mac: bool, write: &str, mut progress: impl FnMut(usize, usize)) -> Outcome {
     let mut out = Outcome::default();
     let mut moves: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let record = new_record_path();
     let mut emptied: HashSet<PathBuf> = HashSet::new();
     let mut deleted: HashSet<&Path> = HashSet::new();
     let clutter: Vec<&(PathBuf, u64)> = if delete_clutter { survey.other.iter().filter(|(rel, _)| clutter_kind(rel).is_some()).collect() } else { Vec::new() };
@@ -280,6 +287,10 @@ pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: boo
         match res {
             Ok(()) => {
                 moves.push((from.to_path_buf(), to.to_path_buf()));
+                // Kept as it goes, so what was moved can be put back even if the app is cut off.
+                if moves.len().is_multiple_of(RECORD_EVERY) {
+                    let _ = save(&record, write, &moves);
+                }
                 if let Some(p) = a.parent() {
                     emptied.insert(p.to_path_buf());
                 }
@@ -320,7 +331,7 @@ pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: boo
         super::copy::remove_empty_dirs(dest);
     }
     if !moves.is_empty()
-        && let Err(e) = save(write, &moves)
+        && let Err(e) = save(&record, write, &moves)
     {
         out.errors.push(format!("saving the undo record: {e:#}"));
     }
@@ -328,28 +339,13 @@ pub fn take_over(survey: &Survey, dest: &Path, gather: bool, delete_clutter: boo
 }
 
 /// Run a file operation, and if it's refused because the file is locked, unlock it and try once
-/// more. macOS shows a FAT/exFAT file's read-only attribute as the "locked" flag, and then
-/// refuses to rename or delete it; the Echo Mini doesn't care either way.
+/// more. A FAT/exFAT file's read-only attribute (macOS shows it as the "locked" flag) keeps it
+/// from being deleted, and on macOS from being renamed; the Echo Mini doesn't care either way.
 fn unlocked<T>(path: &Path, op: impl Fn() -> std::io::Result<T>) -> std::io::Result<T> {
     match op() {
-        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && unlock(path) => op(),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && crate::platform::unlock(path) => op(),
         r => r,
     }
-}
-
-/// Clear a file's "locked" flag. False if it wasn't locked or couldn't be unlocked.
-#[cfg(target_os = "macos")]
-fn unlock(path: &Path) -> bool {
-    use std::os::macos::fs::MetadataExt;
-    use std::os::unix::ffi::OsStrExt;
-    let Ok(flags) = fs::symlink_metadata(path).map(|m| m.st_flags()) else { return false };
-    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
-    flags & libc::UF_IMMUTABLE != 0 && unsafe { libc::chflags(c.as_ptr(), (flags & !libc::UF_IMMUTABLE) as _) } == 0
-}
-
-#[cfg(not(target_os = "macos"))]
-fn unlock(_: &Path) -> bool {
-    false
 }
 
 /// An I/O error in words a person can act on.
@@ -435,6 +431,9 @@ pub fn import(survey: &Survey, dest: &Path, music: &Path, into: &str, stop: &std
     out
 }
 
+/// How many moves a take-over makes between saves of its record.
+const RECORD_EVERY: usize = 25;
+
 /// The record of one take-over, so it can be undone: card moves, oldest first.
 #[derive(Serialize, Deserialize)]
 struct Record {
@@ -451,13 +450,25 @@ fn record_dir() -> PathBuf {
     super::journal::journal_dir().join("card")
 }
 
-fn save(write: &str, moves: &[(PathBuf, PathBuf)]) -> Result<()> {
-    let dir = record_dir();
-    fs::create_dir_all(&dir)?;
-    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos();
-    let rec = Record { write: write.to_string(), moves: moves.to_vec(), relative: true };
-    fs::write(dir.join(format!("{stamp}.json")), serde_json::to_vec_pretty(&rec)?)?;
+/// Where the record of a take-over starting now goes.
+fn new_record_path() -> PathBuf {
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    record_dir().join(format!("{stamp}.json"))
+}
+
+/// Replaced whole, so a record is never left half written.
+fn write_record(path: &Path, rec: &Record) -> Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, serde_json::to_vec_pretty(rec)?)?;
+    fs::rename(&tmp, path)?;
     Ok(())
+}
+
+fn save(path: &Path, write: &str, moves: &[(PathBuf, PathBuf)]) -> Result<()> {
+    write_record(path, &Record { write: write.to_string(), moves: moves.to_vec(), relative: true })
 }
 
 /// The latest take-over by this setup that hasn't been undone, by its id (or, for older
@@ -472,12 +483,13 @@ pub fn latest(id: &str, name: &str) -> Option<PathBuf> {
 /// are no longer the write's (remove them from its manifest), how many files went back, and errors.
 pub fn undo_latest(id: &str, name: &str, dest: &Path) -> Result<(Vec<PathBuf>, usize, Vec<String>)> {
     let path = latest(id, name).context("nothing to undo")?;
+    anyhow::ensure!(dest.is_dir(), "the card isn't connected");
     let rec: Record = serde_json::from_slice(&fs::read(&path)?)?;
-    let (mut released, mut restored, mut errors) = (Vec::new(), 0, Vec::new());
+    let (mut released, mut restored, mut errors, mut failed) = (Vec::new(), 0, Vec::new(), Vec::new());
     let mut emptied = HashSet::new();
     let on_card = |p: &PathBuf| if rec.relative { dest.join(p) } else { p.clone() };
-    for (old, new) in rec.moves.iter().rev() {
-        let (old, new) = (&on_card(old), &on_card(new));
+    for step in rec.moves.iter().rev() {
+        let (old, new) = (&on_card(&step.0), &on_card(&step.1));
         let res = (|| -> Result<()> {
             if let Some(p) = old.parent() {
                 fs::create_dir_all(p)?;
@@ -495,11 +507,20 @@ pub fn undo_latest(id: &str, name: &str, dest: &Path) -> Result<(Vec<PathBuf>, u
                     emptied.insert(p.to_path_buf());
                 }
             }
-            Err(e) => errors.push(format!("{}: {e:#}", new.display())),
+            Err(e) => {
+                errors.push(format!("{}: {e:#}", new.display()));
+                failed.push(step.clone());
+            }
         }
     }
     remove_emptied(dest, emptied);
-    fs::rename(&path, path.with_extension("undone"))?;
+    // Spent only once everything is back; what couldn't move can be tried again.
+    if failed.is_empty() {
+        fs::rename(&path, path.with_extension("undone"))?;
+    } else {
+        failed.reverse();
+        write_record(&path, &Record { write: rec.write.clone(), moves: failed, relative: rec.relative })?;
+    }
     Ok((released, restored, errors))
 }
 
@@ -619,6 +640,7 @@ mod tests {
         let mut s = survey(&tracks, &plan, &[], &card, |_, _| {});
         assert_eq!(s.used.len(), 2, "both Absolution songs are exact copies the write wants");
         assert_eq!(s.spare.len(), 1, "the M4A is a copy of a song this write leaves out");
+        assert_eq!(s.found.len(), 3, "the library songs found, used or spare: what the card tab marks as copied by hand");
         assert_eq!((s.unknown.len(), s.other.len()), (1, 5), "the unknown song; the cover and four files of clutter");
         let kinds: Vec<(&str, usize)> = s.clutter().iter().map(|(k, n, _)| (*k, *n)).collect();
         assert!(kinds.contains(&("iTunes library data", 2)) && kinds.contains(&("Windows and macOS system files", 1)) && kinds.contains(&("rip logs and checksums", 1)), "{kinds:?}");
@@ -660,5 +682,37 @@ mod tests {
         assert!(!card.join("Muse").exists() && !card.join("_Before Pausetape").exists());
         assert!(!card.join("muse absolution [mp3]/rip.log").exists(), "deleted clutter doesn't come back");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_undo_that_cannot_happen_is_not_used_up() {
+        let root = std::env::temp_dir().join(format!("pausetape-test-undo-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let card = root.join("card");
+        fs::create_dir_all(card.join("new")).unwrap();
+        fs::write(card.join("new/a.mp3"), b"a").unwrap();
+        fs::write(card.join("new/b.mp3"), b"b").unwrap();
+        let id = format!("undo test {}", std::process::id());
+        let record = new_record_path();
+        let moves = vec![(PathBuf::from("old/a.mp3"), PathBuf::from("new/a.mp3")), (PathBuf::from("old/b.mp3"), PathBuf::from("new/b.mp3"))];
+        save(&record, &id, &moves).unwrap();
+
+        // The card isn't there: nothing happens, and the undo waits.
+        assert!(undo_latest(&id, "", &root.join("not there")).is_err());
+        assert!(latest(&id, "").is_some());
+
+        // One file can't go back (its place is taken): the other does, and only it is done.
+        fs::create_dir_all(card.join("old")).unwrap();
+        fs::write(card.join("old/b.mp3"), b"someone else's").unwrap();
+        let (released, restored, errors) = undo_latest(&id, "", &card).unwrap();
+        assert_eq!((released.len(), restored, errors.len()), (1, 1, 1));
+        assert!(card.join("old/a.mp3").exists() && card.join("new/b.mp3").exists());
+
+        // Its place free again, the rest goes back and the undo is spent.
+        fs::remove_file(card.join("old/b.mp3")).unwrap();
+        let (_, restored, errors) = undo_latest(&id, "", &card).unwrap();
+        assert_eq!((restored, errors.len()), (1, 0));
+        assert!(card.join("old/b.mp3").exists() && latest(&id, "").is_none());
+        let _ = fs::remove_dir_all(&root);
     }
 }

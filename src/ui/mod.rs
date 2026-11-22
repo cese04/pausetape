@@ -6,9 +6,16 @@ mod albums;
 mod artist_panel;
 mod card;
 mod cassette;
+mod confirm;
+mod details;
+mod drag;
 pub mod folders;
+mod genres;
+mod keys;
+mod menu;
 pub mod icons;
 pub mod layout;
+pub mod motion;
 mod library;
 pub mod navigator;
 mod player;
@@ -17,6 +24,7 @@ mod playlists;
 #[cfg(debug_assertions)]
 pub mod screenshots;
 mod settings;
+mod sidebar;
 mod tag_editor;
 pub mod text;
 pub mod theme;
@@ -25,37 +33,51 @@ pub mod widgets;
 use egui::{RichText, Stroke, Ui};
 
 use crate::app::{App, Tab};
+use text::plural;
 use theme::ink;
 use icons::Icon;
 use widgets::hairline_progress;
-use layout::{ICON, S1, S2, S3, S4, S5, margin, row};
+use layout::{CONTROL, ICON, S1, S2, S4, S5, font, margin, row};
 
 const MAX_W: f32 = 820.0;
 
 const ROW_H: f32 = layout::ROW;
 
-/// The panels, top to bottom: the tab bar; a strip for work under way and the latest notice;
-/// the open tab; the player. The tab bar and the player are the app's frame: tinted and ruled
-/// off, so they never read as content. Everything inside keeps to the page's side margin.
+/// The panels: the top bar (name and search); at the foot, the status bar and above it the
+/// player; the sidebar on the left; the open view in the rest. The bars, the sidebar and the
+/// player are the app's frame: tinted and ruled off, so they never read as content.
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
+    keys::global(app, ui);
     let chrome = |x: f32, y: f32| egui::Frame::new().fill(ink.bar).inner_margin(margin(x, y));
     let r = egui::Panel::top("nav").frame(chrome(S4, S1)).show_separator_line(false).show(ui, |ui| header(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.bottom(), Stroke::new(1.0, ink.faint));
-    let notice_text = app.notices.last().cloned();
-    if app.busy.is_some() || notice_text.is_some() {
-        let frame = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S1 as i8, bottom: 0 });
-        egui::Panel::top("status").frame(frame).show_separator_line(false).show(ui, |ui| {
-            job(app, ui);
-            if let Some(n) = &notice_text {
-                notice(app, ui, n);
-            }
-        });
-    }
-    let r = egui::Panel::bottom("player").frame(chrome(S5, S2)).show_separator_line(false).show(ui, |ui| player::show(app, ui));
+    // The status bar, at the very bottom: always there and always one line, so neither work
+    // starting nor a notice ever moves the page.
+    let r = egui::Panel::bottom("status").frame(chrome(S5, S1 / 2.0)).exact_size(CONTROL + S1).show_separator_line(false).show(ui, |ui| status_bar(app, ui));
     let edge = r.response.rect;
     ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
+    // The player: folding or unfolding, it grows or shrinks to its new height rather than jumping.
+    let frame = chrome(S5, if player::compact(app, ui.ctx()) { S1 } else { S2 });
+    let margins = frame.total_margin().sum().y;
+    let content_id = egui::Id::unique("player's height");
+    let mut panel = egui::Panel::bottom("player").frame(frame).show_separator_line(false);
+    if let Some(h) = ui.ctx().data(|d| d.get_temp::<f32>(content_id)) {
+        let time = motion::time(ui.ctx(), motion::RESIZE);
+        panel = panel.exact_size(ui.ctx().animate_value_with_time(egui::Id::unique("player folding"), h + margins, time));
+    }
+    let r = panel.show(ui, |ui| {
+        let h = ui.scope(|ui| player::show(app, ui)).response.rect.height();
+        ui.ctx().data_mut(|d| d.insert_temp(content_id, h));
+    });
+    let edge = r.response.rect;
+    ui.painter().hline(edge.x_range(), edge.top(), Stroke::new(1.0, ink.faint));
+    // The sidebar, between the top bar and the player, ruled off from the page.
+    let side_w = if sidebar::narrow(ui.ctx()) { sidebar::NARROW } else { sidebar::WIDE };
+    let r = egui::Panel::left("sidebar").frame(egui::Frame::new().fill(ink.bar)).exact_size(side_w).resizable(false).show_separator_line(false).show(ui, |ui| sidebar::show(app, ui));
+    let edge = r.response.rect;
+    ui.painter().vline(edge.right(), edge.y_range(), Stroke::new(1.0, ink.faint));
     let page = egui::Frame::new().fill(ink.bg).inner_margin(egui::Margin { left: S5 as i8, right: S5 as i8, top: S2 as i8, bottom: S2 as i8 });
     egui::CentralPanel::default().frame(page).show(ui, |ui| {
         // The library uses the whole width (its A–Z rail belongs at the window's edge); the other
@@ -64,93 +86,223 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.set_max_width(ui.available_width().min(MAX_W));
         }
         match app.tab {
-            Tab::Folders => folders::show(app, ui),
             Tab::Library => library::show(app, ui),
+            Tab::Suggestions => suggestions(app, ui),
+            Tab::Genres => genres::show(app, ui),
             Tab::Card => card::show(app, ui),
             Tab::Playlists => playlists::show(app, ui),
             Tab::Settings => settings::show(app, ui),
         }
     });
+    folders::welcome(app, ui);
     folders::pickers(app, ui);
     tag_editor::dialog(app, ui);
     card::take_over_dialog(app, ui);
     player_test::dialog(app, ui);
+    // ⌘F is for the search box of the tab it opened; if that tab didn't draw one, it lapses.
+    app.focus_search = false;
+    drop_to_add(app, ui);
     card::sync_confirm_dialog(app, ui);
+    confirm::dialog(app, ui);
+    details::sheet(app, ui);
     folders::add_dialog(app, ui);
+    drag::ghost(ui);
 }
 
-/// The tab bar: the app's name, the tabs, and what's running in the background.
+/// A folder dropped on the window is music to add, as "add music" would: while it's held over
+/// the window, the page says so; once dropped, it's checked against the library.
+fn drop_to_add(app: &mut App, ui: &mut Ui) {
+    let (hovering, dropped) = ui.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect::<Vec<_>>()));
+    if hovering {
+        let ink = ink(ui);
+        let area = ui.ctx().content_rect().shrink(S2);
+        let p = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("drop to add")));
+        p.rect_filled(area, 8.0, ink.bg.gamma_multiply(0.92));
+        p.rect_filled(area, 8.0, ink.accent.gamma_multiply(0.10));
+        p.rect_stroke(area, 8.0, Stroke::new(1.5, ink.accent), egui::StrokeKind::Inside);
+        let what = if app.saved.source.is_some() { "Drop a folder to add its music to your library" } else { "Choose your music folder first, then drop music to add" };
+        p.text(area.center(), egui::Align2::CENTER_CENTER, what, egui::FontId::proportional(font::HEADING), ink.text);
+        p.text(area.center() + egui::vec2(0.0, S4), egui::Align2::CENTER_CENTER, "It's checked against the library first; nothing is copied until you say so.", egui::FontId::proportional(font::UI), ink.muted);
+    }
+    let Some(first) = dropped.first() else { return };
+    if app.dialog_open() {
+        app.notice("close the dialog first, then drop it again");
+    } else if !first.is_dir() {
+        app.notice("drop the folder the music is in (an album, or a folder of albums), not single files");
+    } else {
+        let name = first.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let more = if dropped.len() > 1 { " (one folder at a time: the first)" } else { "" };
+        app.tab = Tab::Library;
+        match &app.busy {
+            // Kept for when the work under way is done, rather than lost.
+            Some(b) => {
+                app.notice(format!("“{name}” is checked against the library once {} is done{more}", b.label));
+                app.pending_add = Some(first.clone());
+            }
+            None => {
+                if !more.is_empty() {
+                    app.notice(format!("checking “{name}”{more}"));
+                }
+                app.check_folder(first.clone());
+            }
+        }
+    }
+}
+
+/// Every album looked up on MusicBrainz, with its suggestions to apply or dismiss, one after
+/// another (the library by artist shows each under its album; the details panel too).
+fn suggestions(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    ui.label(RichText::new("Suggested tags, from MusicBrainz").size(font::HEADING).color(ink.text));
+    ui.add_space(S1);
+    let mut ids: Vec<(String, String, String)> = app
+        .lookups
+        .keys()
+        .map(|id| match app.album_by_id(id) {
+            Some((a, b)) => (app.index.artists[a].name.clone(), app.index.artists[a].albums[b].title.clone().unwrap_or_else(|| "Loose tracks".into()), id.clone()),
+            None => (String::new(), id.clone(), id.clone()),
+        })
+        .collect();
+    ids.sort();
+    if ids.is_empty() {
+        widgets::muted(ui, "Nothing to go through. Right-click an album › Look up on MusicBrainz, and its suggestions come here.");
+        return;
+    }
+    let mut actions = Vec::new();
+    egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+        for (artist, album, id) in ids {
+            ui.add_space(S2);
+            row(ui, |ui| {
+                ui.label(RichText::new(album).family(theme::italic()).size(font::TITLE).color(ink.text));
+                widgets::muted(ui, artist);
+            });
+            if let Some(l) = app.lookups.get_mut(&id) {
+                library::lookup_block(ui, &app.tracks, &id, l, &mut actions);
+            }
+        }
+    });
+    actions::apply(app, actions);
+}
+
+/// The top bar: the app's name, and the search box, which looks through the library from
+/// anywhere (typing in it opens the library).
 fn header(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     row(ui, |ui| {
         cassette::mark(ui, 18.0);
-        ui.label(RichText::new(crate::APP_NAME).size(21.0).color(ink.text));
-        ui.add_space(S3);
-        // In a narrow window only the open tab keeps its name; the others show their icon.
-        let compact = ui.available_width() < 900.0;
-        for (t, icon, name) in [
-            (Tab::Folders, Icon::Folder, "folders"),
-            (Tab::Library, Icon::Library, "library"),
-            (Tab::Card, Icon::Card, "card"),
-            (Tab::Playlists, Icon::Playlists, "playlists"),
-            (Tab::Settings, Icon::Settings, "settings"),
-        ] {
-            let active = app.tab == t;
-            let label = if compact && !active { "" } else { name };
-            if widgets::nav_tab(ui, icon, label, active).on_hover_text(name).clicked() {
-                app.tab = t;
-                // The library tab always opens on the whole library.
-                app.duplicates_only = false;
-                app.look_alikes_only = false;
-            }
+        ui.label(RichText::new(crate::APP_NAME).size(font::HEADING).color(ink.text));
+        ui.add_space(S4);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Search, ink.muted);
+        // Room kept beside it for *Filters* (and *Save*, once something's typed), however large
+        // the text.
+        let gap = ui.spacing().item_spacing.x;
+        let typed = !app.filter.trim().is_empty();
+        let filters = widgets::text_width(ui, "Filters (0)", egui::TextStyle::Button.resolve(ui.style()).size) + 2.0 * ui.spacing().button_padding.x;
+        let beside = filters + gap + if typed { widgets::icon_link_width(ui, "Save") + gap } else { 0.0 };
+        let width = (ui.available_width() * 0.45).clamp(160.0, 420.0).min(ui.available_width() - beside).max(4.0 * S4);
+        let before = app.filter.clone();
+        let r = widgets::search_field(ui, &mut app.filter, "search, or try format:flac", width).on_hover_text(crate::library::search::HELP);
+        if app.focus_search {
+            app.focus_search = false;
+            r.request_focus();
+        }
+        // The card's albums are searched where they are; anywhere else, typing opens the library.
+        if app.filter != before && !matches!(app.tab, Tab::Library) && !(app.tab == Tab::Card && !app.card_setup_open) {
+            app.tab = Tab::Library;
+            app.duplicates_only = false;
+            app.look_alikes_only = false;
+        }
+        library::filters_menu(app, ui);
+        let typed = app.filter.trim().to_string();
+        if !typed.is_empty() && !app.saved.searches.contains(&typed) && widgets::icon_link(ui, Icon::Add, "Save").on_hover_text("keep this search in the sidebar").clicked() {
+            app.saved.searches.push(typed);
         }
     });
 }
 
-/// What's running: how far along, the time left at the pace so far, and a way to stop it.
+/// One line at the foot of the window. On the left, the library in figures and what's selected;
+/// on the right, work under way (how far, time left, Stop), and the latest notice, with *Undo*
+/// when it offers one.
+fn status_bar(app: &mut App, ui: &mut Ui) {
+    let ink = ink(ui);
+    ui.set_height(CONTROL + S1);
+    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = S2;
+        let albums: usize = app.index.artists.iter().map(|a| a.albums.len()).sum();
+        let mut facts = if app.tracks.is_empty() { String::new() } else { format!("{} · {} · {}", plural(app.tracks.len(), "song"), plural(app.index.artists.len(), "artist"), plural(albums, "album")) };
+        if !app.selected.is_empty() {
+            facts.push_str(&format!(" · {} selected", plural(app.selected.len(), "song")));
+        } else if !app.selected_albums.is_empty() {
+            facts.push_str(&format!(" · {} selected", plural(app.selected_albums.len(), "album")));
+        }
+        ui.label(RichText::new(facts).size(font::UI).color(ink.muted));
+        // Work under way at the right end; the latest notice in what's left beside it, so a
+        // notice made while work runs is still seen.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if app.busy.is_some() {
+                job(app, ui);
+            }
+            if let Some(n) = app.notices.last().cloned()
+                && ui.available_width() > 160.0
+            {
+                ui.add_space(S2);
+                notice(app, ui, &n);
+            }
+        });
+    });
+}
+
+/// What's running: the reels turning, what it is, how far along, the time left at the pace so
+/// far, and a way to stop it. Laid out right to left, from the Stop button.
 fn job(app: &mut App, ui: &mut Ui) {
     let ink = ink(ui);
     let Some(b) = &app.busy else { return };
-    row(ui, |ui| {
-        ui.spacing_mut().item_spacing.x = S2;
-        cassette::spinner(ui, ICON);
-        ui.label(RichText::new(&b.label).size(14.5).color(ink.text));
-        let mut facts = match (b.done, b.total) {
-            (_, 0) if b.done > 0 => b.done.to_string(),
-            (_, 0) => String::new(),
-            (d, t) => format!("{d} of {t}"),
-        };
-        if b.stopping() {
-            facts = "stopping after the file it's on…".into();
-        } else if let Some(left) = b.time_left() {
-            facts.push_str(&format!(" · {} left", text::time_left(left)));
+    if let Some(stop) = b.stop.clone().filter(|_| !b.stopping()) {
+        let hint = "Finishes the file it's on and stops there. What's done stays done: a stopped write keeps what it copied, and the next Sync carries on.";
+        if widgets::button_with(ui, Icon::Close, "Stop").on_hover_text(hint).clicked() {
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        ui.label(RichText::new(facts).size(13.5).color(ink.muted));
-        if b.total > 0 {
-            hairline_progress(ui, b.done as f32 / b.total as f32, (ui.available_width() - 120.0).clamp(60.0, 260.0));
-        }
-        if let Some(stop) = b.stop.clone().filter(|_| !b.stopping()) {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let hint = "Finishes the file it's on and stops there. What's done stays done: a stopped write keeps what it copied, and the next Sync carries on.";
-                if widgets::button_with(ui, Icon::Close, "Stop").on_hover_text(hint).clicked() {
-                    stop.store(true, std::sync::atomic::Ordering::Relaxed);
-                }
-            });
-        }
-    });
+    }
+    if b.total > 0 {
+        hairline_progress(ui, b.done as f32 / b.total as f32, (ui.available_width() / 4.0).clamp(60.0, 200.0));
+    }
+    let mut facts = match (b.done, b.total) {
+        (_, 0) if b.done > 0 => b.done.to_string(),
+        (_, 0) => String::new(),
+        (d, t) => format!("{d} of {t}"),
+    };
+    if b.stopping() {
+        facts = "stopping after the file it's on…".into();
+    } else if let Some(left) = b.time_left() {
+        facts.push_str(&format!(" · {} left", text::time_left(left)));
+    }
+    ui.label(RichText::new(facts).size(font::UI).color(ink.muted));
+    ui.label(RichText::new(&b.label).size(font::UI).color(ink.text));
+    cassette::spinner(ui, ICON);
 }
 
-/// The latest message from the app, until the next one or until closed.
+/// The latest message from the app, until the next one or until closed: on one line, shortened
+/// with "…" if it must be (all of it on hover). Laid out right to left, from the close button.
 fn notice(app: &mut App, ui: &mut Ui, text: &str) {
     let ink = ink(ui);
-    row(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
-        icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
-        ui.allocate_ui(egui::vec2(ui.available_width() - S5, 0.0), |ui| {
-            ui.add(egui::Label::new(RichText::new(text).size(13.0).color(ink.muted).italics()).wrap());
-        });
-        if widgets::icon_button(ui, Icon::Close).on_hover_text("dismiss").clicked() {
-            app.notices.clear();
+    if widgets::icon_button(ui, Icon::Close, "Dismiss").clicked() {
+        app.notices.clear();
+        app.undo_notice = None;
+    }
+    if app.notice_offers_undo() && widgets::icon_link(ui, Icon::Back, format!("Undo ({})", ui.ctx().format_shortcut(&keys::UNDO))).clicked() {
+        app.undo_last();
+    }
+    if let Some(card) = app.notice_offers_eject() {
+        // Greyed while other work runs (the card may be part of it), and says until when.
+        let waiting = app.busy.as_ref().map(|b| format!("once {} is done", b.label)).unwrap_or_default();
+        let free = app.busy.is_none();
+        let eject = ui.add_enabled_ui(free, |ui| widgets::icon_link(ui, Icon::Eject, "Eject").on_hover_text("Ready the card to be taken out, as the system's Eject does").on_disabled_hover_text(waiting)).inner;
+        if eject.clicked() {
+            app.eject(card);
         }
-    });
+    }
+    widgets::fitted(ui, RichText::new(text).size(font::UI).color(ink.text), ui.available_width() - ICON - S2, egui::Sense::hover()).on_hover_text(text);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ICON, ICON), egui::Sense::hover());
+    icons::paint(ui.painter(), rect.shrink(1.0), Icon::Info, ink.muted);
 }

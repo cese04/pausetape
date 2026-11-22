@@ -115,7 +115,7 @@ pub fn target(t: &Track, rules: Rules) -> Result<Target, &'static str> {
 }
 
 /// Why a damaged file is left out (`Track::damaged`).
-pub const DAMAGED: &str = "the file is damaged: it starts blank, so there's no audio to copy or convert";
+pub const DAMAGED: &str = "the file is damaged: part of it was lost (it starts blank, or stops inside its tags), so it can't be copied or converted";
 
 fn base_target(t: &Track, device: Player, unplayable: Unplayable) -> Result<Target, &'static str> {
     if t.damaged {

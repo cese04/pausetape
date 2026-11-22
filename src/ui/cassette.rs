@@ -39,13 +39,17 @@ fn reel(p: &Painter, c: Pos2, outer: f32, pack: f32, turn: f32, look: &Look) {
 pub fn spinner(ui: &mut Ui, height: f32) -> Response {
     let ink = ink(ui);
     let (rect, resp) = ui.allocate_exact_size(vec2(height * 2.0 + height * 0.3, height), Sense::hover());
-    let turn = ui.input(|i| i.time) as f32 * 4.0;
+    // Still when motion is reduced: the reels say "under way" as they are.
+    let still = super::motion::reduced(ui.ctx());
+    let turn = if still { 0.0 } else { ui.input(|i| i.time) as f32 * 4.0 };
     let r = height / 2.0;
     let look = Look { tape: tape_colour(&ink), hub: ink.accent, width: 1.3 };
     for (cx, pack) in [(rect.left() + r, 0.7), (rect.right() - r, 0.3)] {
         reel(ui.painter(), pos2(cx, rect.center().y), r, pack, turn, &look);
     }
-    ui.ctx().request_repaint();
+    if !still {
+        ui.ctx().request_repaint();
+    }
     resp
 }
 
@@ -84,7 +88,7 @@ pub fn tape(ui: &mut Ui, height: f32, playing: bool, played: f32) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(height * 1.6, height), Sense::hover());
     let id = resp.id.with("turns");
     let mut turns: (f32, f32) = ui.ctx().data(|d| d.get_temp(id)).unwrap_or((0.0, 0.7));
-    if playing {
+    if playing && !super::motion::reduced(ui.ctx()) {
         // An angle kept from frame to frame: speed changes with the pack, so time alone won't do.
         let dt = ui.input(|i| i.stable_dt).min(0.1);
         let speed = |pack: f32| 2.4 / (0.45 + 0.55 * pack.clamp(0.0, 1.0).sqrt());

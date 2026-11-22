@@ -14,9 +14,11 @@ mod volumes;
 mod write;
 
 pub use device::{Device, Player, Results, Sample, Tested};
-pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, up_to_date};
+pub use copy::{Mode, Progress, Written, clean_mac_files, execute, materialise, prune, tidy_card, up_to_date};
 pub use label::Label;
 pub use journal::{latest_journal, save_problems, undo_latest};
 pub use plan::{AlbumOrder, Chosen, Custom, Options, PlanItem, REPEAT, Rules, Target, Unplayable, build_plan, card_size, song_path, target, tidy_plan};
-pub use volumes::{SpaceInfo, Volume, space, volumes};
-pub use write::{Outcome, Preview, WriteProfile, now, preview, removing, renamed, write};
+pub use volumes::{SpaceInfo, Volume, connected, eject_ended, ejecting, held, let_go_of_ejected, space, volumes};
+#[cfg(windows)]
+pub use volumes::drives;
+pub use write::{Outcome, Preview, WriteProfile, now, organised, preview, removing, renamed, write};

@@ -9,7 +9,7 @@ use super::text::plural;
 use super::theme::{self, ink};
 use super::widgets::{self, help};
 use crate::app::{App, Shared};
-use super::layout::{S1, S2, row, row_wrapped};
+use super::layout::{S1, S2, row, row_wrapped, font};
 
 const LABEL_W: f32 = 110.0;
 
@@ -25,16 +25,16 @@ pub fn selection_bar(app: &App, ui: &mut Ui, actions: &mut Vec<Action>) {
             ui.label(RichText::new(format!("{} selected", plural(app.selected.len(), "song"))).color(ink.text));
             ui.add_space(S1);
             let songs: Vec<usize> = app.selected.iter().copied().collect();
-            if widgets::icon_link(ui, Icon::Rename, "edit their tags").clicked() {
+            if widgets::icon_link(ui, Icon::Rename, "Edit their tags").on_hover_text(ui.ctx().format_shortcut(&super::keys::EDIT_TAGS)).clicked() {
                 actions.push(Action::EditTags(songs.clone()));
             }
-            if widgets::icon_link(ui, Icon::Play, "play them").clicked() {
+            if widgets::icon_link(ui, Icon::Play, "Play them").clicked() {
                 actions.push(Action::Play(songs, 0));
             }
-            if widgets::icon_link(ui, Icon::Close, "clear").on_hover_text("or press Esc").clicked() {
+            if widgets::icon_link(ui, Icon::Close, "Clear").on_hover_text("or press Esc").clicked() {
                 actions.push(Action::ClearSelection);
             }
-            help(ui, "⌘-click adds or removes a song, shift-click a run of songs.");
+            help(ui, format!("Click a song to select it alone, {} to add or remove one, shift-click for a run; double-click plays.", super::keys::COMMAND_CLICK));
         });
     });
     ui.add_space(S1);
@@ -51,7 +51,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         row(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
             super::icons::paint(ui.painter(), rect, Icon::Rename, ink.text);
-            ui.label(RichText::new("Edit tags").size(18.0).color(ink.text));
+            ui.label(RichText::new("Edit tags").size(font::TITLE).color(ink.text));
             ui.label(RichText::new(plural(edit.tracks.len(), "song")).color(ink.muted));
         });
         ui.add_space(S2);
@@ -83,7 +83,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         });
         ui.add_space(S2);
         if let Some(p) = edit.problem() {
-            ui.label(RichText::new(p).size(13.0).color(ink.warn));
+            ui.label(RichText::new(p).size(font::UI).color(ink.warn));
         }
         let cue = edit.tracks.iter().any(|&i| app.tracks[i].cue.is_some());
         help(
@@ -96,10 +96,10 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
         ui.add_space(S2);
         row(ui, |ui| {
             let can = edit.problem().is_none();
-            if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text("or ⌘-Return").clicked() {
+            if ui.add_enabled_ui(can, |ui| widgets::primary_with(ui, Icon::Check, "Save")).inner.on_hover_text(format!("or {}", super::keys::COMMAND_RETURN)).clicked() {
                 save = true;
             }
-            if widgets::button_with(ui, Icon::Close, "Cancel").on_hover_text("or Esc").clicked() {
+            if widgets::button(ui, "Cancel").on_hover_text("or Esc").clicked() {
                 cancel = true;
             }
         });

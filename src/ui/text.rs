@@ -32,8 +32,11 @@ pub fn bytes(n: u64) -> String {
     }
 }
 
-/// Why a file is flagged for the card's player, for tooltips.
+/// Why a file is flagged (damaged, or not for the card's player), for tooltips.
 pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> {
+    if let Some(note) = t.damage_note() {
+        return Some(note);
+    }
     if device.plays(t) {
         return None;
     }
@@ -44,12 +47,21 @@ pub fn format_note(t: &crate::library::Track, device: Player) -> Option<String> 
     Some(match (t.native(), crate::audio::ffmpeg().is_some()) {
         (true, _) => format!("{label}: plays here, but not on {on}, so a card write converts it. {}", device.plays_text()),
         (false, true) => format!("{label}: plays here by converting it with ffmpeg first (surround is mixed down to stereo). It won't play on {on} as it is, so a card write converts it."),
-        (false, false) => format!("{label}: needs ffmpeg to play here (brew install ffmpeg). It won't play on {on} either."),
+        (false, false) => format!("{label}: needs ffmpeg to play here ({}). It won't play on {on} either.", crate::platform::FFMPEG_INSTALL),
     })
 }
 
-/// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play".
+/// `s` with its first letter in capitals: "the Walkman" → "The Walkman".
+pub fn capitalised(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+}
+
+/// Short badge text: "Dolby E-AC-3 · not on RECHO" / "OPUS · needs ffmpeg" / "Dolby AC-4 · can't play" / "damaged".
 pub fn format_badge(t: &crate::library::Track, device: Player) -> String {
+    if t.harmed() {
+        return "damaged".into();
+    }
     let state = match (t.plays_here(), t.ffmpeg_can_decode()) {
         (true, _) => format!("not on {}", device.short()),
         (false, true) => "needs ffmpeg".into(),

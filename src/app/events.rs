@@ -4,6 +4,17 @@ use super::*;
 
 impl App {
     pub fn poll(&mut self) {
+        self.poll_messages();
+        // A folder dropped while other work ran, now that it's done.
+        if self.busy.is_none()
+            && !self.dialog_open()
+            && let Some(folder) = self.pending_add.take()
+        {
+            self.check_folder(folder);
+        }
+    }
+
+    fn poll_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::ScanProgress(n) => {
@@ -100,14 +111,21 @@ impl App {
                     self.room_while_writing = None;
                     let name = self.saved.writes.iter().find(|w| w.id == id).map(|w| w.name.clone()).unwrap_or_default();
                     let errors = self.report_problems(&format!("writing “{name}”"), out.errors.clone());
-                    if out.stopped {
+                    // Something went wrong and nothing on the card changed (write-protected, say).
+                    let failed = !out.errors.is_empty() && out.copied + out.removed + out.renamed + out.tagged == 0;
+                    let finished = !out.stopped && !out.card_gone && !failed;
+                    if out.card_gone {
+                        self.notice(format!("“{name}”: the card isn't connected, so the Sync ended after {} copied{errors}. What's on the card stays recorded; Sync carries on once it's back.", out.copied));
+                    } else if out.stopped {
                         self.notice(format!(
                             "“{name}” stopped: {} copied · {} unchanged · {} removed{errors}. What's on the card is recorded; Sync carries on from there.",
                             out.copied, out.unchanged, out.removed,
                         ));
+                    } else if failed {
+                        self.notice(format!("Nothing was written to “{name}”{errors}"));
                     } else {
                         self.notice(format!(
-                            "“{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
+                            "Done · “{name}”: {} copied · {} unchanged{} · {} removed · {} left out · {} retagged · {} mac files cleaned{errors}",
                             out.copied,
                             out.unchanged,
                             if out.renamed > 0 { format!(" · {} renamed", out.renamed) } else { String::new() },
@@ -119,7 +137,10 @@ impl App {
                     }
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
                         w.manifest = out.manifest;
-                        if !out.stopped {
+                        if out.card_id.is_some() {
+                            w.card_id = out.card_id;
+                        }
+                        if finished {
                             w.last_written = Some(card::now());
                         }
                     }
@@ -127,17 +148,42 @@ impl App {
                     self.volumes = card::volumes();
                     self.refresh_on_card();
                     self.refresh_label();
+                    if finished {
+                        self.offer_eject(&id);
+                    }
                 }
+                Msg::Ejected(name, r) => {
+                    self.busy = None;
+                    let card = self.eject_notice.take().map(|(_, path)| path);
+                    match r {
+                        Ok(()) => self.notice(format!("“{name}” ejected: the card can come out")),
+                        Err(e) => {
+                            self.notice(format!("“{name}” wasn't ejected: {e}"));
+                            // It says to close what's open and eject again: it offers to.
+                            self.eject_notice = card.and_then(|path| Some((self.notices.last()?.clone(), path)));
+                        }
+                    }
+                    self.volumes = card::volumes();
+                    self.refresh_label();
+                }
+                Msg::Looked(look) => self.saw_cards(*look),
                 Msg::Surveyed(id, s) => {
                     self.busy = None;
                     if self.write().id == id {
+                        if let Some(dest) = self.write().dest.clone() {
+                            self.card_found = Some((id.clone(), dest, s.found.iter().copied().collect()));
+                        }
                         self.card_survey = Some((id, *s));
+                        self.refresh_on_card();
                     }
                 }
                 Msg::TookOver(id, mut out) => {
                     self.busy = None;
                     self.take_over_open = false;
                     if let Some(w) = self.saved.writes.iter_mut().find(|w| w.id == id) {
+                        if out.card_id.is_some() {
+                            w.card_id = out.card_id.take();
+                        }
                         // The moved files are now this write's, as if it had copied them.
                         let mut have: HashSet<String> = w.manifest.iter().map(|m| m.rel.to_string_lossy().to_lowercase()).collect();
                         for wr in out.written {
@@ -204,10 +250,10 @@ impl App {
                     }
                     if self.write().id == id {
                         // A card with music the app didn't put there, before any write: explain
-                        // the take-over once, on its own.
+                        // the take-over once, on its own (after the first-run welcome, not over it).
                         let w = &mut self.saved.writes[self.saved.active_write];
                         let owned = self.dest_label.as_ref().is_some_and(|l| l.id != w.id);
-                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered && !owned {
+                        if p.foreign > 0 && w.manifest.is_empty() && w.last_written.is_none() && !w.take_over_offered && !owned && !self.welcome_open {
                             w.take_over_offered = true;
                             self.take_over_open = true;
                         }
@@ -220,6 +266,7 @@ impl App {
                     self.notice(format!("test folder written to the card: {ok} of {} samples · eject the card and try them on the player", made.len()));
                     self.test_card = Some(made);
                     self.write_preview = None;
+                    self.refresh_label();
                 }
                 Msg::TestCardRemoved(r) => {
                     self.busy = None;
@@ -230,6 +277,7 @@ impl App {
                         }
                         Err(e) => self.notice(format!("couldn't take the test folder off the card: {e}")),
                     }
+                    self.refresh_label();
                 }
                 Msg::Trashed(moved, what, errors) => {
                     self.busy = None;
@@ -252,21 +300,39 @@ impl App {
                         t.embedded_cover |= t.cover.is_some();
                         (t.dirty, t.size, t.mtime, t.cover) = (false, size, mtime, None);
                     }
-                    // A cover now embedded in the playing track: look it up again.
-                    if let Some(c) = self.current().filter(|c| ok.iter().any(|&(i, _, _)| i == *c)) {
-                        self.load_cover(self.tracks[c].path.clone());
-                    }
+                    // A cover now embedded in them: look it up again.
+                    let written: Vec<usize> = ok.iter().map(|&(i, _, _)| i).collect();
+                    self.covers_changed(&written);
                     // The corrections live in the files now; the next scan re-reads them.
                     if let Some(db) = &mut self.db {
                         let ids: Vec<PathBuf> = ok.iter().map(|&(i, _, _)| self.tracks[i].id()).collect();
                         let _ = db.drop_edits(ids.iter().map(PathBuf::as_path));
                     }
-                    self.notice(format!("tags written to {} files{}", ok.len(), if errors.is_empty() { String::new() } else { format!(" · {} failed", errors.len()) }));
+                    let failed = self.report_problems("writing tags", errors);
+                    self.notice(format!("tags written to {} files{failed}", ok.len()));
                 }
                 Msg::Cover(path, img, file) => {
                     if self.current().is_some_and(|i| self.tracks[i].path == path) {
                         let tex = img.map(|img| self.ctx.load_texture("cover", img, egui::TextureOptions::LINEAR));
                         self.cover = Some((path, tex, file));
+                    }
+                }
+                Msg::Lyrics(id, found) => self.lyrics_found(id, found),
+                Msg::LyricsDone(found, none, failed) => {
+                    self.busy = None;
+                    let mut s = format!("lyrics found for {found} songs");
+                    if none > 0 {
+                        s.push_str(&format!(" · {none} without on LRCLIB"));
+                    }
+                    if failed > 0 {
+                        s.push_str(&format!(" · {failed} not looked for (no connection, or stopped)"));
+                    }
+                    self.notice(s);
+                }
+                Msg::DetailCover(path, img) => {
+                    if self.detail_cover.as_ref().is_some_and(|(p, _)| *p == path) {
+                        let tex = img.map(|img| self.ctx.load_texture("detail cover", img, egui::TextureOptions::LINEAR));
+                        self.detail_cover = Some((path, tex));
                     }
                 }
                 Msg::CoversFound(found, stopped) => {
@@ -278,6 +344,7 @@ impl App {
                         self.envelope = Some((id, env));
                     }
                 }
+                Msg::Damaged(path, why) => self.found_damaged(&path, why),
             }
         }
         while let Ok(reply) = self.mb_rx.try_recv() {
