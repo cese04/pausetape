@@ -71,7 +71,7 @@ Wayland and X11 both work. The "system picker…" file dialog uses the desktop's
 ```sh
 git clone https://github.com/cese04/pausetape.git
 cd pausetape
-cargo test                          # 79 tests pass on Windows, 80 elsewhere; 12 are skipped on purpose
+cargo test                          # all pass; some are skipped on purpose (network, real files)
 cargo run --release -- --version    # e.g. "Pausetape 0.1.0 · ffmpeg: C:\…\ffmpeg.exe"
 cargo run --release                 # the app
 ```
@@ -127,6 +127,12 @@ formatted **exFAT or FAT32** standing in for the Echo Mini's card. Don't use a c
 anything you'd miss.
 
 Mark each step ✅ / ❌ and note anything odd. Expected behaviour is what macOS does today.
+
+### Updating from 0.1.0
+0a. With a card that 0.1.0 wrote, open the new version. The library is read once more; corrections
+    not yet written to files are still marked *edited*. Brick becomes teal and the album table
+    comes first (any other accent stays). The card is still its setup's own: plugged in, nothing
+    is treated as new, and Sync copies nothing that didn't change.
 
 ### A. Start-up
 1. `--version` prints version and an ffmpeg path (or "not found").

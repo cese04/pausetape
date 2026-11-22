@@ -1,9 +1,9 @@
 # Changelog
 
-Everything built so far, in the order it happened. All of it is unreleased work towards
-**0.1.0**, developed on 2026-10-27 on macOS. Status and next steps: [docs/PROGRESS.md](docs/PROGRESS.md).
+Everything built so far, version by version, in the order it happened. Status and next steps:
+[docs/PROGRESS.md](docs/PROGRESS.md).
 
-## [Unreleased]: 0.1.0
+## 0.1.0 (2026-11-02)
 
 ### 1. First version
 - Rust + egui app chosen over Tauri (one language, one process, small binary).
@@ -778,6 +778,8 @@ Calibre's device view, for music: the library is where you choose what goes on t
   (ci.yml), no longer also the Mac program on its own, which only opens in Terminal and would
   confuse someone choosing what to download.
 
+## 0.2.0 (2026-11-08)
+
 ### 65. Keyboard focus you can see; controls screen readers can name (2026-11-05)
 - Tab moves through the app's own controls (links, commands, buttons, tabs, chips, song and
   album rows, column headings, the A–Z rail, the folder browser), and the one with the focus
@@ -1348,3 +1350,50 @@ twenty times, landing between songs and in the middle of one.
 - `.github/workflows/windows.yml` builds both and attaches the installer to version tags' releases,
   as `macos.yml` does the disk image. Shell scripts keep LF line endings on Windows
   (`.gitattributes`), so Git Bash can run them there.
+
+### 111. What 0.1.0's settings become (2026-11-08)
+- Settings hold everything, defaults too, so someone updating from 0.1.0 kept its brick accent,
+  the colour of warnings now, and the list by artist. Once, on updating, brick becomes teal and
+  the album table comes first; any other accent stays, and what's chosen afterwards is kept.
+
+### 112. Licences in Settings, on every system (2026-11-08)
+- Settings › *About* gives the version and the licence texts of the app and its three fonts. The
+  bare Windows and Linux programs are one file each, with nowhere else to carry them.
+
+### 113. Ready for 0.2.0 (2026-11-08)
+- The website says lyrics come from LRCLIB, and what's sent there; what the app does now, in the
+  README and on the site. Hints no longer point to tabs that became the sidebar.
+- On Windows the website and the README offer the installer first, and the program alone as the
+  portable choice. The site's buttons try patterns in order, so a release from before the
+  installer still gets its program (2026-11-18).
+
+### 114. A folder for the music, and players beyond the Echo Mini (2026-11-18)
+- A card setup can put its songs and playlists in a folder on the card: a Walkman lists only
+  what's in `MUSIC`, and most players and phones look in `Music`. Left empty, the top of the card,
+  as before, so setups already in use don't change. Changing it moves what's on the card at the
+  next Sync rather than copying it again; the label stays at the top, and the test card goes in
+  the folder, where the player will look.
+- Three players to choose from besides the Echo Mini, each with the formats it plays and the
+  folder it looks in, offered when it's chosen: Sony's Walkmans of the NW-A and NW-ZX lines
+  (`MUSIC`), Rockbox (`Music`) and another player or phone (`Music`, and only FLAC, MP3 and WAV
+  until the test card shows more). From the makers' specifications and Rockbox's manual: none
+  checked on a player yet.
+- The .m3u8 beside a playlist finds the songs from however deep it sits.
+- A player that reads playlists (the three new ones; any player whose test card played the
+  playlist) gets the .m3u8 alone, pointing at the songs where they are on the card: copies would
+  show up twice in a library built from tags. Only songs not on the card otherwise are copied,
+  beside it. The Echo Mini keeps its folders of copies.
+- Words that took the player for an Echo Mini now name the player chosen: what clutter is, where
+  to put the card, how playlists go on it. A setup still called after its player takes the new
+  one's name, and the test card says which folder it writes to.
+- Checked on a FAT32 card image (`music_folder_on_fat`, ignored by default): 40 songs for a
+  Walkman, then the folder moved three times, each a move in under 0.2 s with no copy, every
+  playlist line reaching its song.
+- A pushed `release/*` branch gets the disk image and the Windows installer too, kept 90 days,
+  so testers try a version before it's tagged (`macos.yml`, `windows.yml`).
+
+### 115. The Windows installer builds with newer Rust (2026-11-21)
+- `windows.yml` failed at "== assembling": the packaging script looked for the icon build.rs makes
+  at a fixed place inside `target`, and newer Cargo keeps it elsewhere. Cargo now says where
+  (`--message-format=json`), whatever its version. Checked here with a full build and with one that
+  had nothing to rebuild.

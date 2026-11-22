@@ -1,6 +1,6 @@
 # Pausetape: progress and roadmap
 
-*Last updated: 2026-10-30: the roadmap's steps 1–5 and 7 are done, 6 and 8 in a first form (see §2 and the [CHANGELOG](../CHANGELOG.md), sections 23–33). Section 1 below still describes 2026-10-28 in places; the CHANGELOG is the full record.*
+*Last updated: 2026-11-08, for 0.2.0. Section 1 was written before the sidebar replaced the tabs, and still describes them; the [CHANGELOG](../CHANGELOG.md) is the full record.*
 
 Pausetape organises a music collection for the Snowsky Echo Mini running the
 [RECHO](https://recho.atzkey.workers.dev/) firmware. RECHO reads the SD card without writing to
@@ -38,7 +38,7 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 | **Player** | Cover art (embedded, else `cover.jpg`/`folder.jpg`…), a loudness waveform that doubles as the seek bar with a red playhead, round previous/play/next buttons, volume. Keys: space, ←/→ (±10 s), N/P. |
 | **Mac app** | `scripts/package-macos.sh` makes a universal `.app` (47 MB) and `.dmg` (24 MB) for Apple Silicon + Intel, macOS 12+, with a minimal LGPL ffmpeg (8.3 MB) inside, icon, licences, and an ad-hoc signature (no Apple Developer Program yet). `--version` reports which ffmpeg is in use. See [DISTRIBUTION](DISTRIBUTION.md). |
 | **Windows installer** | `scripts/package-windows.sh` makes a per-user NSIS installer (11 MB) with a minimal LGPL ffmpeg (5.5 MB, cross-compiled by `scripts/build-ffmpeg-windows.sh`) as an option, ticked by default. See [DISTRIBUTION](DISTRIBUTION.md). |
-| **Automated builds** | GitHub Actions: `ci.yml` builds and tests on macOS, Windows and Linux on every push; `macos.yml` packages the DMG and `windows.yml` the Windows installer, attaching them to releases for `v*` tags. Written, not yet run (no GitHub repository yet). |
+| **Automated builds** | GitHub Actions: `ci.yml` builds and tests on macOS, Windows and Linux on every push; `macos.yml` packages the DMG and `windows.yml` the Windows installer, attaching them to releases for `v*` tags. `ci.yml` and `macos.yml` have built releases since 0.1.0; `windows.yml` hasn't run yet. |
 | **Look** | Tufte-inspired: ET Book for the music (album titles in its italic), Courier Prime for figures standing alone, Kalam for the names of cards and playlists, all brought with the app; warm paper or ink theme, no boxes except where a task needs grouping, colour only for warnings (always brick red) and an accent of the user's choosing (seven presets) for what's open, playing or under way. Long names shorten with "…" to fit; the layout holds from 720 px to wide screens. |
 
 ### How it was checked
@@ -60,9 +60,9 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 
 ### Not verified yet
 
-- **A real write to the Echo Mini's card.** The write logic is tested on temporary folders, and
-  the *Write to the card* button runs that same code, but nobody has pressed it against a FAT/exFAT
-  card and then browsed the result on the player.
+- **The whole round on the Echo Mini itself, through a card reader:** Sync, Eject, browse on the
+  player. Syncs to FAT32 sticks and disk images are recorded in [CARD_STATES](CARD_STATES.md) §8;
+  a card reader isn't.
 - **Writing tags into real files in other formats.** Real MP3s were checked on 2026-11-06: tags written
   into copies of the 401 that had failed (two ID3v2 tags, or zeros before the audio; CHANGELOG
   §96) read back corrected, artist, album and length kept. On 2026-11-08, copies of 15 FLAC and 15
@@ -72,12 +72,12 @@ Developed and run only on macOS so far; Windows and Linux are next (see [TESTING
 - **Windows: first run on Windows 11 (2026-11-01).** It built and passed its tests unchanged;
   drives, free space, a FAT32 write and rewrite, unticking an album, ffmpeg conversion and the
   Trash on cards worked. Text sat high and a console opened behind the app; both are fixed.
-  Still to see in the app: a card bringing up its setup, Stop during a write, taking over a
-  card, and scaled displays. [TESTING](TESTING.md) §3 has the details.
+  [TESTING](TESTING.md) §3 has the details, and [CARD_STATES](CARD_STATES.md) §8 what's been run
+  on real drives since.
 - **Linux: never built or run there.** The code is written to be portable, but an audit found
   gaps; [TESTING](TESTING.md) lists them with workarounds and is the step-by-step guide.
-- **The Mac app on Intel** (no Rosetta on the build Mac), the **first-launch approval** of a
-  downloaded copy, and both **GitHub Actions workflows** (no GitHub repository yet).
+- **The Mac app on Intel** (no Rosetta on the build Mac), and on macOS versions older than the
+  ones it's been run on, though it's built for macOS 12.
 
 ### Known issues and limits
 

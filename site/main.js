@@ -168,10 +168,12 @@ async function downloads() {
   const notes = Object.assign(document.createElement("a"), { href: release.html_url, textContent: "What's new" });
   status.append(notes, ".");
   for (const a of document.querySelectorAll("[data-asset]")) {
-    const asset = release.assets.find((x) => new RegExp(a.dataset.asset).test(x.name));
+    // Patterns separated by spaces, in order of preference: a release from before the Windows
+    // installer still offers its program.
+    const asset = a.dataset.asset.split(" ").map((p) => release.assets.find((x) => new RegExp(p).test(x.name))).find(Boolean);
     if (!asset) continue;
     a.href = asset.browser_download_url;
-    a.textContent = `Download · ${Math.round(asset.size / 1e6)} MB`;
+    a.textContent = `${a.dataset.label || "Download"} · ${Math.round(asset.size / 1e6)} MB`;
   }
   const own = mine && document.querySelector(`.platform[data-os="${mine}"] [data-asset]`);
   if (own && own.href.includes("/download/")) hero.href = own.href;

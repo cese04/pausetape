@@ -1,11 +1,12 @@
-# Test and package the macOS app for `main`, version tags and pull requests. The disk image of
-# a version tag (`v*`) goes on its GitHub Release, kept for good; that of `main` is kept 90
-# days, the most GitHub allows; pull requests are checked, not kept.
+# Test and package the macOS app for `main`, release branches, version tags and pull requests.
+# The disk image of a version tag (`v*`) goes on its GitHub Release, kept for good; that of
+# `main` or a `release/*` branch (to try before the release) is kept 90 days, the most GitHub
+# allows; pull requests are checked, not kept.
 name: macOS
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
 

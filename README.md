@@ -38,8 +38,12 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
 - **Writes to the card the way you want it.** Saved *card setups* choose which artists, albums
   and playlists go on a card, what they're called there and in what order. Each Sync copies only
   what changed and removes only files it put there itself.
+- **Other players too:** Sony Walkmans (NW-A, NW-ZX), Rockbox (iPods, Sansas…) and any other
+  player or phone, each with what it plays and the folder it looks in (`MUSIC` on a Walkman),
+  set per card setup. Only the Echo Mini has been checked on the player; the test card checks
+  the rest.
 - **Playlists for a player without playlists:** folders of numbered copies (FAT/exFAT cards
-  can't hold symlinks).
+  can't hold symlinks). A player that reads playlists gets an .m3u8 instead.
 - **Plays almost anything**, including Dolby Atmos (E-AC-3) releases via ffmpeg, and marks
   clearly what the Echo Mini can't play.
 - **Converts for the card** what the Echo Mini can't play: ALAC, AIFF, APE and other lossless
@@ -51,11 +55,15 @@ _Playlists/Road Trip/01 - Artist - Title.flac   (+ Road Trip.m3u8)
   are pointed out, so you can remove them if you like.
 - **Cover art in the songs:** when a cover is only an image in the folder, the player offers to
   embed it, so the Echo Mini shows it.
+- **Listens with you:** a queue to see and edit, a view by genre, and lyrics in the details panel,
+  in time with the song: the song's own, or found on [LRCLIB](https://lrclib.net) and kept.
+- **Careful with the card:** a card has its own identity, a Sync that loses the card keeps its
+  record and leaves no half-copied song behind, and a finished Sync offers to eject it.
 
 ## Status
 
-Early: 0.1.0 is the first release. Developed and used most on **macOS**, tested by hand on
-**Windows 11**; **Linux** builds and passes its tests, but hasn't been run on a desktop yet.
+Early, and moving fast. Developed and used most on **macOS**, tested by hand on **Windows 11**;
+**Linux** builds and passes its tests, but hasn't been run on a desktop yet.
 Details: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Downloads are on [Releases](https://github.com/cese04/pausetape/releases) (or the
@@ -65,7 +73,7 @@ so each system asks once whether to trust it.
 | Platform | Download | State |
 |---|---|---|
 | macOS 12+ (Apple Silicon + Intel) | `Pausetape-<version>.dmg`, ffmpeg included | Works |
-| Windows 10/11 (x64) | `pausetape-v<version>-Windows.exe`, one file, nothing to install | Works on Windows 11; what was checked is in [docs/TESTING.md](docs/TESTING.md) §3 |
+| Windows 10/11 (x64) | `Pausetape-<version>-setup.exe`, ffmpeg included as an option; or `pausetape-v<version>-Windows.exe`, one file, nothing installed | Works on Windows 11; what was checked is in [docs/TESTING.md](docs/TESTING.md) §3 |
 | Linux (x86-64) | `pausetape-v<version>-Linux`, one file | Untested; known gaps in [docs/TESTING.md](docs/TESTING.md) §3 |
 
 ## Install
@@ -76,8 +84,10 @@ so each system asks once whether to trust it.
 2. Open it once; macOS says it can't verify the developer. Click **Done**.
 3. System Settings › Privacy & Security › **Open Anyway**. Only needed the first time.
 
-**Windows:** run the `.exe`. If Windows says it protected your PC, click **More info**, then
-**Run anyway**. For Dolby, Opus, APE, WavPack and WMA files, install ffmpeg:
+**Windows:** run `Pausetape-<version>-setup.exe`. If Windows says it protected your PC, click
+**More info**, then **Run anyway**. It installs for you alone, without administrator rights, with
+ffmpeg ticked; untick it if you have your own. The portable `pausetape-v<version>-Windows.exe`
+asks the same, and for Dolby, Opus, APE, WavPack and WMA files needs ffmpeg:
 `winget install Gyan.FFmpeg`.
 
 **Linux:** `chmod +x pausetape-v<version>-Linux`, then run it. For the same rarer formats,
@@ -117,7 +127,7 @@ cargo run --release -- --plan ~/Music        # dry run: print the planned layout
 cargo test                                   # offline tests
 ```
 
-ffmpeg is optional outside the Mac app (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
+ffmpeg is optional outside the Mac app and the Windows installer (`winget install Gyan.FFmpeg`, `sudo apt install ffmpeg`,
 `brew install ffmpeg`). Without it, everything except Dolby, Opus, APE, WavPack and WMA plays.
 
 ## Documentation

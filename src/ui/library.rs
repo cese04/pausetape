@@ -491,7 +491,7 @@ fn page(app: &mut App, ui: &mut Ui) {
                         r.context_menu(|ui| super::menu::music(app, ui, super::menu::Of::Album(ai, bi), &mut actions, |_, _| {}));
                         let r = ui.label(RichText::new(meta).color(ink.muted));
                         if let Some(e) = &al.edition {
-                            r.on_hover_text(format!("{}\nThe card gets one edition; choose which in the card tab.", e.label));
+                            r.on_hover_text(format!("{}\nThe card gets one edition; Send to the card chooses this one.", e.label));
                         }
                         if off > 0 {
                             ui.label(RichText::new(off_text).size(font::META).color(ink.warn));

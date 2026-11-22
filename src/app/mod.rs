@@ -57,6 +57,9 @@ pub enum ThemePref {
 /// The text sizes offered, smallest and largest (egui's zoom; Settings steps through them by tenths).
 pub const TEXT_SIZES: (f32, f32) = (0.8, 2.0);
 
+/// Bump when settings saved before should change once, in `Saved::migrate`.
+const SETTINGS_VERSION: u32 = 1;
+
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct Saved {
@@ -84,6 +87,24 @@ pub struct Saved {
     pub compact: bool,
     /// No movement: changes at once, the reels still (the system's wish is followed too).
     pub reduce_motion: bool,
+    /// What `migrate` has brought these settings up to; files from before it have none, so 0.
+    #[serde(default)]
+    settings_version: u32,
+}
+
+impl Saved {
+    /// Settings saved by an older version take up what's changed since, once.
+    /// 1 (0.2.0): the album table comes first, and the accent is teal: brick, 0.1.0's default and
+    /// so saved with everything else, is the colour of warnings now.
+    fn migrate(&mut self) {
+        if self.settings_version < 1 {
+            self.album_table = true;
+            if self.accent == crate::ui::theme::Accent::Brick {
+                self.accent = crate::ui::theme::Accent::Teal;
+            }
+        }
+        self.settings_version = SETTINGS_VERSION;
+    }
 }
 
 impl Default for Saved {
@@ -106,6 +127,7 @@ impl Default for Saved {
             text_size: 1.0,
             compact: false,
             reduce_motion: false,
+            settings_version: SETTINGS_VERSION,
         }
     }
 }
@@ -457,7 +479,8 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::ui::theme::install(&cc.egui_ctx);
-        let saved: Saved = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
+        let mut saved: Saved = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
+        saved.migrate();
         let ctx = cc.egui_ctx.clone();
         let wake = ctx.clone();
         let audio = Audio::spawn(move || wake.request_repaint());
@@ -469,7 +492,6 @@ impl App {
             thread::spawn(move || cards::watcher(asks, tx, ctx));
         }
         let (mb_tx, mb_rx) = unbounded();
-        let mut saved = saved;
         if saved.writes.is_empty() {
             saved.writes.push(WriteProfile::default());
         }
@@ -623,6 +645,27 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_saved_by_0_1_0_take_up_what_changed_once() {
+        use crate::ui::theme::Accent;
+        let mut old: Saved = serde_json::from_str(r#"{"accent":"brick","album_table":false,"volume":0.5}"#).unwrap();
+        assert_eq!(old.settings_version, 0, "files from before it don't have it");
+        old.migrate();
+        assert!(old.accent == Accent::Teal && old.album_table);
+        assert_eq!(old.volume, 0.5, "the rest is as it was");
+
+        // Choosing brick or the list by artist afterwards is the user's to keep.
+        (old.accent, old.album_table) = (Accent::Brick, false);
+        let mut later: Saved = serde_json::from_str(&serde_json::to_string(&old).unwrap()).unwrap();
+        later.migrate();
+        assert!(later.accent == Accent::Brick && !later.album_table);
+
+        let mut plum: Saved = serde_json::from_str(r#"{"accent":"plum"}"#).unwrap();
+        plum.migrate();
+        assert!(plum.accent == Accent::Plum, "only the old default moves");
+        assert_eq!(Saved::default().settings_version, SETTINGS_VERSION, "a new install has nothing to catch up on");
+    }
 
 
     #[test]

@@ -27,10 +27,12 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new(format!("Test the player: {}", player.name())).size(font::TITLE).color(ink.text));
         });
         ui.add_space(S1);
+        let root = app.write().music_root();
+        let place = if root.as_os_str().is_empty() { String::new() } else { format!(" in {}", root.to_string_lossy().replace('\\', "/")) };
         muted(
             ui,
             format!(
-                "Writes a folder, “{TEST_FOLDER}”, of 6-second tones in every format, a cover and accented titles, and a playlist. Eject the card, try each on the player, and tick what worked. Your answers are used instead of what's known of this player from its makers and reviews, for this card setup."
+                "Writes a folder{place}, “{TEST_FOLDER}”, of 6-second tones in every format, a cover and accented titles, and a playlist. Eject the card, try each on the player, and tick what worked. Your answers are used instead of what's known of this player from its makers and reviews, for this card setup."
             ),
         );
         ui.add_space(S1);
@@ -43,7 +45,7 @@ pub fn dialog(app: &mut App, ui: &mut Ui) {
             row_wrapped(ui, |ui| {
                 let on_card = app.test_folder_seen();
                 if app.write().dest.is_none() {
-                    ui.label(RichText::new("Choose the card first (destination, in the card tab).").color(ink.warn));
+                    ui.label(RichText::new("Choose the card first: in the sidebar, the card's Setup.").color(ink.warn));
                 } else if widgets::primary_with(ui, Icon::Card, if on_card { "Write the test folder again" } else { "Write the test folder to the card" }).clicked() {
                     app.write_test_card();
                 }

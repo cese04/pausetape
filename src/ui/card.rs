@@ -395,7 +395,18 @@ fn writes_bar(app: &mut App, ui: &mut Ui) {
         }
     });
     if device != app.write().options.device {
-        app.write_mut().options.device = device;
+        // The setup's name and folder follow the player, unless they were set by hand.
+        let was = app.write().options.device;
+        let renamed = app.write().name == was.setup_name() && !app.saved.writes.iter().any(|o| o.name == device.setup_name());
+        let w = app.write_mut();
+        if renamed {
+            w.name = device.setup_name().into();
+        }
+        if w.music_folder.trim().eq_ignore_ascii_case(was.music_folder()) {
+            w.music_folder = device.music_folder().into();
+        }
+        w.options.device = device;
+        app.write_preview = None;
         app.refresh_on_card();
     }
 }
@@ -478,7 +489,7 @@ fn pattern_example(index: &crate::library::grouping::Index, tracks: &[crate::lib
     let ck = &index.clusters[artist.cluster].key;
     let t = &tracks[*album.tracks.get(1)?];
     let name = w.custom.artist_names.get(ck).unwrap_or(&artist.name);
-    let rel = song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext);
+    let rel = w.music_root().join(song_path(pattern, t, album, name, w.custom.album_name(ck, album), 0, &w.options, &t.ext));
     Some(rel.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join(" / "))
 }
 
@@ -508,7 +519,7 @@ impl Sizes {
         let w = app.write();
         let mut h = std::collections::hash_map::DefaultHasher::new();
         app.library_generation.hash(&mut h);
-        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder)).unwrap_or_default().hash(&mut h);
+        serde_json::to_vec(&(&w.id, &w.options, &w.custom, &w.playlists, &w.playlists_folder, &w.music_folder)).unwrap_or_default().hash(&mut h);
         for p in &app.saved.playlists {
             (&p.name, &p.tracks).hash(&mut h);
         }
@@ -560,9 +571,10 @@ impl Sizes {
         s.largest.sort_by_key(|&(_, _, bytes)| std::cmp::Reverse(bytes));
         let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
         let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
-        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &w.playlists_folder, rules);
-        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().map(|c| card_size(c.track, c.target))).sum();
-        s.songs += planned.iter().map(|(_, copies, _)| copies.len()).sum::<usize>();
+        let organised = crate::card::organised(&app.tracks, &w.plan(&app.tracks, &app.index));
+        let planned = crate::card::playlist::planned(&w.chosen_playlists(&app.saved.playlists), &by_path, &organised, &w.playlists_dir(), rules);
+        s.playlists = planned.iter().flat_map(|(_, copies, _)| copies.iter().filter(|c| c.copy).map(|c| card_size(c.track, c.target))).sum();
+        s.songs += planned.iter().map(|(_, copies, _)| copies.iter().filter(|c| c.copy).count()).sum::<usize>();
         s
     }
 }
@@ -786,7 +798,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && widgets::primary_with(ui, Icon::Compare, "Check them against the library").on_hover_text("reads a little of each file; changes nothing").clicked() {
                     app.survey_card();
                 }
-                if widgets::button(ui, "Not now").on_hover_text("the card tab offers it again").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card's view offers it again").clicked() {
                     app.take_over_open = false;
                 }
             });
@@ -867,7 +879,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 let kinds: Vec<String> = clutter.iter().map(|(k, n, s)| format!("{k}: {} ({})", plural(*n, "file"), text::bytes(*s))).collect();
                 ui.checkbox(&mut app.delete_clutter_on_take_over, format!("delete clutter: {} ({}) of iTunes data, system files and rip logs; can't be undone", plural(n, "file"), text::bytes(bytes)))
                     .on_hover_text(format!(
-                        "{}\n\nThe Echo Mini can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
+                        "{}\n\nThe player can't use these, and your library keeps its own. Covers, scans, booklets, playlists, CUE sheets and text files are never deleted.",
                         kinds.join("\n")
                     ));
             }
@@ -878,7 +890,7 @@ fn take_over_steps(app: &mut App, ui: &mut Ui) {
                 if app.busy.is_none() && used + spare + versions + unknown + other > 0 && take_over(ui).on_hover_text("only moves files on the card; undo puts everything back").clicked() {
                     app.take_over_card();
                 }
-                if widgets::button(ui, "Not now").on_hover_text("the card tab offers it again").clicked() {
+                if widgets::button(ui, "Not now").on_hover_text("the card's view offers it again").clicked() {
                     app.card_survey = None;
                     app.take_over_open = false;
                 }
@@ -895,6 +907,18 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
     let w = &mut app.saved.writes[app.saved.active_write];
     widgets::section(ui, Icon::Settings, "Folders and options");
     ui.add_space(S1);
+    widgets::setting(ui, "Music folder on the card", |ui| {
+        changed |= ui.add(egui::TextEdit::singleline(&mut w.music_folder).hint_text("the top of the card").align(egui::Align2::LEFT_CENTER).desired_width(160.0)).changed();
+        widgets::help(ui, "Where the songs and playlists go. A Walkman finds music only in MUSIC; most other players and phones look in Music. Left empty, they go at the top of the card. Songs already on the card move there at the next Sync, not copied again.");
+        let wanted = device.device.music_folder();
+        if !w.music_folder.trim().eq_ignore_ascii_case(wanted) {
+            let back = if wanted.is_empty() { "Back to the top of the card".to_string() } else { format!("Back to “{wanted}”, where {} looks", device.short()) };
+            if widgets::icon_link(ui, Icon::Back, back).clicked() {
+                w.music_folder = wanted.into();
+                changed = true;
+            }
+        }
+    });
     widgets::setting(ui, "Album folders", |ui| {
         row(ui, |ui| {
             for (order, label) in [(AlbumOrder::Year, "1997 - Album"), (AlbumOrder::Title, "Album"), (AlbumOrder::Custom, "01 - Album")] {
@@ -1051,17 +1075,19 @@ fn layout_options(app: &mut App, ui: &mut Ui) {
 fn playlists(app: &mut App, ui: &mut Ui) {
     widgets::section(ui, Icon::Playlists, "Playlists on this card");
     if app.saved.playlists.is_empty() {
-        widgets::help(ui, "None yet; make some in the playlists tab.");
+        widgets::help(ui, "None yet; New playlist, in the sidebar, makes one.");
         return;
     }
     let ids: Vec<PathBuf> = app.tracks.iter().map(Track::id).collect();
     let by_path = ids.iter().map(PathBuf::as_path).zip(&app.tracks).collect();
     let mut changed = false;
+    // A player that reads playlists gets a small .m3u8, not copies: the size would mislead.
+    let lists = app.player().reads_playlists();
     let w = &mut app.saved.writes[app.saved.active_write];
     row_wrapped(ui, |ui| {
         for p in &app.saved.playlists {
             let mut on = w.playlists.contains(&p.name);
-            let label = format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path)));
+            let label = if lists { format!("{} ({})", p.name, plural(p.tracks.len(), "song")) } else { format!("{} ({}, {})", p.name, p.tracks.len(), text::bytes(p.bytes(&by_path))) };
             if ui.checkbox(&mut on, label).changed() {
                 changed = true;
                 if on {

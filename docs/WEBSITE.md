@@ -115,12 +115,14 @@ order; the code counts them.
 ## 4. Downloads
 
 `main.js` asks GitHub for the latest release (`api.github.com/repos/cese04/pausetape/releases/latest`)
-and points each platform's button at its file, found by the pattern in `data-asset`:
+and points each platform's button at its file, found by the pattern in `data-asset` (several,
+separated by spaces, are tried in order):
 
 | Platform | Pattern | File the release workflows attach |
 |---|---|---|
 | macOS | `\.dmg$` | `Pausetape-<version>.dmg` (macos.yml) |
-| Windows | `Windows\.exe$` | `pausetape-v<version>-Windows.exe` (ci.yml) |
+| Windows | `-setup\.exe$`, else `Windows\.exe$` | `Pausetape-<version>-setup.exe` (windows.yml); before 0.2.0, the program alone |
+| Windows, portable | `Windows\.exe$` | `pausetape-v<version>-Windows.exe` (ci.yml) |
 | Linux | `Linux$` | `pausetape-v<version>-Linux` (ci.yml) |
 
 If those names change in the workflows, change the patterns too. Until there's a release (or

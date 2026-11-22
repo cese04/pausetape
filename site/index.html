@@ -127,6 +127,8 @@
         <li><b>Converts what won't play.</b> ALAC, AIFF and APE become FLAC with nothing lost;
           AAC and Dolby become MP3.</li>
         <li><b>Makes playlists for a player without them:</b> folders of numbered copies.</li>
+        <li><b>Plays it on your computer.</b> With a queue, your genres, and lyrics in time with
+          the song.</li>
         <li><b>Leads to more music.</b> Each artist's links to buy (Bandcamp, Qobuz, Discogs)
           or to listen first (Spotify, Tidal…).</li>
       </ol>
@@ -139,7 +141,8 @@
         <li><b>Delete what it didn't put there.</b> On the card it only ever removes its own
           copies.</li>
         <li><b>Ask for an account.</b> No sign-up, no cloud, no tracking. It goes online only to
-          look things up on MusicBrainz and its Cover Art Archive.</li>
+          look things up: names and covers on MusicBrainz and its Cover Art Archive, lyrics on
+          LRCLIB.</li>
         <li><b>Cost anything.</b> It's free and open source.</li>
       </ol>
     </div>
@@ -252,17 +255,22 @@
 
     <article class="platform" data-os="windows">
       <h3>Windows</h3>
-      <p class="muted small">Windows 10 or 11 · one file, nothing to install</p>
-      <a class="button primary" data-asset="Windows\.exe$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <p class="muted small">Windows 10 or 11 · installer, ffmpeg included</p>
+      <a class="button primary" data-asset="-setup\.exe$ Windows\.exe$" href="https://github.com/cese04/pausetape/releases">Releases</a>
+      <p class="small muted">Or <a data-asset="Windows\.exe$" data-label="the portable program" href="https://github.com/cese04/pausetape/releases">the portable program</a>:
+        one file, nothing installed.</p>
       <details>
         <summary>Opening it the first time</summary>
         <ol>
-          <li>Run the file you downloaded.</li>
-          <li>If Windows says it protected your PC, click <b>More info</b>, then
-            <b>Run anyway</b>.</li>
-          <li>For the rarer formats (Dolby, Opus, APE, WavPack, WMA), install ffmpeg: in a
-            terminal, <code>winget install Gyan.FFmpeg</code>.</li>
+          <li>Run the installer. If Windows says it protected your PC, click <b>More info</b>,
+            then <b>Run anyway</b>.</li>
+          <li>FFmpeg, for the rarer formats (Dolby, Opus, APE, WavPack, WMA), comes ticked: untick
+            it if you already have your own.</li>
+          <li>Pausetape is then in the Start menu. Your settings and library stay if you uninstall
+            it.</li>
         </ol>
+        <p class="small muted">The portable program asks the same the first time. For the rarer
+          formats it needs ffmpeg: in a terminal, <code>winget install Gyan.FFmpeg</code>.</p>
       </details>
     </article>
 
@@ -300,9 +308,11 @@
         8,192 songs, so Pausetape warns before a card goes past that.</p>
     </div>
     <div>
-      <h3>Anything that reads a card by folder</h3>
-      <p>The same tidy layout suits most players and car stereos that browse folders, though
-        only the Echo Mini has been tested.</p>
+      <h3>Sony Walkman, Rockbox, and the rest</h3>
+      <p>Walkmans of the NW-A and NW-ZX lines, Rockbox on an iPod or a Sansa, and any other player
+        or phone. Each card setup knows what its player plays and the folder it looks in:
+        <code>MUSIC</code> on a Walkman. Only the Echo Mini has been checked on the player; a
+        test card of samples finds out what yours does.</p>
     </div>
   </div>
 </section>
@@ -340,8 +350,10 @@
     </details>
     <details>
       <summary>Does it need the internet?</summary>
-      <p>Only to look up names, covers and artists on MusicBrainz and its Cover Art Archive. Everything
-        else works offline, and nothing is sent anywhere else.</p>
+      <p>Only to look up names, covers and artists on MusicBrainz and its Cover Art Archive, and
+        lyrics on LRCLIB, which is sent a song's artist, title, album and length when its lyrics
+        are opened, unless the song has its own. Everything else works offline, and nothing is sent
+        anywhere else.</p>
     </details>
     <details>
       <summary>Is it really free?</summary>
